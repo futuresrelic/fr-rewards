@@ -37,29 +37,23 @@ async function waitForLibraries() {
     // Check for WaxJS (multiple possible locations)
     const waxLoaded = window.waxjs?.WaxJS || window.WaxJS;
 
-    // Check for Anchor Link (can be in different namespaces)
-    const anchorLoaded = window.AnchorLink && window.AnchorLinkBrowserTransport;
-
-    if (waxLoaded && anchorLoaded) {
-      console.log('✅ Wallet libraries loaded successfully');
+    if (waxLoaded) {
+      console.log('✅ WaxJS loaded successfully');
       console.log('   WaxJS:', !!waxLoaded);
-      console.log('   AnchorLink:', !!window.AnchorLink);
-      console.log('   AnchorTransport:', !!window.AnchorLinkBrowserTransport);
+      console.log('   Anchor wallet:', window.anchor ? 'browser extension detected' : 'extension not detected (optional)');
       return;
     }
 
     if (attempts % 10 === 0 && attempts > 0) {
-      console.log(`⏳ Waiting for wallet libraries... (${attempts * checkInterval / 1000}s)`);
+      console.log(`⏳ Waiting for WaxJS library... (${attempts * checkInterval / 1000}s)`);
     }
 
     await new Promise(resolve => setTimeout(resolve, checkInterval));
     attempts++;
   }
 
-  console.warn('⚠️ Wallet libraries did not load within 10 seconds');
+  console.warn('⚠️ WaxJS library did not load within 10 seconds');
   console.warn('   WaxJS loaded:', !!(window.waxjs?.WaxJS || window.WaxJS));
-  console.warn('   AnchorLink loaded:', !!window.AnchorLink);
-  console.warn('   AnchorTransport loaded:', !!window.AnchorLinkBrowserTransport);
 }
 
 // Load public configuration
@@ -144,30 +138,25 @@ async function connectWCW() {
 
 // Connect Anchor
 async function connectAnchor() {
-  const AnchorLink = window.AnchorLink;
-  const AnchorLinkBrowserTransport = window.AnchorLinkBrowserTransport;
-
-  if (!AnchorLink || !AnchorLinkBrowserTransport) {
-    throw new Error('Anchor Link not loaded. Please refresh the page and try again.');
+  // Check for Anchor browser extension
+  if (!window.anchor) {
+    throw new Error('Anchor Wallet browser extension not detected. Please install Anchor Wallet from https://greymass.com/anchor');
   }
 
   try {
-    const transport = new AnchorLinkBrowserTransport();
-    const link = new AnchorLink({
-      transport,
-      chains: [{
-        chainId: '1064487b3cd1a897ce03ae5b6a865651747e2e152090f99c1d19d44e01aea5a4',
-        nodeUrl: 'https://api.waxsweden.org'
-      }]
-    });
+    // Request identity from Anchor browser extension
+    const identity = await window.anchor.login('fr-rewards');
 
-    const identity = await link.login('fr-rewards');
-    currentAccount = identity.session.auth.actor.toString();
+    if (identity && identity.account) {
+      currentAccount = identity.account;
+    } else {
+      throw new Error('Failed to get account from Anchor');
+    }
   } catch (error) {
-    if (error.message && error.message.includes('User rejected')) {
+    if (error.message && error.message.includes('cancelled')) {
       throw new Error('Login cancelled');
     }
-    throw new Error('Anchor login failed. Please make sure you have Anchor Wallet installed.');
+    throw new Error('Anchor login failed. Please make sure you have Anchor Wallet installed and unlocked.');
   }
 }
 
