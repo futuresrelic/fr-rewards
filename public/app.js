@@ -22,9 +22,31 @@ const claimHistorySection = document.getElementById('claim-history');
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   await loadPublicConfig();
+  await waitForLibraries();
   setupEventListeners();
   checkExistingSession();
 });
+
+// Wait for wallet libraries to load
+async function waitForLibraries() {
+  let attempts = 0;
+  const maxAttempts = 50; // 5 seconds max
+
+  while (attempts < maxAttempts) {
+    const waxLoaded = window.waxjs?.WaxJS || window.WaxJS;
+    const anchorLoaded = window.AnchorLink && window.AnchorLinkBrowserTransport;
+
+    if (waxLoaded && anchorLoaded) {
+      console.log('✅ Wallet libraries loaded successfully');
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
+  }
+
+  console.warn('⚠️ Some wallet libraries may not have loaded. Wallet connections might fail.');
+}
 
 // Load public configuration
 async function loadPublicConfig() {
@@ -84,11 +106,14 @@ async function connectWallet(walletType) {
 
 // Connect Wax Cloud Wallet
 async function connectWCW() {
-  if (!window.waxjs) {
-    throw new Error('WaxJS not loaded');
+  // Check for WaxJS (can be window.waxjs or window.WaxJS)
+  const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
+
+  if (!WaxJS) {
+    throw new Error('WaxJS not loaded. Please refresh the page and try again.');
   }
 
-  wax = new window.waxjs.WaxJS({
+  wax = new WaxJS({
     rpcEndpoint: 'https://api.waxsweden.org'
   });
 
@@ -96,27 +121,40 @@ async function connectWCW() {
     const userAccount = await wax.login();
     currentAccount = userAccount;
   } catch (error) {
-    throw new Error('User cancelled login or WCW not available');
+    if (error.message && error.message.includes('User cancelled')) {
+      throw new Error('Login cancelled');
+    }
+    throw new Error('Cloud Wallet login failed. Please make sure you have Wax Cloud Wallet setup.');
   }
 }
 
 // Connect Anchor
 async function connectAnchor() {
-  if (!window.AnchorLink) {
-    throw new Error('Anchor Link not loaded');
+  const AnchorLink = window.AnchorLink;
+  const AnchorLinkBrowserTransport = window.AnchorLinkBrowserTransport;
+
+  if (!AnchorLink || !AnchorLinkBrowserTransport) {
+    throw new Error('Anchor Link not loaded. Please refresh the page and try again.');
   }
 
-  const transport = new window.AnchorLinkBrowserTransport();
-  const link = new window.AnchorLink({
-    transport,
-    chains: [{
-      chainId: '1064487b3cd1a897ce03ae5b6a865651747e2e152090f99c1d19d44e01aea5a4',
-      nodeUrl: 'https://api.waxsweden.org'
-    }]
-  });
+  try {
+    const transport = new AnchorLinkBrowserTransport();
+    const link = new AnchorLink({
+      transport,
+      chains: [{
+        chainId: '1064487b3cd1a897ce03ae5b6a865651747e2e152090f99c1d19d44e01aea5a4',
+        nodeUrl: 'https://api.waxsweden.org'
+      }]
+    });
 
-  const identity = await link.login('fr-rewards');
-  currentAccount = identity.session.auth.actor.toString();
+    const identity = await link.login('fr-rewards');
+    currentAccount = identity.session.auth.actor.toString();
+  } catch (error) {
+    if (error.message && error.message.includes('User rejected')) {
+      throw new Error('Login cancelled');
+    }
+    throw new Error('Anchor login failed. Please make sure you have Anchor Wallet installed.');
+  }
 }
 
 // Disconnect wallet
