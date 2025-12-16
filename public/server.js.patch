@@ -1,0 +1,28 @@
+// REPLACE lines 16-33 in server.js with this:
+
+// Trust proxy for Railway deployment
+app.set('trust proxy', 1); // Trust first proxy
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+
+// Rate limiting with proper proxy handling
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false } // Don't validate trust proxy
+});
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // stricter limit for claim endpoints
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false }
+});
+
+app.use('/api/', limiter);
