@@ -97,7 +97,12 @@
   </div>
 
   <!-- Scripts -->
-  <script src="waxjs-browser.js"></script>
+  <script type="module">
+    import * as waxjsModule from 'https://cdn.jsdelivr.net/npm/@waxio/waxjs@1.7.1/+esm';
+    window.waxjs = waxjsModule;
+    window.WaxJS = waxjsModule.WaxJS || waxjsModule.default;
+    console.log('✅ WaxJS loaded from jsdelivr ESM');
+  </script>
   <script src="app.js" defer></script>
 </body>
 </html>
