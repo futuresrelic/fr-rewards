@@ -1,4 +1,5 @@
 const Database = require('better-sqlite3');
+const fs = require('fs');
 require('dotenv').config();
 
 const dbPath = process.env.DATABASE_FILE || './database.sqlite';
@@ -6,6 +7,92 @@ const db = new Database(dbPath);
 
 // Enable WAL mode for better concurrency
 db.pragma('journal_mode = WAL');
+
+// Initialize database tables if they don't exist
+function initializeTables() {
+  // Check if config table exists
+  const tableExists = db.prepare(`
+    SELECT name FROM sqlite_master WHERE type='table' AND name='config'
+  `).get();
+
+  if (!tableExists) {
+    console.log('🔧 Initializing database tables...');
+
+    // Create config table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        whitelist_templates TEXT NOT NULL,
+        reward_template INTEGER NOT NULL,
+        cooldown_hours INTEGER NOT NULL DEFAULT 24,
+        collection_name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Create claims table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS claims (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        wallet_account TEXT NOT NULL,
+        template_id INTEGER NOT NULL,
+        reward_template INTEGER NOT NULL,
+        transaction_id TEXT NOT NULL,
+        claimed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        next_claim_at TIMESTAMP NOT NULL,
+        UNIQUE(wallet_account, template_id, claimed_at)
+      );
+    `);
+
+    // Create indexes
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_claims_wallet
+      ON claims(wallet_account);
+    `);
+
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_claims_next_claim
+      ON claims(wallet_account, template_id, next_claim_at);
+    `);
+
+    // Create admin_accounts table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS admin_accounts (
+        wallet_account TEXT PRIMARY KEY,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Insert default configuration
+    const whitelistTemplates = process.env.WHITELIST_TEMPLATES || '217679,217680,217682';
+    const rewardTemplate = process.env.REWARD_TEMPLATE || '251276';
+    const cooldownHours = process.env.COOLDOWN_HOURS || '24';
+    const collectionName = process.env.COLLECTION_NAME || 'futuresrelic';
+
+    db.prepare(`
+      INSERT INTO config (id, whitelist_templates, reward_template, cooldown_hours, collection_name)
+      VALUES (1, ?, ?, ?, ?)
+    `).run(whitelistTemplates, rewardTemplate, cooldownHours, collectionName);
+
+    // Insert default admin accounts
+    const adminAccounts = (process.env.ADMIN_ACCOUNTS || 'futuresrelic').split(',');
+    for (const account of adminAccounts) {
+      const trimmedAccount = account.trim();
+      if (trimmedAccount) {
+        db.prepare(`
+          INSERT OR IGNORE INTO admin_accounts (wallet_account)
+          VALUES (?)
+        `).run(trimmedAccount);
+      }
+    }
+
+    console.log('✅ Database tables initialized successfully!');
+  }
+}
+
+// Initialize tables immediately
+initializeTables();
 
 // Configuration methods
 const config = {

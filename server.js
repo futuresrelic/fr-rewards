@@ -4,32 +4,10 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const fs = require('fs');
 require('dotenv').config();
 
 const db = require('./database');
 const wax = require('./wax');
-
-// Auto-initialize database on first run
-function initializeDatabaseIfNeeded() {
-  const dbPath = process.env.DATABASE_FILE || './database.sqlite';
-  const dbExists = fs.existsSync(dbPath);
-
-  if (!dbExists) {
-    console.log('🔧 Database not found. Initializing...');
-    const { execSync } = require('child_process');
-    try {
-      execSync('node scripts/init-db.js', { stdio: 'inherit' });
-      console.log('✅ Database initialized successfully!');
-    } catch (error) {
-      console.error('❌ Database initialization failed:', error);
-      process.exit(1);
-    }
-  }
-}
-
-// Initialize database before starting server
-initializeDatabaseIfNeeded();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -409,12 +387,18 @@ app.listen(PORT, () => {
   console.log(`📡 Server running on http://localhost:${PORT}`);
   console.log(`🔧 Admin panel: http://localhost:${PORT}/admin`);
 
-  const config = db.config.get();
-  console.log(`\n📋 Configuration:`);
-  console.log(`   Collection: ${config.collection_name}`);
-  console.log(`   Whitelist: ${config.whitelist_templates}`);
-  console.log(`   Reward Template: ${config.reward_template}`);
-  console.log(`   Cooldown: ${config.cooldown_hours} hours`);
+  try {
+    const config = db.config.get();
+    if (config) {
+      console.log(`\n📋 Configuration:`);
+      console.log(`   Collection: ${config.collection_name}`);
+      console.log(`   Whitelist: ${config.whitelist_templates}`);
+      console.log(`   Reward Template: ${config.reward_template}`);
+      console.log(`   Cooldown: ${config.cooldown_hours} hours`);
+    }
+  } catch (error) {
+    console.log(`\n⚠️  Configuration not loaded yet (database initializing...)`);
+  }
   console.log();
 });
 
