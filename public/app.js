@@ -34,9 +34,20 @@ async function waitForLibraries() {
   const checkInterval = 100;
 
   while (attempts < maxAttempts) {
-    const waxLoaded = window.wax || window.WaxJS;
+    // Check what's actually available
+    const waxLoaded = window.waxjs?.WaxJS || window.WaxJS;
     const anchorLoaded = window.AnchorLink;
     const anchorTransportLoaded = window.AnchorLinkBrowserTransport;
+
+    if (attempts === 0) {
+      console.log('Checking for libraries:', {
+        waxjs: !!window.waxjs,
+        WaxJS: !!window.WaxJS,
+        'waxjs.WaxJS': !!window.waxjs?.WaxJS,
+        AnchorLink: !!window.AnchorLink,
+        AnchorLinkBrowserTransport: !!window.AnchorLinkBrowserTransport
+      });
+    }
 
     if (waxLoaded && anchorLoaded && anchorTransportLoaded) {
       console.log('✅ Wallet libraries loaded successfully');
@@ -47,7 +58,14 @@ async function waitForLibraries() {
     attempts++;
   }
 
-  console.warn('⚠️ Wallet libraries not loaded');
+  console.warn('⚠️ Wallet libraries not loaded after 5 seconds');
+  console.warn('Final state:', {
+    waxjs: !!window.waxjs,
+    WaxJS: !!window.WaxJS,
+    'waxjs.WaxJS': !!window.waxjs?.WaxJS,
+    AnchorLink: !!window.AnchorLink,
+    AnchorLinkBrowserTransport: !!window.AnchorLinkBrowserTransport
+  });
   return false;
 }
 
