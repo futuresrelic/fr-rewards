@@ -127,21 +127,11 @@ async function connectWallet(walletType) {
 
 // Connect Wax Cloud Wallet
 async function connectWCW() {
-  try {
-    const WaxJS = window.wax?.WaxJS || window.WaxJS;
-    if (!WaxJS) throw new Error('WaxJS not loaded');
+  const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
+  if (!WaxJS) throw new Error('WaxJS not loaded');
 
-    wax = new WaxJS({
-      rpcEndpoint: 'https://wax.greymass.com',
-      userAccount: null,
-      tryAutoLogin: false
-    });
-    currentAccount = await wax.login();
-  } catch (error) {
-    if (error.message?.includes('cancel')) throw new Error('Login cancelled');
-    console.error('WCW error:', error);
-    throw new Error('WCW login failed: ' + error.message);
-  }
+  wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: false });
+  currentAccount = await wax.login();
 }
 
 // Connect Anchor
