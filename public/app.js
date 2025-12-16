@@ -34,10 +34,11 @@ async function waitForLibraries() {
   const checkInterval = 100;
 
   while (attempts < maxAttempts) {
-    const waxLoaded = window.WaxJS || window.waxjs?.WaxJS;
+    const waxLoaded = window.wax || window.WaxJS;
     const anchorLoaded = window.AnchorLink;
+    const anchorTransportLoaded = window.AnchorLinkBrowserTransport;
 
-    if (waxLoaded && anchorLoaded) {
+    if (waxLoaded && anchorLoaded && anchorTransportLoaded) {
       console.log('✅ Wallet libraries loaded successfully');
       return true;
     }
@@ -109,10 +110,14 @@ async function connectWallet(walletType) {
 // Connect Wax Cloud Wallet
 async function connectWCW() {
   try {
-    const WaxJS = window.WaxJS || window.waxjs?.WaxJS;
+    const WaxJS = window.wax?.WaxJS || window.WaxJS;
     if (!WaxJS) throw new Error('WaxJS not loaded');
 
-    wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: false });
+    wax = new WaxJS({
+      rpcEndpoint: 'https://wax.greymass.com',
+      userAccount: null,
+      tryAutoLogin: false
+    });
     currentAccount = await wax.login();
   } catch (error) {
     if (error.message?.includes('cancel')) throw new Error('Login cancelled');
