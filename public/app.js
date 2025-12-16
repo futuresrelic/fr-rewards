@@ -30,35 +30,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Wait for wallet libraries to load
 async function waitForLibraries() {
   let attempts = 0;
-  const maxAttempts = 100; // 10 seconds max
-  const checkInterval = 100; // Check every 100ms
+  const maxAttempts = 50; // 5 seconds
+  const checkInterval = 100;
 
   while (attempts < maxAttempts) {
-    // Check multiple possible locations for WaxJS (CDN can expose it differently)
-    const waxLoaded = window.waxjs?.WaxJS || window.WaxJS;
+    const waxLoaded = window.WaxJS || window.waxjs?.WaxJS;
 
-    // AnchorLink should be directly on window
-    const anchorLoaded = window.AnchorLink;
-
-    if (waxLoaded && anchorLoaded) {
-      console.log('✅ Wallet libraries loaded successfully');
-      console.log('   WaxJS:', !!waxLoaded);
-      console.log('   AnchorLink:', !!anchorLoaded);
+    if (waxLoaded) {
+      console.log('✅ WaxJS loaded');
       return true;
-    }
-
-    if (attempts % 10 === 0 && attempts > 0) {
-      console.log(`⏳ Waiting for wallet libraries... (${attempts / 10}s)`);
-      console.log(`   WaxJS: ${!!waxLoaded} | AnchorLink: ${!!anchorLoaded}`);
     }
 
     await new Promise(resolve => setTimeout(resolve, checkInterval));
     attempts++;
   }
 
-  console.warn('⚠️ Wallet libraries did not load within 10 seconds');
-  console.log('   WaxJS loaded:', !!(window.waxjs?.WaxJS || window.WaxJS));
-  console.log('   AnchorLink loaded:', !!window.AnchorLink);
+  console.warn('⚠️ WaxJS not loaded');
   return false;
 }
 
@@ -121,55 +108,21 @@ async function connectWallet(walletType) {
 // Connect Wax Cloud Wallet
 async function connectWCW() {
   try {
-    // Try both possible locations (CDN exposes it differently)
-    const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
+    const WaxJS = window.WaxJS || window.waxjs?.WaxJS;
+    if (!WaxJS) throw new Error('WaxJS not loaded');
 
-    if (!WaxJS) {
-      throw new Error('WaxJS library not found. Please refresh the page.');
-    }
-
-    wax = new WaxJS({
-      rpcEndpoint: 'https://wax.greymass.com',
-      tryAutoLogin: false
-    });
-
-    const userAccount = await wax.login();
-    currentAccount = userAccount;
+    wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: false });
+    currentAccount = await wax.login();
   } catch (error) {
-    if (error.message && error.message.includes('User cancelled')) {
-      throw new Error('Login cancelled');
-    }
-    console.error('WCW login error:', error);
-    throw new Error('Cloud Wallet login failed: ' + error.message);
+    if (error.message?.includes('cancel')) throw new Error('Login cancelled');
+    console.error('WCW error:', error);
+    throw new Error('WCW login failed: ' + error.message);
   }
 }
 
 // Connect Anchor
 async function connectAnchor() {
-  if (!window.AnchorLink || !window.AnchorLinkBrowserTransport) {
-    throw new Error('Anchor Link not loaded. Please refresh the page and try again.');
-  }
-
-  try {
-    const transport = new window.AnchorLinkBrowserTransport();
-    const anchor = new window.AnchorLink({
-      transport,
-      chains: [{
-        chainId: '1064487b3cd1a897ce03ae5b6a865651747e2e152090f99c1d19d44e01aea5a4',
-        nodeUrl: 'https://wax.greymass.com'
-      }]
-    });
-
-    const identity = await anchor.login('fr-rewards');
-    const session = identity.session;
-
-    currentAccount = session.auth.actor.toString();
-  } catch (error) {
-    if (error.message && (error.message.includes('cancelled') || error.message.includes('rejected'))) {
-      throw new Error('Login cancelled');
-    }
-    throw new Error('Anchor login failed: ' + error.message);
-  }
+  throw new Error('Anchor support coming soon - please use Wax Cloud Wallet for now');
 }
 
 // Disconnect wallet

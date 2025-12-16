@@ -97,23 +97,16 @@
   </div>
 
   <!-- Scripts -->
-  <!-- Load from skypack for better browser ESM support -->
-  <script type="module">
-    import * as waxjsModule from 'https://cdn.skypack.dev/@waxio/waxjs@1.0.5';
-    import AnchorLinkModule from 'https://cdn.skypack.dev/anchor-link@3.4.3';
-    import AnchorLinkBrowserTransportModule from 'https://cdn.skypack.dev/anchor-link-browser-transport@3.4.3';
-
-    // Expose to window for app.js
-    window.waxjs = waxjsModule;
-    window.WaxJS = waxjsModule.WaxJS || waxjsModule.default?.WaxJS;
-    window.AnchorLink = AnchorLinkModule.default || AnchorLinkModule;
-    window.AnchorLinkBrowserTransport = AnchorLinkBrowserTransportModule.default || AnchorLinkBrowserTransportModule;
-
-    console.log('📦 Loaded libraries:', {
-      waxjs: !!window.waxjs,
-      WaxJS: !!window.WaxJS,
-      AnchorLink: !!window.AnchorLink,
-      AnchorLinkBrowserTransport: !!window.AnchorLinkBrowserTransport
+  <script src="https://unpkg.com/@waxio/waxjs@latest/dist/index.js"></script>
+  <script src="https://unpkg.com/eosjs@20.0.0/dist/eosjs-api.min.js"></script>
+  <script src="https://unpkg.com/eosjs@20.0.0/dist/eosjs-jsonrpc.min.js"></script>
+  <script>
+    // Initialize WaxJS when ready
+    window.addEventListener('DOMContentLoaded', function() {
+      if (typeof waxjs !== 'undefined') {
+        window.WaxJS = waxjs.WaxJS;
+        console.log('✅ WaxJS loaded');
+      }
     });
   </script>
   <script src="app.js" defer></script>
