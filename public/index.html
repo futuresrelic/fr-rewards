@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NFT Holder Rewards</title>
   <link rel="stylesheet" href="styles.css">
+
+  <!-- Load wallet libraries BEFORE app.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@waxio/waxjs@1.0.5/dist/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/anchor-link@3.4.3/dist/anchor-link.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/anchor-link-browser-transport@3.4.3/dist/anchor-link-browser-transport.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -96,13 +101,7 @@
     </footer>
   </div>
 
-  <!-- Scripts -->
-  <script type="module">
-    import * as waxjsModule from 'https://cdn.jsdelivr.net/npm/@waxio/waxjs@1.7.1/+esm';
-    window.waxjs = waxjsModule;
-    window.WaxJS = waxjsModule.WaxJS || waxjsModule.default;
-    console.log('✅ WaxJS loaded from jsdelivr ESM');
-  </script>
+  <!-- App Script -->
   <script src="app.js" defer></script>
 </body>
 </html>
