@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NFT Holder Rewards</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎨 NFT Holder Rewards</h1>
+      <p class="subtitle">Connect your wallet to claim rewards!</p>
+    </header>
+
+    <!-- Not Connected State -->
+    <div id="not-connected" class="state-section">
+      <div class="card">
+        <h2>Connect Your Wallet</h2>
+        <p>Connect your WAX wallet to check eligibility and claim rewards.</p>
+
+        <div class="wallet-buttons">
+          <button id="connect-wcw" class="btn btn-primary">
+            <span class="btn-icon">☁️</span>
+            Wax Cloud Wallet
+          </button>
+          <button id="connect-anchor" class="btn btn-primary">
+            <span class="btn-icon">⚓</span>
+            Anchor Wallet
+          </button>
+        </div>
+
+        <div class="info-box">
+          <h3>How it works:</h3>
+          <ol>
+            <li>Connect your WAX wallet</li>
+            <li>Hold eligible NFTs from the collection</li>
+            <li>Claim rewards every <span id="cooldown-info">24</span> hours</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connected State -->
+    <div id="connected" class="state-section" style="display: none;">
+      <div class="user-header">
+        <div class="user-info">
+          <span class="label">Connected:</span>
+          <span id="connected-account" class="account-name"></span>
+        </div>
+        <button id="disconnect-btn" class="btn btn-secondary btn-sm">Disconnect</button>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loading" class="card">
+        <div class="loader"></div>
+        <p>Checking your NFT holdings...</p>
+      </div>
+
+      <!-- Eligible State -->
+      <div id="eligible" class="card" style="display: none;">
+        <div class="status-badge success">
+          <span class="badge-icon">✅</span>
+          <span>You are eligible!</span>
+        </div>
+
+        <div id="nft-list" class="nft-list"></div>
+
+        <div id="claim-history" class="history-section" style="display: none;">
+          <h3>Claim History</h3>
+          <div id="history-list" class="history-list"></div>
+        </div>
+      </div>
+
+      <!-- Not Eligible State -->
+      <div id="not-eligible" class="card" style="display: none;">
+        <div class="status-badge error">
+          <span class="badge-icon">❌</span>
+          <span>No eligible NFTs found</span>
+        </div>
+
+        <p>You need to hold one of these NFT templates:</p>
+        <div id="whitelist-info" class="whitelist-list"></div>
+
+        <a href="#" id="marketplace-link" class="btn btn-secondary" target="_blank">
+          View on NeftyBlocks
+        </a>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-message" class="alert alert-error" style="display: none;"></div>
+
+    <footer>
+      <p>Powered by WAX Blockchain | <a href="/admin">Admin Panel</a></p>
+    </footer>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/waxjs@1.0.1/dist/waxjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/anchor-link@3.4.3/dist/anchor-link.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/anchor-link-browser-transport@3.4.3/dist/anchor-link-browser-transport.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

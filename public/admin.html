@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - NFT Rewards</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔧 Admin Panel</h1>
+      <p class="subtitle">Configure rewards system</p>
+    </header>
+
+    <!-- Login Section -->
+    <div id="admin-login" class="card">
+      <h2>Admin Authentication</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="admin-password">Admin Password:</label>
+          <input type="password" id="admin-password" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+      <div id="login-error" class="alert alert-error" style="display: none;"></div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="admin-dashboard" style="display: none;">
+      <div class="user-header">
+        <div class="user-info">
+          <span class="label">Admin Session</span>
+        </div>
+        <button id="admin-logout" class="btn btn-secondary btn-sm">Logout</button>
+      </div>
+
+      <!-- Statistics -->
+      <div class="card">
+        <h2>📊 Statistics</h2>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-value" id="stat-total-claims">-</div>
+            <div class="stat-label">Total Claims</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-active-users">-</div>
+            <div class="stat-label">Active Users</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-claims-24h">-</div>
+            <div class="stat-label">Claims (24h)</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="stat-last-claim">-</div>
+            <div class="stat-label">Last Claim</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Configuration -->
+      <div class="card">
+        <h2>⚙️ Configuration</h2>
+        <form id="config-form">
+          <div class="form-group">
+            <label for="collection-name">Collection Name:</label>
+            <input type="text" id="collection-name" class="form-control" required>
+            <small>The WAX collection to check for NFTs</small>
+          </div>
+
+          <div class="form-group">
+            <label for="whitelist-templates">Whitelist Template IDs:</label>
+            <input type="text" id="whitelist-templates" class="form-control" placeholder="217679,217680,217682" required>
+            <small>Comma-separated list of eligible template IDs</small>
+          </div>
+
+          <div class="form-group">
+            <label for="reward-template">Reward Template ID:</label>
+            <input type="number" id="reward-template" class="form-control" required>
+            <small>Template ID to mint as reward</small>
+          </div>
+
+          <div class="form-group">
+            <label for="cooldown-hours">Cooldown Period (hours):</label>
+            <input type="number" id="cooldown-hours" class="form-control" min="1" required>
+            <small>Hours between claims</small>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Save Configuration</button>
+        </form>
+        <div id="config-message" class="alert" style="display: none;"></div>
+      </div>
+
+      <!-- Recent Claims -->
+      <div class="card">
+        <h2>📋 Recent Claims</h2>
+        <div class="table-container">
+          <table id="claims-table">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th>Template ID</th>
+                <th>Transaction</th>
+                <th>Claimed At</th>
+                <th>Next Claim</th>
+              </tr>
+            </thead>
+            <tbody id="claims-tbody">
+              <tr>
+                <td colspan="5" class="text-center">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="back-link">
+        <a href="/" class="btn btn-secondary">← Back to Main Page</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin.js"></script>
+</body>
+</html>
