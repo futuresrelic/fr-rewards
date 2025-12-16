@@ -30,22 +30,36 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Wait for wallet libraries to load
 async function waitForLibraries() {
   let attempts = 0;
-  const maxAttempts = 50; // 5 seconds max
+  const maxAttempts = 100; // 10 seconds max
+  const checkInterval = 100; // Check every 100ms
 
   while (attempts < maxAttempts) {
+    // Check for WaxJS (multiple possible locations)
     const waxLoaded = window.waxjs?.WaxJS || window.WaxJS;
+
+    // Check for Anchor Link (can be in different namespaces)
     const anchorLoaded = window.AnchorLink && window.AnchorLinkBrowserTransport;
 
     if (waxLoaded && anchorLoaded) {
       console.log('✅ Wallet libraries loaded successfully');
+      console.log('   WaxJS:', !!waxLoaded);
+      console.log('   AnchorLink:', !!window.AnchorLink);
+      console.log('   AnchorTransport:', !!window.AnchorLinkBrowserTransport);
       return;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    if (attempts % 10 === 0 && attempts > 0) {
+      console.log(`⏳ Waiting for wallet libraries... (${attempts * checkInterval / 1000}s)`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, checkInterval));
     attempts++;
   }
 
-  console.warn('⚠️ Some wallet libraries may not have loaded. Wallet connections might fail.');
+  console.warn('⚠️ Wallet libraries did not load within 10 seconds');
+  console.warn('   WaxJS loaded:', !!(window.waxjs?.WaxJS || window.WaxJS));
+  console.warn('   AnchorLink loaded:', !!window.AnchorLink);
+  console.warn('   AnchorTransport loaded:', !!window.AnchorLinkBrowserTransport);
 }
 
 // Load public configuration
