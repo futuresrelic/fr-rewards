@@ -35,9 +35,10 @@ async function waitForLibraries() {
 
   while (attempts < maxAttempts) {
     const waxLoaded = window.WaxJS || window.waxjs?.WaxJS;
+    const anchorLoaded = window.AnchorLink;
 
-    if (waxLoaded) {
-      console.log('✅ WaxJS loaded');
+    if (waxLoaded && anchorLoaded) {
+      console.log('✅ Wallet libraries loaded successfully');
       return true;
     }
 
@@ -45,7 +46,7 @@ async function waitForLibraries() {
     attempts++;
   }
 
-  console.warn('⚠️ WaxJS not loaded');
+  console.warn('⚠️ Wallet libraries not loaded');
   return false;
 }
 
@@ -122,7 +123,47 @@ async function connectWCW() {
 
 // Connect Anchor
 async function connectAnchor() {
-  throw new Error('Anchor support coming soon - please use Wax Cloud Wallet for now');
+  try {
+    const AnchorLink = window.AnchorLink;
+    const AnchorLinkBrowserTransport = window.AnchorLinkBrowserTransport;
+
+    if (!AnchorLink || !AnchorLinkBrowserTransport) {
+      throw new Error('Anchor libraries not loaded');
+    }
+
+    // Initialize Anchor
+    const transport = new AnchorLinkBrowserTransport();
+    const anchor = new AnchorLink({
+      transport,
+      chains: [{
+        chainId: '1064487b3cd1a897ce03ae5b6a865651747e2e152090f99c1d19d44e01aea5a4',
+        nodeUrl: 'https://wax.greymass.com'
+      }]
+    });
+
+    // Perform login
+    const identity = await anchor.login('fr-rewards');
+    const session = identity.session;
+
+    currentAccount = session.auth.actor.toString();
+
+    // Store session for auto-login
+    localStorage.setItem('anchorSession', JSON.stringify({
+      auth: {
+        actor: session.auth.actor.toString(),
+        permission: session.auth.permission.toString()
+      },
+      publicKey: session.publicKey.toString()
+    }));
+
+    return currentAccount;
+  } catch (error) {
+    if (error.message?.includes('cancel') || error.message?.includes('rejected')) {
+      throw new Error('Login cancelled');
+    }
+    console.error('Anchor error:', error);
+    throw new Error('Anchor login failed: ' + error.message);
+  }
 }
 
 // Disconnect wallet
@@ -131,6 +172,7 @@ function disconnect() {
   wax = null;
   localStorage.removeItem('wax_account');
   localStorage.removeItem('wax_wallet');
+  localStorage.removeItem('anchorSession');
   clearCountdowns();
   showNotConnectedState();
 }
