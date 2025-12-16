@@ -64,7 +64,20 @@ function initializeTables() {
       );
     `);
 
-    // Insert default configuration
+    // Create templates table for per-template configuration
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS templates (
+        template_id INTEGER PRIMARY KEY,
+        name TEXT,
+        reward_template_id INTEGER NOT NULL,
+        cooldown_hours INTEGER NOT NULL DEFAULT 24,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Insert default configuration (keeping for backward compatibility)
     const whitelistTemplates = process.env.WHITELIST_TEMPLATES || '217679,217680,217682';
     const rewardTemplate = process.env.REWARD_TEMPLATE || '251276';
     const cooldownHours = process.env.COOLDOWN_HOURS || '24';
@@ -74,6 +87,15 @@ function initializeTables() {
       INSERT INTO config (id, whitelist_templates, reward_template, cooldown_hours, collection_name)
       VALUES (1, ?, ?, ?, ?)
     `).run(whitelistTemplates, rewardTemplate, cooldownHours, collectionName);
+
+    // Migrate existing whitelist templates to new templates table
+    const templateIds = whitelistTemplates.split(',').map(id => parseInt(id.trim()));
+    for (const templateId of templateIds) {
+      db.prepare(`
+        INSERT OR IGNORE INTO templates (template_id, reward_template_id, cooldown_hours, enabled)
+        VALUES (?, ?, ?, 1)
+      `).run(templateId, parseInt(rewardTemplate), parseInt(cooldownHours));
+    }
 
     // Insert default admin accounts
     const adminAccounts = (process.env.ADMIN_ACCOUNTS || 'futuresrelic').split(',');
@@ -210,9 +232,58 @@ const admin = {
   }
 };
 
+// Templates methods
+const templates = {
+  getAll: () => {
+    return db.prepare('SELECT * FROM templates ORDER BY template_id ASC').all();
+  },
+
+  getEnabled: () => {
+    return db.prepare('SELECT * FROM templates WHERE enabled = 1 ORDER BY template_id ASC').all();
+  },
+
+  getById: (template_id) => {
+    return db.prepare('SELECT * FROM templates WHERE template_id = ?').get(template_id);
+  },
+
+  add: (template_id, name, reward_template_id, cooldown_hours) => {
+    const stmt = db.prepare(`
+      INSERT INTO templates (template_id, name, reward_template_id, cooldown_hours, enabled)
+      VALUES (?, ?, ?, ?, 1)
+    `);
+    return stmt.run(template_id, name, reward_template_id, cooldown_hours);
+  },
+
+  update: (template_id, data) => {
+    const stmt = db.prepare(`
+      UPDATE templates
+      SET name = ?,
+          reward_template_id = ?,
+          cooldown_hours = ?,
+          enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE template_id = ?
+    `);
+    return stmt.run(data.name, data.reward_template_id, data.cooldown_hours, data.enabled, template_id);
+  },
+
+  delete: (template_id) => {
+    return db.prepare('DELETE FROM templates WHERE template_id = ?').run(template_id);
+  },
+
+  enable: (template_id) => {
+    return db.prepare('UPDATE templates SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE template_id = ?').run(template_id);
+  },
+
+  disable: (template_id) => {
+    return db.prepare('UPDATE templates SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE template_id = ?').run(template_id);
+  }
+};
+
 module.exports = {
   db,
   config,
   claims,
-  admin
+  admin,
+  templates
 };

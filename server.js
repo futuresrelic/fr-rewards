@@ -88,20 +88,28 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
   try {
     const { account } = req.params;
     const config = db.config.get();
-    const whitelistTemplates = config.whitelist_templates.split(',').map(id => parseInt(id.trim()));
+    const enabledTemplates = db.templates.getEnabled();
+    const whitelistTemplates = enabledTemplates.map(t => t.template_id);
 
     const eligibleAssets = await wax.checkEligibility(account, config.collection_name, whitelistTemplates);
+
+    // Add template configuration to each eligible asset
+    const enrichedAssets = eligibleAssets.map(asset => {
+      const templateConfig = enabledTemplates.find(t => t.template_id === parseInt(asset.template.template_id));
+      return {
+        asset_id: asset.asset_id,
+        template_id: asset.template.template_id,
+        name: asset.name,
+        template_config: templateConfig
+      };
+    });
 
     res.json({
       success: true,
       account,
       eligible: eligibleAssets.length > 0,
       whitelistTemplates,
-      eligibleAssets: eligibleAssets.map(asset => ({
-        asset_id: asset.asset_id,
-        template_id: asset.template.template_id,
-        name: asset.name
-      }))
+      eligibleAssets: enrichedAssets
     });
   } catch (error) {
     console.error('Error checking eligibility:', error);
@@ -137,22 +145,22 @@ app.get('/api/user/claims/:account', async (req, res) => {
 app.get('/api/user/cooldowns/:account', async (req, res) => {
   try {
     const { account } = req.params;
-    const config = db.config.get();
-    const whitelistTemplates = config.whitelist_templates.split(',').map(id => parseInt(id.trim()));
+    const enabledTemplates = db.templates.getEnabled();
 
     const cooldowns = db.claims.getCooldowns(account);
     const now = new Date();
 
-    const cooldownStatus = whitelistTemplates.map(templateId => {
-      const cooldown = cooldowns.find(c => c.template_id === templateId);
+    const cooldownStatus = enabledTemplates.map(template => {
+      const cooldown = cooldowns.find(c => c.template_id === template.template_id);
 
       if (!cooldown) {
         return {
-          template_id: templateId,
+          template_id: template.template_id,
           can_claim: true,
           next_claim_at: null,
           last_claimed_at: null,
-          remaining_seconds: 0
+          remaining_seconds: 0,
+          template_config: template
         };
       }
 
@@ -161,11 +169,12 @@ app.get('/api/user/cooldowns/:account', async (req, res) => {
       const remainingSeconds = canClaim ? 0 : Math.floor((nextClaimDate - now) / 1000);
 
       return {
-        template_id: templateId,
+        template_id: template.template_id,
         can_claim: canClaim,
         next_claim_at: cooldown.next_claim_at,
         last_claimed_at: cooldown.last_claimed_at,
-        remaining_seconds: remainingSeconds
+        remaining_seconds: remainingSeconds,
+        template_config: template
       };
     });
 
@@ -193,14 +202,16 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
     }
 
     const config = db.config.get();
-    const whitelistTemplates = config.whitelist_templates.split(',').map(id => parseInt(id.trim()));
 
-    // Check if template is whitelisted
-    if (!whitelistTemplates.includes(parseInt(template_id))) {
-      return res.status(400).json({ error: 'Template not whitelisted' });
+    // Get template configuration
+    const templateConfig = db.templates.getById(parseInt(template_id));
+    if (!templateConfig || !templateConfig.enabled) {
+      return res.status(400).json({ error: 'Template not enabled or does not exist' });
     }
 
     // Check eligibility
+    const enabledTemplates = db.templates.getEnabled();
+    const whitelistTemplates = enabledTemplates.map(t => t.template_id);
     const eligibleAssets = await wax.checkEligibility(account, config.collection_name, whitelistTemplates);
     const hasTemplate = eligibleAssets.some(asset => parseInt(asset.template.template_id) === parseInt(template_id));
 
@@ -214,20 +225,20 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
       return res.status(429).json({ error: 'Cooldown period has not expired' });
     }
 
-    // Mint reward NFT
-    console.log(`Minting reward NFT to ${account} (template: ${config.reward_template})`);
-    const mintResult = await wax.mintNFT(account, config.collection_name, parseInt(config.reward_template));
+    // Mint reward NFT using template-specific reward
+    console.log(`Minting reward NFT to ${account} (template: ${templateConfig.reward_template_id})`);
+    const mintResult = await wax.mintNFT(account, config.collection_name, parseInt(templateConfig.reward_template_id));
 
-    // Record claim
-    db.claims.add(account, template_id, config.reward_template, mintResult.transaction_id, config.cooldown_hours);
+    // Record claim using template-specific cooldown
+    db.claims.add(account, template_id, templateConfig.reward_template_id, mintResult.transaction_id, templateConfig.cooldown_hours);
 
     res.json({
       success: true,
       message: 'Reward claimed successfully',
       transaction_id: mintResult.transaction_id,
       block_num: mintResult.block_num,
-      reward_template: config.reward_template,
-      next_claim_hours: config.cooldown_hours
+      reward_template: templateConfig.reward_template_id,
+      next_claim_hours: templateConfig.cooldown_hours
     });
   } catch (error) {
     console.error('Error claiming reward:', error);
@@ -349,6 +360,105 @@ app.get('/api/admin/claims', authenticateAdmin, async (req, res) => {
   }
 });
 
+// ==================== TEMPLATE MANAGEMENT ENDPOINTS ====================
+
+/**
+ * GET /api/admin/templates
+ * Get all templates
+ */
+app.get('/api/admin/templates', authenticateAdmin, async (req, res) => {
+  try {
+    const templates = db.templates.getAll();
+    res.json({ success: true, templates });
+  } catch (error) {
+    console.error('Error fetching templates:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/templates
+ * Add a new template
+ */
+app.post('/api/admin/templates', authenticateAdmin, async (req, res) => {
+  try {
+    const { template_id, name, reward_template_id, cooldown_hours } = req.body;
+
+    if (!template_id || !reward_template_id || !cooldown_hours) {
+      return res.status(400).json({ error: 'Missing required fields: template_id, reward_template_id, cooldown_hours' });
+    }
+
+    // Check if template already exists
+    const existing = db.templates.getById(parseInt(template_id));
+    if (existing) {
+      return res.status(400).json({ error: 'Template already exists' });
+    }
+
+    db.templates.add(
+      parseInt(template_id),
+      name || null,
+      parseInt(reward_template_id),
+      parseInt(cooldown_hours)
+    );
+
+    res.json({ success: true, message: 'Template added successfully' });
+  } catch (error) {
+    console.error('Error adding template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/templates/:template_id
+ * Update a template
+ */
+app.put('/api/admin/templates/:template_id', authenticateAdmin, async (req, res) => {
+  try {
+    const { template_id } = req.params;
+    const { name, reward_template_id, cooldown_hours, enabled } = req.body;
+
+    // Check if template exists
+    const existing = db.templates.getById(parseInt(template_id));
+    if (!existing) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    db.templates.update(parseInt(template_id), {
+      name: name !== undefined ? name : existing.name,
+      reward_template_id: reward_template_id !== undefined ? parseInt(reward_template_id) : existing.reward_template_id,
+      cooldown_hours: cooldown_hours !== undefined ? parseInt(cooldown_hours) : existing.cooldown_hours,
+      enabled: enabled !== undefined ? (enabled ? 1 : 0) : existing.enabled
+    });
+
+    res.json({ success: true, message: 'Template updated successfully' });
+  } catch (error) {
+    console.error('Error updating template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/templates/:template_id
+ * Delete a template
+ */
+app.delete('/api/admin/templates/:template_id', authenticateAdmin, async (req, res) => {
+  try {
+    const { template_id } = req.params;
+
+    const existing = db.templates.getById(parseInt(template_id));
+    if (!existing) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    db.templates.delete(parseInt(template_id));
+
+    res.json({ success: true, message: 'Template deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /**
  * GET /api/config/public
  * Get public configuration (no auth required)
@@ -356,12 +466,12 @@ app.get('/api/admin/claims', authenticateAdmin, async (req, res) => {
 app.get('/api/config/public', async (req, res) => {
   try {
     const config = db.config.get();
+    const enabledTemplates = db.templates.getEnabled();
     res.json({
       success: true,
       config: {
         collection_name: config.collection_name,
-        cooldown_hours: config.cooldown_hours,
-        whitelist_templates: config.whitelist_templates.split(',').map(id => parseInt(id.trim()))
+        templates: enabledTemplates
       }
     });
   } catch (error) {

@@ -171,6 +171,7 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
   eligibilityData.eligibleAssets.forEach(asset => {
     const templateId = parseInt(asset.template_id);
     const cooldown = cooldownMap[templateId];
+    const templateConfig = asset.template_config || (cooldown && cooldown.template_config);
 
     const nftCard = document.createElement('div');
     nftCard.className = 'nft-card';
@@ -178,12 +179,20 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
     const canClaim = cooldown ? cooldown.can_claim : true;
     const remainingSeconds = cooldown ? cooldown.remaining_seconds : 0;
 
+    // Get template-specific info
+    const templateName = templateConfig?.name || '';
+    const rewardTemplate = templateConfig?.reward_template_id || '?';
+    const cooldownHours = templateConfig?.cooldown_hours || 24;
+
     nftCard.innerHTML = `
       <div class="nft-header">
         <div class="nft-icon">📦</div>
         <div class="nft-info">
-          <div class="nft-name">${asset.name || 'NFT #' + asset.asset_id}</div>
-          <div class="nft-template">Template: ${templateId}</div>
+          <div class="nft-name">${asset.name || templateName || 'NFT #' + asset.asset_id}</div>
+          <div class="nft-template">Template ID: ${templateId}</div>
+          <div class="nft-template" style="font-size: 0.85rem; color: var(--text-secondary);">
+            Reward: Template #${rewardTemplate} | Cooldown: ${cooldownHours}h
+          </div>
         </div>
       </div>
       <div class="nft-status ${canClaim ? 'ready' : 'cooldown'}">

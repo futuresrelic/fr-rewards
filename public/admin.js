@@ -21,6 +21,7 @@ function setupEventListeners() {
   loginForm.addEventListener('submit', handleLogin);
   configForm.addEventListener('submit', handleConfigUpdate);
   document.getElementById('admin-logout').addEventListener('click', logout);
+  document.getElementById('add-template-form').addEventListener('submit', handleAddTemplate);
 }
 
 // Check existing session
@@ -81,7 +82,8 @@ async function showDashboard() {
     await Promise.all([
       loadConfig(),
       loadStats(),
-      loadClaims()
+      loadClaims(),
+      loadTemplates()
     ]);
   } catch (error) {
     console.error('Error loading dashboard:', error);
@@ -108,9 +110,6 @@ async function loadConfig() {
     const config = data.config;
 
     document.getElementById('collection-name').value = config.collection_name;
-    document.getElementById('whitelist-templates').value = config.whitelist_templates;
-    document.getElementById('reward-template').value = config.reward_template;
-    document.getElementById('cooldown-hours').value = config.cooldown_hours;
 
   } catch (error) {
     console.error('Error loading config:', error);
@@ -200,9 +199,9 @@ async function handleConfigUpdate(e) {
 
   const config = {
     collection_name: document.getElementById('collection-name').value,
-    whitelist_templates: document.getElementById('whitelist-templates').value,
-    reward_template: document.getElementById('reward-template').value,
-    cooldown_hours: document.getElementById('cooldown-hours').value
+    whitelist_templates: '', // Keep for backward compatibility
+    reward_template: 0,
+    cooldown_hours: 24
   };
 
   try {
@@ -221,24 +220,36 @@ async function handleConfigUpdate(e) {
       throw new Error(data.error || 'Update failed');
     }
 
-    showMessage('Configuration updated successfully!', 'success');
+    showConfigMessage('Configuration updated successfully!', 'success');
 
     // Reload stats
     await loadStats();
 
   } catch (error) {
-    showMessage('Error: ' + error.message, 'error');
+    showConfigMessage('Error: ' + error.message, 'error');
   }
 }
 
-// Show message
-function showMessage(message, type) {
+// Show config message
+function showConfigMessage(message, type) {
   configMessage.textContent = message;
   configMessage.className = `alert alert-${type}`;
   configMessage.style.display = 'block';
 
   setTimeout(() => {
     configMessage.style.display = 'none';
+  }, 5000);
+}
+
+// Show template message
+function showTemplateMessage(message, type) {
+  const templateMessage = document.getElementById('template-message');
+  templateMessage.textContent = message;
+  templateMessage.className = `alert alert-${type}`;
+  templateMessage.style.display = 'block';
+
+  setTimeout(() => {
+    templateMessage.style.display = 'none';
   }, 5000);
 }
 
@@ -262,10 +273,195 @@ function getTimeSince(date) {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
+// ==================== TEMPLATE MANAGEMENT ====================
+
+// Load templates
+async function loadTemplates() {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/templates`, {
+      headers: {
+        'Authorization': `Bearer ${adminToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to load templates');
+    }
+
+    const data = await response.json();
+    const templates = data.templates;
+
+    const tbody = document.getElementById('templates-tbody');
+    tbody.innerHTML = '';
+
+    if (templates.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center">No templates configured. Add one above!</td></tr>';
+      return;
+    }
+
+    templates.forEach(template => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><strong>${template.template_id}</strong></td>
+        <td>${template.name || '-'}</td>
+        <td>${template.reward_template_id}</td>
+        <td>${template.cooldown_hours}</td>
+        <td>
+          <span class="status-badge ${template.enabled ? 'success' : 'error'}" style="padding: 5px 10px; border-radius: 5px; font-size: 0.85rem;">
+            ${template.enabled ? '✅ Enabled' : '❌ Disabled'}
+          </span>
+        </td>
+        <td>
+          <button class="btn btn-sm btn-secondary" onclick="editTemplate(${template.template_id})">✏️ Edit</button>
+          <button class="btn btn-sm btn-secondary" onclick="toggleTemplate(${template.template_id}, ${template.enabled})">${template.enabled ? '⏸️' : '▶️'}</button>
+          <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="deleteTemplate(${template.template_id})">🗑️</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+
+  } catch (error) {
+    console.error('Error loading templates:', error);
+    throw error;
+  }
+}
+
+// Handle add template
+async function handleAddTemplate(e) {
+  e.preventDefault();
+
+  const template = {
+    template_id: document.getElementById('new-template-id').value,
+    name: document.getElementById('new-template-name').value,
+    reward_template_id: document.getElementById('new-reward-template').value,
+    cooldown_hours: document.getElementById('new-cooldown-hours').value
+  };
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/templates`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify(template)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to add template');
+    }
+
+    showTemplateMessage('Template added successfully!', 'success');
+    document.getElementById('add-template-form').reset();
+    await loadTemplates();
+
+  } catch (error) {
+    showTemplateMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// Edit template
+async function editTemplate(templateId) {
+  const newName = prompt('Enter template name (optional):');
+  const newReward = prompt('Enter reward template ID:');
+  const newCooldown = prompt('Enter cooldown hours:');
+
+  if (!newReward || !newCooldown) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/templates/${templateId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        name: newName,
+        reward_template_id: parseInt(newReward),
+        cooldown_hours: parseInt(newCooldown),
+        enabled: 1
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to update template');
+    }
+
+    showTemplateMessage('Template updated successfully!', 'success');
+    await loadTemplates();
+
+  } catch (error) {
+    showTemplateMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// Toggle template enable/disable
+async function toggleTemplate(templateId, currentlyEnabled) {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/templates/${templateId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        enabled: currentlyEnabled ? 0 : 1
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to toggle template');
+    }
+
+    showTemplateMessage(`Template ${currentlyEnabled ? 'disabled' : 'enabled'} successfully!`, 'success');
+    await loadTemplates();
+
+  } catch (error) {
+    showTemplateMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// Delete template
+async function deleteTemplate(templateId) {
+  if (!confirm('Are you sure you want to delete this template? This cannot be undone.')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/templates/${templateId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to delete template');
+    }
+
+    showTemplateMessage('Template deleted successfully!', 'success');
+    await loadTemplates();
+
+  } catch (error) {
+    showTemplateMessage('Error: ' + error.message, 'error');
+  }
+}
+
 // Auto-refresh stats every 30 seconds
 setInterval(() => {
   if (adminToken && dashboardSection.style.display !== 'none') {
     loadStats();
     loadClaims();
+    loadTemplates();
   }
 }, 30000);
