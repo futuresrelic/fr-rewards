@@ -53,6 +53,19 @@ db.exec(`
   );
 `);
 
+// Create templates table for per-template configuration
+db.exec(`
+  CREATE TABLE IF NOT EXISTS templates (
+    template_id INTEGER PRIMARY KEY,
+    name TEXT,
+    reward_template_id INTEGER NOT NULL,
+    cooldown_hours INTEGER NOT NULL DEFAULT 24,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Insert default configuration
 const configExists = db.prepare('SELECT COUNT(*) as count FROM config').get();
 
@@ -84,6 +97,29 @@ for (const account of adminAccounts) {
 
 console.log(`✅ Admin accounts configured: ${adminAccounts.join(', ')}`);
 
+// Seed default templates if they don't exist
+console.log('🌱 Checking default templates...');
+
+const defaultTemplates = [
+  { id: 247050, name: 'Apprentice Editor Card', reward: 246504, cooldown: 96 },
+  { id: 247051, name: '2nd Assistant Editor Card', reward: 246504, cooldown: 72 },
+  { id: 247052, name: '1st Assistant Editor Card', reward: 246504, cooldown: 48 },
+  { id: 247053, name: 'Associate Editor Card', reward: 246504, cooldown: 24 }
+];
+
+for (const template of defaultTemplates) {
+  const exists = db.prepare('SELECT template_id FROM templates WHERE template_id = ?').get(template.id);
+  if (!exists) {
+    db.prepare(`
+      INSERT INTO templates (template_id, name, reward_template_id, cooldown_hours, enabled)
+      VALUES (?, ?, ?, ?, 1)
+    `).run(template.id, template.name, template.reward, template.cooldown);
+    console.log(`✅ Seeded template: ${template.id} (${template.name})`);
+  } else {
+    console.log(`   Template ${template.id} already exists`);
+  }
+}
+
 // Display current configuration
 const config = db.prepare('SELECT * FROM config WHERE id = 1').get();
 console.log('\n📋 Current Configuration:');
@@ -91,6 +127,13 @@ console.log(`   Collection: ${config.collection_name}`);
 console.log(`   Whitelist Templates: ${config.whitelist_templates}`);
 console.log(`   Reward Template: ${config.reward_template}`);
 console.log(`   Cooldown: ${config.cooldown_hours} hours`);
+
+// Display templates
+const templates = db.prepare('SELECT * FROM templates WHERE enabled = 1 ORDER BY template_id ASC').all();
+console.log('\n📦 Active Templates:');
+templates.forEach(t => {
+  console.log(`   ${t.template_id}: ${t.name || 'Unnamed'} → Reward ${t.reward_template_id} (${t.cooldown_hours}h cooldown)`);
+});
 
 console.log('\n✅ Database initialized successfully!');
 console.log(`   Location: ${path.resolve(dbPath)}`);

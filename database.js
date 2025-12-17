@@ -110,16 +110,28 @@ function initializeTables() {
     }
 
     console.log('✅ Database tables initialized successfully!');
+  }
 
-    // Seed default template if templates table is empty
-    const templateCount = db.prepare('SELECT COUNT(*) as count FROM templates').get();
-    if (templateCount.count === 0) {
-      console.log('🌱 Seeding default template...');
+  // Seed default templates if they don't exist (runs every time)
+  console.log('🌱 Checking default templates...');
+
+  const defaultTemplates = [
+    { id: 247050, name: 'Apprentice Editor Card', reward: 246504, cooldown: 96 },
+    { id: 247051, name: '2nd Assistant Editor Card', reward: 246504, cooldown: 72 },
+    { id: 247052, name: '1st Assistant Editor Card', reward: 246504, cooldown: 48 },
+    { id: 247053, name: 'Associate Editor Card', reward: 246504, cooldown: 24 }
+  ];
+
+  for (const template of defaultTemplates) {
+    const exists = db.prepare('SELECT template_id FROM templates WHERE template_id = ?').get(template.id);
+    if (!exists) {
       db.prepare(`
         INSERT INTO templates (template_id, name, reward_template_id, cooldown_hours, enabled)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(247052, '1st Assistant Editor Card', 246504, 48, 1);
-      console.log('✅ Default template seeded: 247052');
+        VALUES (?, ?, ?, ?, 1)
+      `).run(template.id, template.name, template.reward, template.cooldown);
+      console.log(`✅ Seeded template: ${template.id} (${template.name})`);
+    } else {
+      console.log(`   Template ${template.id} already exists`);
     }
   }
 }
