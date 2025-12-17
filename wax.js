@@ -147,6 +147,12 @@ async function mintNFT(toAccount, collection, templateId, immutableData = {}, mu
     throw new Error('WAX_ACCOUNT not configured.');
   }
 
+  console.log('🔨 Attempting to mint NFT:');
+  console.log(`   Minter: ${WAX_ACCOUNT}`);
+  console.log(`   Recipient: ${toAccount}`);
+  console.log(`   Collection: ${collection}`);
+  console.log(`   Template: ${templateId}`);
+
   try {
     // Convert data to AtomicAssets format
     const immutableDataArray = Object.entries(immutableData).map(([key, value]) => ({
@@ -178,6 +184,8 @@ async function mintNFT(toAccount, collection, templateId, immutableData = {}, mu
       },
     }];
 
+    console.log('📤 Sending transaction to blockchain...');
+
     const result = await waxApi.transact(
       { actions },
       {
@@ -185,6 +193,8 @@ async function mintNFT(toAccount, collection, templateId, immutableData = {}, mu
         expireSeconds: 30,
       }
     );
+
+    console.log('✅ Mint successful! TX:', result.transaction_id);
 
     return {
       success: true,
