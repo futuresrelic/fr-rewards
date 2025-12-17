@@ -96,12 +96,31 @@ async function getTemplate(collection, templateId) {
  */
 async function checkEligibility(account, collection, whitelistTemplates) {
   try {
+    console.log(`🔍 Checking eligibility for ${account}`);
+    console.log(`📋 Collection: ${collection}`);
+    console.log(`✅ Whitelist templates:`, whitelistTemplates);
+
     const assets = await getUserAssets(account, collection);
+    console.log(`📦 Found ${assets.length} total assets in collection`);
 
     // Filter assets that match whitelisted templates
     const eligibleAssets = assets.filter(asset => {
-      return whitelistTemplates.includes(parseInt(asset.template.template_id));
+      const templateId = parseInt(asset.template.template_id);
+      const isEligible = whitelistTemplates.includes(templateId);
+
+      if (isEligible) {
+        console.log(`✅ MATCH: Asset ${asset.asset_id} with template ${templateId}`);
+      }
+
+      return isEligible;
     });
+
+    console.log(`🎯 Found ${eligibleAssets.length} eligible assets`);
+
+    if (eligibleAssets.length === 0) {
+      console.log('❌ No eligible assets found');
+      console.log('📝 User template IDs:', assets.map(a => a.template.template_id).slice(0, 20));
+    }
 
     return eligibleAssets;
   } catch (error) {

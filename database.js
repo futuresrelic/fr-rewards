@@ -110,6 +110,17 @@ function initializeTables() {
     }
 
     console.log('✅ Database tables initialized successfully!');
+
+    // Seed default template if templates table is empty
+    const templateCount = db.prepare('SELECT COUNT(*) as count FROM templates').get();
+    if (templateCount.count === 0) {
+      console.log('🌱 Seeding default template...');
+      db.prepare(`
+        INSERT INTO templates (template_id, name, reward_template_id, cooldown_hours, enabled)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(247052, '1st Assistant Editor Card', 246504, 48, 1);
+      console.log('✅ Default template seeded: 247052');
+    }
   }
 }
 
