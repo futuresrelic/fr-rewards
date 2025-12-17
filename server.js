@@ -265,6 +265,14 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Error claiming reward:', error);
+
+    // Handle CPU exhaustion errors
+    if (error.message && error.message.toLowerCase().includes('cpu')) {
+      return res.status(503).json({
+        error: 'Server temporarily unavailable - insufficient CPU resources. Please try again in a few minutes or contact admin.'
+      });
+    }
+
     res.status(500).json({ error: error.message });
   }
 });
