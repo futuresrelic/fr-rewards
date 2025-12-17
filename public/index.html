@@ -6,44 +6,8 @@
   <title>NFT Holder Rewards</title>
   <link rel="stylesheet" href="styles.css">
 
-  <!-- WaxJS from unpkg with load tracking -->
-  <script>
-    console.log('🔍 Starting to load wallet libraries...');
-
-    // Track script loading
-    window.scriptLoadStatus = {
-      waxjs: 'loading',
-      anchor: 'loading',
-      anchorTransport: 'loading'
-    };
-  </script>
-
-  <script src="https://unpkg.com/@waxio/waxjs@1.0.4/dist-web/waxjs.js"
-          onload="console.log('✅ WaxJS script loaded'); window.scriptLoadStatus.waxjs = 'loaded'; console.log('WaxJS available:', typeof window.waxjs, typeof window.WaxJS);"
-          onerror="console.error('❌ WaxJS script failed to load'); window.scriptLoadStatus.waxjs = 'error';"></script>
-
-  <script src="https://unpkg.com/anchor-link@3.4.3/dist/anchor-link.umd.js"
-          onload="console.log('✅ Anchor Link script loaded'); window.scriptLoadStatus.anchor = 'loaded'; console.log('AnchorLink available:', typeof window.AnchorLink);"
-          onerror="console.error('❌ Anchor Link script failed to load'); window.scriptLoadStatus.anchor = 'error';"></script>
-
-  <script src="https://unpkg.com/anchor-link-browser-transport@3.4.3/dist/anchor-link-browser-transport.umd.js"
-          onload="console.log('✅ Anchor Transport script loaded'); window.scriptLoadStatus.anchorTransport = 'loaded'; console.log('AnchorLinkBrowserTransport available:', typeof window.AnchorLinkBrowserTransport);"
-          onerror="console.error('❌ Anchor Transport script failed to load'); window.scriptLoadStatus.anchorTransport = 'error';"></script>
-
-  <script>
-    // Log what's actually available after all scripts load
-    window.addEventListener('DOMContentLoaded', function() {
-      console.log('📊 Script load status:', window.scriptLoadStatus);
-      console.log('📦 Available globals:', {
-        waxjs: typeof window.waxjs,
-        WaxJS: typeof window.WaxJS,
-        AnchorLink: typeof window.AnchorLink,
-        AnchorLinkBrowserTransport: typeof window.AnchorLinkBrowserTransport
-      });
-      console.log('🔍 All window properties containing "wax":', Object.keys(window).filter(k => k.toLowerCase().includes('wax')));
-      console.log('🔍 All window properties containing "anchor":', Object.keys(window).filter(k => k.toLowerCase().includes('anchor')));
-    });
-  </script>
+  <!-- Local WaxJS wrapper -->
+  <script src="waxjs-simple.js"></script>
 </head>
 <body>
   <div class="container">
