@@ -61,7 +61,21 @@ async function loadPublicConfig() {
     const data = await response.json();
     if (data.success) {
       config = data.config;
-      document.getElementById('cooldown-info').textContent = config.cooldown_hours;
+
+      // Apply branding
+      if (config.page_title) {
+        document.getElementById('page-title').textContent = config.page_title;
+        document.title = config.page_title;
+      }
+      if (config.page_subtitle) {
+        document.getElementById('page-subtitle').textContent = config.page_subtitle;
+      }
+      if (config.logo_url) {
+        const logoImg = document.getElementById('page-logo');
+        logoImg.src = config.logo_url;
+        logoImg.alt = config.page_title || 'Logo';
+        logoImg.style.display = 'block';
+      }
     }
   } catch (error) {
     console.error('Error loading config:', error);

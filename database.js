@@ -26,6 +26,9 @@ function initializeTables() {
         reward_template INTEGER NOT NULL,
         cooldown_hours INTEGER NOT NULL DEFAULT 24,
         collection_name TEXT NOT NULL,
+        page_title TEXT DEFAULT 'NFT Holder Rewards',
+        page_subtitle TEXT DEFAULT 'Connect your wallet to claim rewards!',
+        logo_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -112,6 +115,20 @@ function initializeTables() {
     console.log('✅ Database tables initialized successfully!');
   }
 
+  // Migration: Add branding columns if they don't exist
+  try {
+    const configRow = db.prepare('SELECT * FROM config WHERE id = 1').get();
+    if (configRow && !configRow.hasOwnProperty('page_title')) {
+      console.log('🔄 Migrating database: Adding branding columns...');
+      db.exec(`ALTER TABLE config ADD COLUMN page_title TEXT DEFAULT 'NFT Holder Rewards'`);
+      db.exec(`ALTER TABLE config ADD COLUMN page_subtitle TEXT DEFAULT 'Connect your wallet to claim rewards!'`);
+      db.exec(`ALTER TABLE config ADD COLUMN logo_url TEXT`);
+      console.log('✅ Branding columns added');
+    }
+  } catch (error) {
+    // Columns might already exist, ignore error
+  }
+
   // Seed default templates if they don't exist (runs every time)
   console.log('🌱 Checking default templates...');
 
@@ -161,6 +178,30 @@ const config = {
       data.cooldown_hours,
       data.collection_name
     );
+  },
+
+  updateBranding: (data) => {
+    const fields = [];
+    const values = [];
+
+    if (data.page_title !== undefined) {
+      fields.push('page_title = ?');
+      values.push(data.page_title);
+    }
+    if (data.page_subtitle !== undefined) {
+      fields.push('page_subtitle = ?');
+      values.push(data.page_subtitle);
+    }
+    if (data.logo_url !== undefined) {
+      fields.push('logo_url = ?');
+      values.push(data.logo_url);
+    }
+
+    if (fields.length === 0) return;
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    const sql = `UPDATE config SET ${fields.join(', ')} WHERE id = 1`;
+    return db.prepare(sql).run(...values);
   }
 };
 

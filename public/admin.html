@@ -116,6 +116,44 @@
         <div id="template-message" class="alert" style="display: none;"></div>
       </div>
 
+      <!-- Branding -->
+      <div class="card">
+        <h2>🎨 Page Branding</h2>
+        <p>Customize the appearance of your rewards claim page.</p>
+
+        <form id="branding-form">
+          <div class="form-group">
+            <label for="page-title">Page Title:</label>
+            <input type="text" id="page-title-input" class="form-control" placeholder="Future's Relic Rewards Claim">
+            <small>Main heading displayed on the claim page</small>
+          </div>
+
+          <div class="form-group">
+            <label for="page-subtitle">Page Subtitle:</label>
+            <input type="text" id="page-subtitle-input" class="form-control" placeholder="Connect your wallet to claim exclusive rewards!">
+            <small>Subheading displayed under the title</small>
+          </div>
+
+          <div class="form-group">
+            <label for="logo-upload">Logo Image:</label>
+            <input type="file" id="logo-upload" accept="image/*" style="display: none;">
+            <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+              <button type="button" id="upload-logo-btn" class="btn btn-secondary">
+                📷 Choose Logo Image
+              </button>
+              <small style="flex: 1;">PNG, JPG, GIF, WebP, SVG (max 5MB)</small>
+            </div>
+            <div id="logo-preview" style="margin-top: 15px; display: none;">
+              <img id="logo-preview-img" src="" alt="Logo preview" style="max-height: 100px; max-width: 200px; object-fit: contain; border-radius: 8px; background: rgba(255,255,255,0.1); padding: 10px;">
+              <p style="margin-top: 8px; font-size: 0.9em; color: var(--text-secondary);"><strong>Current logo</strong></p>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Save Branding</button>
+        </form>
+        <div id="branding-message" class="alert" style="display: none;"></div>
+      </div>
+
       <!-- Configuration -->
       <div class="card">
         <h2>⚙️ General Configuration</h2>

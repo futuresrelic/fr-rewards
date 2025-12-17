@@ -4,6 +4,8 @@ const path = require('path');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const fs = require('fs');
 require('dotenv').config();
 
 const db = require('./database');
@@ -12,6 +14,39 @@ const wax = require('./wax');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for image uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'logo-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp|svg/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (extname && mimetype) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed (JPEG, PNG, GIF, WebP, SVG)'));
+    }
+  }
+});
 
 // Trust proxy for Railway deployment
 app.set('trust proxy', true);
@@ -604,6 +639,60 @@ app.post('/api/admin/import', authenticateAdmin, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/upload-logo
+ * Upload a logo image
+ */
+app.post('/api/admin/upload-logo', authenticateAdmin, upload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const logoUrl = `/uploads/${req.file.filename}`;
+
+    // Update database with new logo URL
+    db.config.updateBranding({ logo_url: logoUrl });
+
+    res.json({
+      success: true,
+      logo_url: logoUrl,
+      message: 'Logo uploaded successfully'
+    });
+  } catch (error) {
+    console.error('Error uploading logo:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/branding
+ * Update page branding (title, subtitle)
+ */
+app.put('/api/admin/branding', authenticateAdmin, async (req, res) => {
+  try {
+    const { page_title, page_subtitle } = req.body;
+
+    const updates = {};
+    if (page_title !== undefined) updates.page_title = page_title;
+    if (page_subtitle !== undefined) updates.page_subtitle = page_subtitle;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No branding fields provided' });
+    }
+
+    db.config.updateBranding(updates);
+
+    res.json({
+      success: true,
+      message: 'Branding updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating branding:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/config/public
  * Get public configuration (no auth required)
  */
@@ -615,7 +704,10 @@ app.get('/api/config/public', async (req, res) => {
       success: true,
       config: {
         collection_name: config.collection_name,
-        templates: enabledTemplates
+        templates: enabledTemplates,
+        page_title: config.page_title || 'NFT Holder Rewards',
+        page_subtitle: config.page_subtitle || 'Connect your wallet to claim rewards!',
+        logo_url: config.logo_url || null
       }
     });
   } catch (error) {

@@ -27,6 +27,11 @@ function setupEventListeners() {
     document.getElementById('import-file').click();
   });
   document.getElementById('import-file').addEventListener('change', handleImport);
+  document.getElementById('branding-form').addEventListener('submit', handleBrandingUpdate);
+  document.getElementById('upload-logo-btn').addEventListener('click', () => {
+    document.getElementById('logo-upload').click();
+  });
+  document.getElementById('logo-upload').addEventListener('change', handleLogoUpload);
 }
 
 // Check existing session
@@ -88,7 +93,8 @@ async function showDashboard() {
       loadConfig(),
       loadStats(),
       loadClaims(),
-      loadTemplates()
+      loadTemplates(),
+      loadBranding()
     ]);
   } catch (error) {
     console.error('Error loading dashboard:', error);
@@ -549,6 +555,117 @@ function showImportMessage(message, type) {
   setTimeout(() => {
     importMessage.style.display = 'none';
   }, 5000);
+}
+
+// Handle logo upload
+async function handleLogoUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const brandingMessage = document.getElementById('branding-message');
+
+  try {
+    const formData = new FormData();
+    formData.append('logo', file);
+
+    const response = await fetch(`${API_URL}/api/admin/upload-logo`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Upload failed');
+    }
+
+    // Show preview
+    const logoPreview = document.getElementById('logo-preview');
+    const logoPreviewImg = document.getElementById('logo-preview-img');
+    logoPreviewImg.src = data.logo_url;
+    logoPreview.style.display = 'block';
+
+    showBrandingMessage('Logo uploaded successfully!', 'success');
+  } catch (error) {
+    showBrandingMessage('Logo upload failed: ' + error.message, 'error');
+  }
+
+  // Reset file input
+  e.target.value = '';
+}
+
+// Handle branding update
+async function handleBrandingUpdate(e) {
+  e.preventDefault();
+
+  const pageTitle = document.getElementById('page-title-input').value.trim();
+  const pageSubtitle = document.getElementById('page-subtitle-input').value.trim();
+
+  if (!pageTitle && !pageSubtitle) {
+    showBrandingMessage('Please enter at least one field', 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/branding`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        page_title: pageTitle || undefined,
+        page_subtitle: pageSubtitle || undefined
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Update failed');
+    }
+
+    showBrandingMessage('Branding updated successfully!', 'success');
+  } catch (error) {
+    showBrandingMessage('Update failed: ' + error.message, 'error');
+  }
+}
+
+// Show branding message
+function showBrandingMessage(message, type) {
+  const brandingMessage = document.getElementById('branding-message');
+  brandingMessage.textContent = message;
+  brandingMessage.className = `alert alert-${type}`;
+  brandingMessage.style.display = 'block';
+
+  setTimeout(() => {
+    brandingMessage.style.display = 'none';
+  }, 5000);
+}
+
+// Load branding into form
+async function loadBranding() {
+  try {
+    const response = await fetch(`${API_URL}/api/config/public`);
+    const data = await response.json();
+
+    if (data.success && data.config) {
+      document.getElementById('page-title-input').value = data.config.page_title || '';
+      document.getElementById('page-subtitle-input').value = data.config.page_subtitle || '';
+
+      if (data.config.logo_url) {
+        const logoPreview = document.getElementById('logo-preview');
+        const logoPreviewImg = document.getElementById('logo-preview-img');
+        logoPreviewImg.src = data.config.logo_url;
+        logoPreview.style.display = 'block';
+      }
+    }
+  } catch (error) {
+    console.error('Error loading branding:', error);
+  }
 }
 
 // Auto-refresh stats every 30 seconds
