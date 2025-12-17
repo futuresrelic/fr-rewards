@@ -6,14 +6,12 @@
   <title>NFT Holder Rewards</title>
   <link rel="stylesheet" href="styles.css">
 
-  <!-- Official WaxJS library from node_modules -->
-  <script src="/libs/waxjs/index.js"></script>
-  <script>
-    // Expose WaxJS globally after it loads
-    if (typeof waxjs !== 'undefined') {
-      window.WaxJS = waxjs.WaxJS;
-      console.log('✅ Official WaxJS loaded');
-    }
+  <!-- WaxJS via esm.sh (npm to browser converter) -->
+  <script type="module">
+    import * as waxjsModule from 'https://esm.sh/@waxio/waxjs@1.7.1';
+    window.waxjs = waxjsModule;
+    window.WaxJS = waxjsModule.WaxJS || waxjsModule.default;
+    console.log('✅ Official WaxJS loaded via esm.sh:', !!window.WaxJS);
   </script>
 </head>
 <body>
