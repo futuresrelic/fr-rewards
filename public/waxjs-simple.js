@@ -42,12 +42,36 @@
             if (loginWindow.closed) {
               clearInterval(checkLogin);
 
+              // Debug: Log ALL localStorage keys
+              console.log('🔍 Popup closed. Checking localStorage...');
+              console.log('🔍 All localStorage keys:', Object.keys(localStorage));
+
+              // Try multiple possible keys
+              const possibleKeys = [
+                storageKey,
+                'wax-cloud-wallet',
+                'waxCloudWallet',
+                'wax_account',
+                'wax_session'
+              ];
+
+              console.log('🔍 Checking keys:', possibleKeys);
+
+              for (const key of possibleKeys) {
+                const data = localStorage.getItem(key);
+                if (data) {
+                  console.log(`🔍 Found data in key "${key}":`, data.substring(0, 100));
+                }
+              }
+
               // Check if WAX stored session data
               const sessionData = localStorage.getItem(storageKey);
 
               if (sessionData) {
                 try {
                   const session = JSON.parse(sessionData);
+                  console.log('🔍 Parsed session:', session);
+
                   if (session && session.userAccount) {
                     this.userAccount = session.userAccount;
                     this.pubKeys = session.pubKeys || [];
@@ -62,6 +86,7 @@
               }
 
               // No session found
+              console.error('❌ No valid session found in localStorage');
               reject(new Error('Login cancelled or failed'));
             }
           } catch (e) {
