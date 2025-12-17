@@ -222,8 +222,25 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
     cooldownMap[cd.template_id] = cd;
   });
 
-  // Display each eligible NFT
+  // Group assets by template_id (to show quantity)
+  const templateGroups = {};
   eligibilityData.eligibleAssets.forEach(asset => {
+    const templateId = parseInt(asset.template_id);
+    if (!templateGroups[templateId]) {
+      templateGroups[templateId] = {
+        asset: asset,
+        quantity: 0,
+        assetIds: []
+      };
+    }
+    templateGroups[templateId].quantity++;
+    templateGroups[templateId].assetIds.push(asset.asset_id);
+  });
+
+  // Display each unique template (grouped by template_id)
+  Object.values(templateGroups).forEach(group => {
+    const asset = group.asset;
+    const quantity = group.quantity;
     const templateId = parseInt(asset.template_id);
     const cooldown = cooldownMap[templateId];
     const templateConfig = asset.template_config || (cooldown && cooldown.template_config);
@@ -239,19 +256,31 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
     const rewardTemplate = templateConfig?.reward_template_id || '?';
     const cooldownHours = templateConfig?.cooldown_hours || 24;
 
-    // Get image URLs
-    const nftImageUrl = asset.image_url;
+    // Get image/video URLs
+    const nftMediaUrl = asset.image_url;
+    const isVideo = asset.is_video;
     const rewardImageUrl = asset.reward_image_url;
+
+    // Build media element (video or image)
+    let nftMediaHtml = '📦';
+    if (nftMediaUrl) {
+      if (isVideo) {
+        nftMediaHtml = `<video src="${nftMediaUrl}" class="nft-image" autoplay loop muted playsinline onerror="this.style.display='none'; this.parentElement.innerHTML='📦';"></video>`;
+      } else {
+        nftMediaHtml = `<img src="${nftMediaUrl}" alt="NFT" class="nft-image" onerror="this.style.display='none'; this.parentElement.innerHTML='📦';">`;
+      }
+    }
 
     nftCard.innerHTML = `
       <div class="nft-header">
         <div class="nft-icon">
-          ${nftImageUrl
-            ? `<img src="${nftImageUrl}" alt="NFT" class="nft-image" onerror="this.style.display='none'; this.parentElement.innerHTML='📦';">`
-            : '📦'}
+          ${nftMediaHtml}
         </div>
         <div class="nft-info">
-          <div class="nft-name">${asset.name || templateName || 'NFT #' + asset.asset_id}</div>
+          <div class="nft-name">
+            ${asset.name || templateName || 'NFT #' + asset.asset_id}
+            ${quantity > 1 ? `<span class="quantity-badge">×${quantity}</span>` : ''}
+          </div>
           <div class="nft-template">Template ID: ${templateId}</div>
           <div class="nft-template" style="font-size: 0.85rem; color: var(--text-secondary);">
             Reward: Template #${rewardTemplate} | Cooldown: ${cooldownHours}h

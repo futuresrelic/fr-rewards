@@ -169,12 +169,16 @@ async function checkEligibility(account, collection, whitelistTemplates) {
       console.log('📝 User template IDs:', assets.map(a => a.template.template_id).slice(0, 20));
     }
 
-    // Enhance eligible assets with image URLs
+    // Enhance eligible assets with image/video URLs (prioritize video over img)
     const enhancedAssets = eligibleAssets.map(asset => {
+      const video = asset.data?.video || asset.template?.immutable_data?.video;
       const img = asset.data?.img || asset.template?.immutable_data?.img;
+      const media = video || img;
+
       return {
         ...asset,
-        image_url: img ? getIpfsUrl(img) : null
+        image_url: media ? getIpfsUrl(media) : null,
+        is_video: !!video
       };
     });
 

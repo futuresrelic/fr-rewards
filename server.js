@@ -156,9 +156,12 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
     await Promise.all(uniqueRewardTemplates.map(async (rewardTemplateId) => {
       try {
         const templateData = await wax.getTemplate(config.collection_name, rewardTemplateId);
+        // Prioritize video over img
+        const video = templateData?.immutable_data?.video;
         const img = templateData?.immutable_data?.img;
-        if (img) {
-          rewardTemplateImages.set(rewardTemplateId, wax.getIpfsUrl ? wax.getIpfsUrl(img) : null);
+        const media = video || img;
+        if (media) {
+          rewardTemplateImages.set(rewardTemplateId, wax.getIpfsUrl ? wax.getIpfsUrl(media) : null);
         }
       } catch (error) {
         console.warn(`Failed to fetch reward template ${rewardTemplateId}:`, error.message);
