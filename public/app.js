@@ -239,9 +239,17 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
     const rewardTemplate = templateConfig?.reward_template_id || '?';
     const cooldownHours = templateConfig?.cooldown_hours || 24;
 
+    // Get image URLs
+    const nftImageUrl = asset.image_url;
+    const rewardImageUrl = asset.reward_image_url;
+
     nftCard.innerHTML = `
       <div class="nft-header">
-        <div class="nft-icon">📦</div>
+        <div class="nft-icon">
+          ${nftImageUrl
+            ? `<img src="${nftImageUrl}" alt="NFT" class="nft-image" onerror="this.style.display='none'; this.parentElement.innerHTML='📦';">`
+            : '📦'}
+        </div>
         <div class="nft-info">
           <div class="nft-name">${asset.name || templateName || 'NFT #' + asset.asset_id}</div>
           <div class="nft-template">Template ID: ${templateId}</div>
@@ -249,6 +257,12 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
             Reward: Template #${rewardTemplate} | Cooldown: ${cooldownHours}h
           </div>
         </div>
+        ${rewardImageUrl
+          ? `<div class="reward-preview">
+              <img src="${rewardImageUrl}" alt="Reward" class="reward-image" onerror="this.style.display='none';">
+              <div class="reward-label">Reward</div>
+            </div>`
+          : ''}
       </div>
       <div class="nft-status ${canClaim ? 'ready' : 'cooldown'}">
         ${canClaim ? '✅ Ready to claim!' : '⏰ Next claim in: <span class="countdown" data-seconds="' + remainingSeconds + '"></span>'}
