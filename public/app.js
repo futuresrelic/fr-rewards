@@ -3,6 +3,8 @@ const API_URL = window.location.origin;
 // State
 let currentAccount = null;
 let wax = null;
+let anchor = null;
+let currentWalletType = null;
 let config = null;
 let countdownIntervals = [];
 
@@ -29,13 +31,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Wait for wallet libraries to load
 async function waitForLibraries() {
-  // WaxJS wrapper loads synchronously, just check it's there
+  // Check WaxJS
   if (window.WaxJS) {
     console.log('✅ WaxJS loaded');
-    return true;
+  } else {
+    console.error('❌ WaxJS not loaded');
   }
-  console.error('❌ WaxJS not loaded');
-  return false;
+
+  // Wait a bit for Anchor to load (it loads async)
+  let attempts = 0;
+  while (!window.AnchorWallet && attempts < 50) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
+  }
+
+  if (window.AnchorWallet) {
+    console.log('✅ Anchor wallet loaded');
+  } else {
+    console.warn('⚠️ Anchor wallet not loaded (will be disabled)');
+  }
+
+  return true;
 }
 
 // Load public configuration
@@ -60,12 +76,31 @@ function setupEventListeners() {
 }
 
 // Check for existing session
-function checkExistingSession() {
+async function checkExistingSession() {
   const savedAccount = localStorage.getItem('wax_account');
   const savedWallet = localStorage.getItem('wax_wallet');
 
   if (savedAccount && savedWallet) {
     currentAccount = savedAccount;
+    currentWalletType = savedWallet;
+
+    // Try to restore Anchor session
+    if (savedWallet === 'anchor' && window.AnchorWallet) {
+      try {
+        const restored = await window.AnchorWallet.restoreSession();
+        if (restored) {
+          anchor = window.AnchorWallet;
+          currentAccount = restored;
+        }
+      } catch (error) {
+        console.warn('Could not restore Anchor session:', error);
+        // Clear invalid session
+        localStorage.removeItem('wax_account');
+        localStorage.removeItem('wax_wallet');
+        return;
+      }
+    }
+
     showConnectedState();
     loadUserData();
   }
@@ -83,6 +118,7 @@ async function connectWallet(walletType) {
     }
 
     if (currentAccount) {
+      currentWalletType = walletType;
       localStorage.setItem('wax_account', currentAccount);
       localStorage.setItem('wax_wallet', walletType);
       showConnectedState();
@@ -105,16 +141,31 @@ async function connectWCW() {
 
 // Connect Anchor
 async function connectAnchor() {
-  throw new Error('Anchor wallet support coming soon. Please use WAX Cloud Wallet for now.');
+  if (!window.AnchorWallet) {
+    throw new Error('Anchor wallet not loaded. Please refresh the page or use WAX Cloud Wallet.');
+  }
+
+  anchor = window.AnchorWallet;
+  currentAccount = await anchor.login();
 }
 
 // Disconnect wallet
-function disconnect() {
+async function disconnect() {
+  // Logout from Anchor if connected
+  if (currentWalletType === 'anchor' && anchor) {
+    try {
+      await anchor.logout();
+    } catch (error) {
+      console.error('Error logging out of Anchor:', error);
+    }
+  }
+
   currentAccount = null;
   wax = null;
+  anchor = null;
+  currentWalletType = null;
   localStorage.removeItem('wax_account');
   localStorage.removeItem('wax_wallet');
-  localStorage.removeItem('anchorSession');
   clearCountdowns();
   showNotConnectedState();
 }
