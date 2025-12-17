@@ -149,13 +149,31 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
 
     const eligibleAssets = await wax.checkEligibility(account, config.collection_name, whitelistTemplates);
 
-    // Add template configuration to each eligible asset
+    // Fetch reward template images for unique reward templates
+    const rewardTemplateImages = new Map();
+    const uniqueRewardTemplates = [...new Set(enabledTemplates.map(t => t.reward_template_id))];
+
+    await Promise.all(uniqueRewardTemplates.map(async (rewardTemplateId) => {
+      try {
+        const templateData = await wax.getTemplate(config.collection_name, rewardTemplateId);
+        const img = templateData?.immutable_data?.img;
+        if (img) {
+          rewardTemplateImages.set(rewardTemplateId, wax.getIpfsUrl ? wax.getIpfsUrl(img) : null);
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch reward template ${rewardTemplateId}:`, error.message);
+      }
+    }));
+
+    // Add template configuration and images to each eligible asset
     const enrichedAssets = eligibleAssets.map(asset => {
       const templateConfig = enabledTemplates.find(t => t.template_id === parseInt(asset.template.template_id));
       return {
         asset_id: asset.asset_id,
         template_id: asset.template.template_id,
         name: asset.name,
+        image_url: asset.image_url || null,  // Whitelisted NFT image from checkEligibility
+        reward_image_url: templateConfig ? rewardTemplateImages.get(templateConfig.reward_template_id) : null,
         template_config: templateConfig
       };
     });

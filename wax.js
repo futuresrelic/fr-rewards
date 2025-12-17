@@ -120,6 +120,21 @@ async function getTemplate(collection, templateId) {
 }
 
 /**
+ * Convert IPFS hash to usable URL
+ * @param {string} ipfsHash - IPFS hash (e.g., "QmXXX" or "ipfs://QmXXX")
+ * @returns {string} Full IPFS URL
+ */
+function getIpfsUrl(ipfsHash) {
+  if (!ipfsHash) return null;
+
+  // Remove ipfs:// prefix if present
+  const hash = ipfsHash.replace('ipfs://', '');
+
+  // Use ipfs.io gateway
+  return `https://ipfs.io/ipfs/${hash}`;
+}
+
+/**
  * Check if user holds any whitelisted NFTs
  * @param {string} account - WAX account name
  * @param {string} collection - Collection name
@@ -154,7 +169,16 @@ async function checkEligibility(account, collection, whitelistTemplates) {
       console.log('📝 User template IDs:', assets.map(a => a.template.template_id).slice(0, 20));
     }
 
-    return eligibleAssets;
+    // Enhance eligible assets with image URLs
+    const enhancedAssets = eligibleAssets.map(asset => {
+      const img = asset.data?.img || asset.template?.immutable_data?.img;
+      return {
+        ...asset,
+        image_url: img ? getIpfsUrl(img) : null
+      };
+    });
+
+    return enhancedAssets;
   } catch (error) {
     console.error('Error checking eligibility:', error);
     throw error;
@@ -386,6 +410,7 @@ module.exports = {
   getCollection,
   verifyTransaction,
   getAccountResources,
+  getIpfsUrl,
   ATOMIC_APIS,
   WAX_ACCOUNT
 };
