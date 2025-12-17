@@ -37,8 +37,10 @@ async function getUserAssets(account, collection = null) {
     }
 
     const response = await fetch(url);
+
     if (!response.ok) {
-      throw new Error(`AtomicAssets API error: ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`AtomicAssets API error (${response.status}): ${errorText || response.statusText}`);
     }
 
     const data = await response.json();

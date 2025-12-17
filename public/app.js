@@ -233,16 +233,22 @@ function showNotEligibleState(eligibilityData) {
   notEligibleSection.style.display = 'block';
   whitelistInfoEl.innerHTML = '';
 
-  eligibilityData.whitelistTemplates.forEach(templateId => {
-    const item = document.createElement('div');
-    item.className = 'whitelist-item';
-    item.textContent = `Template ID: ${templateId}`;
-    whitelistInfoEl.appendChild(item);
-  });
+  if (eligibilityData && eligibilityData.whitelistTemplates && eligibilityData.whitelistTemplates.length > 0) {
+    eligibilityData.whitelistTemplates.forEach(templateId => {
+      const item = document.createElement('div');
+      item.className = 'whitelist-item';
+      item.textContent = `Template ID: ${templateId}`;
+      whitelistInfoEl.appendChild(item);
+    });
+  } else {
+    whitelistInfoEl.innerHTML = '<p>No templates configured. Please contact admin.</p>';
+  }
 
   // Update marketplace link
   const marketplaceLink = document.getElementById('marketplace-link');
-  marketplaceLink.href = `https://neftyblocks.com/collection/${config.collection_name}`;
+  if (config && config.collection_name) {
+    marketplaceLink.href = `https://neftyblocks.com/collection/${config.collection_name}`;
+  }
 }
 
 // Claim reward
