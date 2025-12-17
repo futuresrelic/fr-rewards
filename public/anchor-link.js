@@ -6,25 +6,74 @@
 (async function() {
   console.log('🔗 Loading Anchor Link...');
 
-  // Load anchor-link from CDN
-  const anchorLinkScript = document.createElement('script');
-  anchorLinkScript.src = 'https://unpkg.com/anchor-link@3.4.4/dist/anchor-link.min.js';
-  anchorLinkScript.onload = () => {
-    console.log('✅ Anchor Link library loaded');
-    initAnchor();
-  };
-  anchorLinkScript.onerror = () => {
-    console.error('❌ Failed to load Anchor Link');
-  };
-  document.head.appendChild(anchorLinkScript);
+  // Try multiple CDNs for better compatibility
+  const cdns = [
+    {
+      link: 'https://cdn.jsdelivr.net/npm/anchor-link@3.4.4/dist/anchor-link.min.js',
+      transport: 'https://cdn.jsdelivr.net/npm/anchor-link-browser-transport@3.4.1/dist/anchor-link-browser-transport.min.js'
+    },
+    {
+      link: 'https://unpkg.com/anchor-link@3.4.4/dist/anchor-link.min.js',
+      transport: 'https://unpkg.com/anchor-link-browser-transport@3.4.1/dist/anchor-link-browser-transport.min.js'
+    }
+  ];
 
-  // Load anchor-link-browser-transport
-  const transportScript = document.createElement('script');
-  transportScript.src = 'https://unpkg.com/anchor-link-browser-transport@3.4.1/dist/anchor-link-browser-transport.min.js';
-  transportScript.onerror = () => {
-    console.error('❌ Failed to load Anchor transport');
-  };
-  document.head.appendChild(transportScript);
+  let cdnIndex = 0;
+  let loadFailed = false;
+
+  function tryLoadScripts() {
+    if (cdnIndex >= cdns.length) {
+      console.error('❌ All Anchor CDNs failed');
+      disableAnchorButton();
+      return;
+    }
+
+    const cdn = cdns[cdnIndex];
+    console.log(`📦 Trying CDN ${cdnIndex + 1}/${cdns.length}...`);
+
+    // Load anchor-link from CDN
+    const anchorLinkScript = document.createElement('script');
+    anchorLinkScript.src = cdn.link;
+    anchorLinkScript.onload = () => {
+      console.log('✅ Anchor Link library loaded');
+      loadTransport(cdn.transport);
+    };
+    anchorLinkScript.onerror = () => {
+      console.warn(`❌ Failed to load Anchor Link from CDN ${cdnIndex + 1}`);
+      cdnIndex++;
+      tryLoadScripts();
+    };
+    document.head.appendChild(anchorLinkScript);
+  }
+
+  function loadTransport(transportUrl) {
+    // Load anchor-link-browser-transport
+    const transportScript = document.createElement('script');
+    transportScript.src = transportUrl;
+    transportScript.onload = () => {
+      console.log('✅ Anchor Transport loaded');
+      initAnchor();
+    };
+    transportScript.onerror = () => {
+      console.warn(`❌ Failed to load Anchor transport from CDN ${cdnIndex + 1}`);
+      cdnIndex++;
+      tryLoadScripts();
+    };
+    document.head.appendChild(transportScript);
+  }
+
+  function disableAnchorButton() {
+    // Disable Anchor button if loading fails
+    const anchorBtn = document.getElementById('connect-anchor');
+    if (anchorBtn) {
+      anchorBtn.disabled = true;
+      anchorBtn.style.opacity = '0.5';
+      anchorBtn.title = 'Anchor wallet unavailable - use WAX Cloud Wallet';
+    }
+  }
+
+  // Start loading
+  tryLoadScripts();
 
   function initAnchor() {
     // Wait for both libraries to load
