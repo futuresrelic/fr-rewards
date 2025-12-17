@@ -224,6 +224,6 @@ module.exports = {
   mintNFT,
   getCollection,
   verifyTransaction,
-  ATOMIC_API,
+  ATOMIC_APIS,
   WAX_ACCOUNT
 };
