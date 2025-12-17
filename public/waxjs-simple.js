@@ -15,96 +15,74 @@
 
     async login() {
       return new Promise((resolve, reject) => {
-        const width = 350;
+        // Listen for postMessage from WAX Cloud Wallet
+        const messageHandler = (event) => {
+          // Accept messages from WAX domains
+          if (event.origin !== 'https://www.mycloudwallet.com' &&
+              event.origin !== 'https://all-access.wax.io') {
+            return;
+          }
+
+          console.log('📨 Received message from WAX:', event.data);
+
+          // Handle different message formats
+          if (event.data) {
+            let account = null;
+            let keys = [];
+
+            // Try to extract account from various formats
+            if (typeof event.data === 'string') {
+              account = event.data;
+            } else if (event.data.account) {
+              account = event.data.account;
+              keys = event.data.keys || event.data.pubKeys || [];
+            } else if (event.data.userAccount) {
+              account = event.data.userAccount;
+              keys = event.data.pubKeys || [];
+            }
+
+            if (account) {
+              this.userAccount = account;
+              this.pubKeys = keys;
+
+              window.removeEventListener('message', messageHandler);
+              console.log('✅ Logged in as:', account);
+              resolve(account);
+            }
+          }
+        };
+
+        window.addEventListener('message', messageHandler);
+
+        // Open WAX Cloud Wallet
+        const width = 400;
         const height = 600;
         const left = (window.screen.width / 2) - (width / 2);
         const top = (window.screen.height / 2) - (height / 2);
 
-        // Check localStorage key that WAX Cloud Wallet uses
-        const storageKey = `wax-cloud-wallet_${window.location.origin}`;
-
-        // Open WAX Cloud Wallet login
         const loginWindow = window.open(
-          'https://www.mycloudwallet.com/cloud-wallet/login/',
+          'https://all-access.wax.io/cloud-wallet/login/',
           'WAX Login',
           `width=${width},height=${height},left=${left},top=${top}`
         );
 
         if (!loginWindow) {
-          reject(new Error('Popup blocked - please allow popups for this site'));
+          window.removeEventListener('message', messageHandler);
+          reject(new Error('Popup blocked'));
           return;
         }
 
-        // Poll for localStorage changes (WAX Cloud Wallet stores session here)
-        const checkLogin = setInterval(() => {
-          try {
-            // Check if popup is closed
-            if (loginWindow.closed) {
-              clearInterval(checkLogin);
+        // Check if window was closed
+        const checkClosed = setInterval(() => {
+          if (loginWindow.closed) {
+            clearInterval(checkClosed);
 
-              // Debug: Log ALL localStorage keys
-              console.log('🔍 Popup closed. Checking localStorage...');
-              console.log('🔍 All localStorage keys:', Object.keys(localStorage));
-
-              // Try multiple possible keys
-              const possibleKeys = [
-                storageKey,
-                'wax-cloud-wallet',
-                'waxCloudWallet',
-                'wax_account',
-                'wax_session'
-              ];
-
-              console.log('🔍 Checking keys:', possibleKeys);
-
-              for (const key of possibleKeys) {
-                const data = localStorage.getItem(key);
-                if (data) {
-                  console.log(`🔍 Found data in key "${key}":`, data.substring(0, 100));
-                }
-              }
-
-              // Check if WAX stored session data
-              const sessionData = localStorage.getItem(storageKey);
-
-              if (sessionData) {
-                try {
-                  const session = JSON.parse(sessionData);
-                  console.log('🔍 Parsed session:', session);
-
-                  if (session && session.userAccount) {
-                    this.userAccount = session.userAccount;
-                    this.pubKeys = session.pubKeys || [];
-
-                    console.log('✅ Logged in as:', this.userAccount);
-                    resolve(this.userAccount);
-                    return;
-                  }
-                } catch (e) {
-                  console.error('Error parsing session:', e);
-                }
-              }
-
-              // No session found
-              console.error('❌ No valid session found in localStorage');
-              reject(new Error('Login cancelled or failed'));
+            if (!this.userAccount) {
+              window.removeEventListener('message', messageHandler);
+              reject(new Error('Login cancelled'));
             }
-          } catch (e) {
-            clearInterval(checkLogin);
-            reject(new Error('Login error: ' + e.message));
           }
-        }, 500);
-
-        // Timeout after 5 minutes
-        setTimeout(() => {
-          if (!loginWindow.closed) {
-            loginWindow.close();
-          }
-          clearInterval(checkLogin);
-          if (!this.userAccount) {
-            reject(new Error('Login timeout'));
-          }
-        }, 5 * 60 * 1000);
+        }, 1000);
       });
     }
 
