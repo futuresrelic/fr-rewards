@@ -6,8 +6,15 @@
   <title>NFT Holder Rewards</title>
   <link rel="stylesheet" href="styles.css">
 
-  <!-- Local WaxJS wrapper -->
-  <script src="waxjs-simple.js"></script>
+  <!-- Official WaxJS library from node_modules -->
+  <script src="/libs/waxjs/index.js"></script>
+  <script>
+    // Expose WaxJS globally after it loads
+    if (typeof waxjs !== 'undefined') {
+      window.WaxJS = waxjs.WaxJS;
+      console.log('✅ Official WaxJS loaded');
+    }
+  </script>
 </head>
 <body>
   <div class="container">
