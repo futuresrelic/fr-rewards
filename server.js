@@ -639,6 +639,16 @@ app.listen(PORT, () => {
   console.log(`📡 Server running on http://localhost:${PORT}`);
   console.log(`🔧 Admin panel: http://localhost:${PORT}/admin`);
 
+  // Debug: Show database file location
+  const dbPath = process.env.DATABASE_FILE || './database.sqlite';
+  const fs = require('fs');
+  const dbExists = fs.existsSync(dbPath);
+  const dbSize = dbExists ? fs.statSync(dbPath).size : 0;
+  console.log(`\n💾 Database File:`);
+  console.log(`   Path: ${dbPath}`);
+  console.log(`   Exists: ${dbExists ? '✅ Yes' : '❌ No'}`);
+  console.log(`   Size: ${(dbSize / 1024).toFixed(2)} KB`);
+
   try {
     const config = db.config.get();
     if (config) {
@@ -648,6 +658,13 @@ app.listen(PORT, () => {
       console.log(`   Reward Template: ${config.reward_template}`);
       console.log(`   Cooldown: ${config.cooldown_hours} hours`);
     }
+
+    // Debug: Show all templates
+    const allTemplates = db.templates.getAll();
+    console.log(`\n📦 Templates in Database: ${allTemplates.length}`);
+    allTemplates.forEach(t => {
+      console.log(`   ${t.template_id}: ${t.name || 'Unnamed'} (${t.enabled ? 'Enabled' : 'Disabled'})`);
+    });
   } catch (error) {
     console.log(`\n⚠️  Configuration not loaded yet (database initializing...)`);
   }
