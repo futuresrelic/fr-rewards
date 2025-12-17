@@ -491,6 +491,117 @@ app.delete('/api/admin/templates/:template_id', authenticateAdmin, async (req, r
 });
 
 /**
+ * GET /api/admin/export
+ * Export all templates and configuration as JSON backup
+ */
+app.get('/api/admin/export', authenticateAdmin, async (req, res) => {
+  try {
+    const config = db.config.get();
+    const templates = db.templates.getAll();
+    const adminAccounts = db.admin.getAll();
+
+    const exportData = {
+      version: '1.0',
+      exported_at: new Date().toISOString(),
+      config: {
+        collection_name: config.collection_name,
+        whitelist_templates: config.whitelist_templates,
+        reward_template: config.reward_template,
+        cooldown_hours: config.cooldown_hours
+      },
+      templates: templates,
+      admin_accounts: adminAccounts.map(a => a.wallet_account)
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="fr-rewards-backup-${Date.now()}.json"`);
+    res.json(exportData);
+  } catch (error) {
+    console.error('Error exporting data:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/import
+ * Import templates from JSON backup
+ */
+app.post('/api/admin/import', authenticateAdmin, async (req, res) => {
+  try {
+    const { templates, config, admin_accounts, replace } = req.body;
+
+    if (!templates || !Array.isArray(templates)) {
+      return res.status(400).json({ error: 'Invalid import data: templates array required' });
+    }
+
+    let imported = 0;
+    let skipped = 0;
+    let updated = 0;
+
+    // Import templates
+    for (const template of templates) {
+      const exists = db.templates.getById(template.template_id);
+
+      if (exists) {
+        if (replace) {
+          db.templates.update(template.template_id, {
+            name: template.name,
+            reward_template_id: template.reward_template_id,
+            cooldown_hours: template.cooldown_hours,
+            enabled: template.enabled
+          });
+          updated++;
+        } else {
+          skipped++;
+        }
+      } else {
+        db.templates.add(
+          template.template_id,
+          template.name,
+          template.reward_template_id,
+          template.cooldown_hours
+        );
+        if (template.enabled === 0) {
+          db.templates.disable(template.template_id);
+        }
+        imported++;
+      }
+    }
+
+    // Update config if provided
+    if (config) {
+      db.config.update({
+        whitelist_templates: config.whitelist_templates,
+        reward_template: config.reward_template,
+        cooldown_hours: config.cooldown_hours,
+        collection_name: config.collection_name
+      });
+    }
+
+    // Import admin accounts if provided
+    if (admin_accounts && Array.isArray(admin_accounts)) {
+      for (const account of admin_accounts) {
+        db.admin.add(account);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Import completed',
+      stats: {
+        imported,
+        updated,
+        skipped,
+        total: templates.length
+      }
+    });
+  } catch (error) {
+    console.error('Error importing data:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/config/public
  * Get public configuration (no auth required)
  */

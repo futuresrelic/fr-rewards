@@ -22,6 +22,11 @@ function setupEventListeners() {
   configForm.addEventListener('submit', handleConfigUpdate);
   document.getElementById('admin-logout').addEventListener('click', logout);
   document.getElementById('add-template-form').addEventListener('submit', handleAddTemplate);
+  document.getElementById('export-btn').addEventListener('click', handleExport);
+  document.getElementById('import-btn').addEventListener('click', () => {
+    document.getElementById('import-file').click();
+  });
+  document.getElementById('import-file').addEventListener('change', handleImport);
 }
 
 // Check existing session
@@ -455,6 +460,95 @@ async function deleteTemplate(templateId) {
   } catch (error) {
     showTemplateMessage('Error: ' + error.message, 'error');
   }
+}
+
+// Export settings
+async function handleExport() {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/export`, {
+      headers: {
+        'Authorization': `Bearer ${adminToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Export failed');
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fr-rewards-backup-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    showImportMessage('Settings exported successfully!', 'success');
+  } catch (error) {
+    showImportMessage('Export failed: ' + error.message, 'error');
+  }
+}
+
+// Import settings
+async function handleImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const importMessage = document.getElementById('import-message');
+
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    const replace = document.getElementById('import-replace').checked;
+
+    const response = await fetch(`${API_URL}/api/admin/import`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        ...data,
+        replace: replace
+      })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Import failed');
+    }
+
+    showImportMessage(
+      `Import successful! Imported: ${result.stats.imported}, Updated: ${result.stats.updated}, Skipped: ${result.stats.skipped}`,
+      'success'
+    );
+
+    // Reload templates and config
+    await loadTemplates();
+    await loadConfig();
+
+  } catch (error) {
+    showImportMessage('Import failed: ' + error.message, 'error');
+  }
+
+  // Reset file input
+  e.target.value = '';
+}
+
+// Show import message
+function showImportMessage(message, type) {
+  const importMessage = document.getElementById('import-message');
+  importMessage.textContent = message;
+  importMessage.className = `alert alert-${type}`;
+  importMessage.style.display = 'block';
+
+  setTimeout(() => {
+    importMessage.style.display = 'none';
+  }, 5000);
 }
 
 // Auto-refresh stats every 30 seconds

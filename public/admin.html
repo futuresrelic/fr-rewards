@@ -131,6 +131,34 @@
         <div id="config-message" class="alert" style="display: none;"></div>
       </div>
 
+      <!-- Export/Import Settings -->
+      <div class="card">
+        <h2>💾 Backup & Restore</h2>
+        <p>Export your templates and configuration to a JSON file, or restore from a previous backup.</p>
+
+        <div style="display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap;">
+          <button id="export-btn" class="btn btn-primary">
+            📥 Export Settings
+          </button>
+
+          <div style="flex: 1; min-width: 250px;">
+            <input type="file" id="import-file" accept=".json" style="display: none;">
+            <button id="import-btn" class="btn btn-secondary">
+              📤 Import Settings
+            </button>
+            <small style="display: block; margin-top: 8px; color: var(--text-secondary);">
+              Imports templates. Existing templates will be skipped unless "Replace" is checked.
+            </small>
+            <label style="display: inline-flex; align-items: center; margin-top: 8px; cursor: pointer;">
+              <input type="checkbox" id="import-replace" style="margin-right: 8px;">
+              Replace existing templates
+            </label>
+          </div>
+        </div>
+
+        <div id="import-message" class="alert" style="display: none; margin-top: 15px;"></div>
+      </div>
+
       <!-- Recent Claims -->
       <div class="card">
         <h2>📋 Recent Claims</h2>
