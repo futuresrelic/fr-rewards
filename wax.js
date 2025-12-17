@@ -28,7 +28,7 @@ if (WAX_PRIVATE_KEY) {
 }
 
 /**
- * Get all NFT assets for a specific account
+ * Get all NFT assets for a specific account (with pagination)
  * @param {string} account - WAX account name
  * @param {string} collection - Collection name (optional)
  * @returns {Promise<Array>} Array of assets
@@ -39,20 +39,43 @@ async function getUserAssets(account, collection = null) {
   // Try multiple API endpoints with fallback
   for (const ATOMIC_API of ATOMIC_APIS) {
     try {
-      let url = `${ATOMIC_API}/atomicassets/v1/assets?owner=${account}&limit=1000`;
-      if (collection) {
-        url += `&collection_name=${collection}`;
+      console.log(`🔄 Fetching assets from ${ATOMIC_API}...`);
+
+      let allAssets = [];
+      let page = 1;
+      let hasMore = true;
+      const limit = 1000;
+
+      // Paginate through all results
+      while (hasMore) {
+        let url = `${ATOMIC_API}/atomicassets/v1/assets?owner=${account}&limit=${limit}&page=${page}`;
+        if (collection) {
+          url += `&collection_name=${collection}`;
+        }
+
+        const response = await fetch(url, { timeout: 15000 });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const assets = data.data || [];
+
+        console.log(`   Page ${page}: ${assets.length} assets`);
+
+        allAssets = allAssets.concat(assets);
+
+        // If we got fewer results than the limit, we've reached the end
+        if (assets.length < limit) {
+          hasMore = false;
+        } else {
+          page++;
+        }
       }
 
-      const response = await fetch(url, { timeout: 10000 });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log(`✅ Fetched assets from ${ATOMIC_API}`);
-      return data.data || [];
+      console.log(`✅ Fetched ${allAssets.length} total assets from ${ATOMIC_API}`);
+      return allAssets;
     } catch (error) {
       console.warn(`❌ Failed ${ATOMIC_API}:`, error.message);
       lastError = error;
@@ -71,20 +94,29 @@ async function getUserAssets(account, collection = null) {
  * @returns {Promise<Object>} Template data
  */
 async function getTemplate(collection, templateId) {
-  try {
-    const url = `${ATOMIC_API}/atomicassets/v1/templates/${collection}/${templateId}`;
-    const response = await fetch(url);
+  let lastError = null;
 
-    if (!response.ok) {
-      throw new Error(`Template not found: ${templateId}`);
+  // Try multiple API endpoints with fallback
+  for (const ATOMIC_API of ATOMIC_APIS) {
+    try {
+      const url = `${ATOMIC_API}/atomicassets/v1/templates/${collection}/${templateId}`;
+      const response = await fetch(url, { timeout: 10000 });
+
+      if (!response.ok) {
+        throw new Error(`Template not found: ${templateId}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Fetched template ${templateId} from ${ATOMIC_API}`);
+      return data.data;
+    } catch (error) {
+      console.warn(`❌ Failed to fetch template from ${ATOMIC_API}:`, error.message);
+      lastError = error;
+      continue;
     }
-
-    const data = await response.json();
-    return data.data;
-  } catch (error) {
-    console.error('Error fetching template:', error);
-    throw error;
   }
+
+  throw new Error(`Failed to fetch template ${templateId}. Last error: ${lastError?.message}`);
 }
 
 /**
@@ -130,6 +162,44 @@ async function checkEligibility(account, collection, whitelistTemplates) {
 }
 
 /**
+ * Check account CPU resources
+ * @param {string} account - WAX account name
+ * @returns {Promise<Object>} Resource information
+ */
+async function getAccountResources(account) {
+  try {
+    const rpc = new JsonRpc(WAX_RPC_ENDPOINT, { fetch });
+    const accountInfo = await rpc.get_account(account);
+
+    const cpuLimit = accountInfo.cpu_limit || {};
+    const netLimit = accountInfo.net_limit || {};
+
+    return {
+      cpu: {
+        used: cpuLimit.used || 0,
+        available: cpuLimit.available || 0,
+        max: cpuLimit.max || 0,
+        percentage: cpuLimit.max > 0 ? ((cpuLimit.used / cpuLimit.max) * 100).toFixed(2) : 0
+      },
+      net: {
+        used: netLimit.used || 0,
+        available: netLimit.available || 0,
+        max: netLimit.max || 0,
+        percentage: netLimit.max > 0 ? ((netLimit.used / netLimit.max) * 100).toFixed(2) : 0
+      },
+      ram: {
+        used: accountInfo.ram_usage || 0,
+        quota: accountInfo.ram_quota || 0,
+        available: (accountInfo.ram_quota || 0) - (accountInfo.ram_usage || 0)
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching account resources:', error);
+    return null;
+  }
+}
+
+/**
  * Mint a new NFT to a user's account
  * @param {string} toAccount - Recipient account
  * @param {string} collection - Collection name
@@ -147,13 +217,51 @@ async function mintNFT(toAccount, collection, templateId, immutableData = {}, mu
     throw new Error('WAX_ACCOUNT not configured.');
   }
 
-  console.log('🔨 Attempting to mint NFT:');
-  console.log(`   Minter: ${WAX_ACCOUNT}`);
+  console.log('═══════════════════════════════════════════════════════');
+  console.log('🔨 MINT NFT REQUEST');
+  console.log('═══════════════════════════════════════════════════════');
+  console.log(`   Minter Account: ${WAX_ACCOUNT}`);
   console.log(`   Recipient: ${toAccount}`);
   console.log(`   Collection: ${collection}`);
-  console.log(`   Template: ${templateId}`);
+  console.log(`   Template ID: ${templateId}`);
+  console.log(`   RPC Endpoint: ${WAX_RPC_ENDPOINT}`);
+  console.log('───────────────────────────────────────────────────────');
 
   try {
+    // Step 1: Check minter account resources
+    console.log('📊 Checking minter account resources...');
+    const resources = await getAccountResources(WAX_ACCOUNT);
+
+    if (resources) {
+      console.log(`   CPU: ${resources.cpu.available.toLocaleString()} / ${resources.cpu.max.toLocaleString()} available (${resources.cpu.percentage}% used)`);
+      console.log(`   NET: ${resources.net.available.toLocaleString()} / ${resources.net.max.toLocaleString()} available (${resources.net.percentage}% used)`);
+      console.log(`   RAM: ${resources.ram.available.toLocaleString()} bytes available`);
+
+      if (resources.cpu.available < 1000) {
+        console.warn('⚠️  WARNING: Very low CPU available!');
+      }
+    } else {
+      console.warn('⚠️  Could not fetch account resources');
+    }
+
+    // Step 2: Fetch template to get schema name
+    console.log('───────────────────────────────────────────────────────');
+    console.log('📋 Fetching template information...');
+    const template = await getTemplate(collection, templateId);
+
+    if (!template || !template.schema) {
+      throw new Error(`Template ${templateId} not found or has no schema`);
+    }
+
+    const schemaName = template.schema.schema_name;
+    console.log(`   Schema: ${schemaName}`);
+    console.log(`   Template Name: ${template.name || 'N/A'}`);
+    console.log(`   Issued Supply: ${template.issued_supply || 0}`);
+
+    // Step 3: Prepare transaction data
+    console.log('───────────────────────────────────────────────────────');
+    console.log('🔧 Preparing transaction...');
+
     // Convert data to AtomicAssets format
     const immutableDataArray = Object.entries(immutableData).map(([key, value]) => ({
       key,
@@ -165,6 +273,20 @@ async function mintNFT(toAccount, collection, templateId, immutableData = {}, mu
       value: [typeof value === 'string' ? 'string' : 'uint64', value]
     }));
 
+    const actionData = {
+      authorized_minter: WAX_ACCOUNT,
+      collection_name: collection,
+      schema_name: schemaName, // Use actual schema from template
+      template_id: templateId,
+      new_asset_owner: toAccount,
+      immutable_data: immutableDataArray,
+      mutable_data: mutableDataArray,
+      tokens_to_back: []
+    };
+
+    console.log('   Action Data:');
+    console.log('   ', JSON.stringify(actionData, null, 2).split('\n').join('\n    '));
+
     const actions = [{
       account: 'atomicassets',
       name: 'mintasset',
@@ -172,19 +294,14 @@ async function mintNFT(toAccount, collection, templateId, immutableData = {}, mu
         actor: WAX_ACCOUNT,
         permission: 'active',
       }],
-      data: {
-        authorized_minter: WAX_ACCOUNT,
-        collection_name: collection,
-        schema_name: '', // Will be determined by template
-        template_id: templateId,
-        new_asset_owner: toAccount,
-        immutable_data: immutableDataArray,
-        mutable_data: mutableDataArray,
-        tokens_to_back: []
-      },
+      data: actionData,
     }];
 
+    // Step 4: Send transaction
+    console.log('───────────────────────────────────────────────────────');
     console.log('📤 Sending transaction to blockchain...');
+    console.log(`   Transaction expiration: 30 seconds`);
+    console.log(`   Blocks behind: 3`);
 
     const result = await waxApi.transact(
       { actions },
@@ -194,7 +311,13 @@ async function mintNFT(toAccount, collection, templateId, immutableData = {}, mu
       }
     );
 
-    console.log('✅ Mint successful! TX:', result.transaction_id);
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('✅ MINT SUCCESSFUL!');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log(`   Transaction ID: ${result.transaction_id}`);
+    console.log(`   Block Number: ${result.processed.block_num}`);
+    console.log(`   Block Time: ${result.processed.block_time}`);
+    console.log('═══════════════════════════════════════════════════════');
 
     return {
       success: true,
@@ -203,7 +326,16 @@ async function mintNFT(toAccount, collection, templateId, immutableData = {}, mu
       block_time: result.processed.block_time
     };
   } catch (error) {
-    console.error('Error minting NFT:', error);
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('❌ MINT FAILED');
+    console.log('═══════════════════════════════════════════════════════');
+    console.error('Error details:', error);
+
+    if (error.json) {
+      console.log('Error JSON:', JSON.stringify(error.json, null, 2));
+    }
+
+    console.log('═══════════════════════════════════════════════════════');
     throw error;
   }
 }
@@ -253,6 +385,7 @@ module.exports = {
   mintNFT,
   getCollection,
   verifyTransaction,
+  getAccountResources,
   ATOMIC_APIS,
   WAX_ACCOUNT
 };
