@@ -20,6 +20,9 @@
         const left = (window.screen.width / 2) - (width / 2);
         const top = (window.screen.height / 2) - (height / 2);
 
+        // Check localStorage key that WAX Cloud Wallet uses
+        const storageKey = `wax-cloud-wallet_${window.location.origin}`;
+
         // Open WAX Cloud Wallet login
         const loginWindow = window.open(
           'https://www.mycloudwallet.com/cloud-wallet/login/',
@@ -32,46 +35,51 @@
           return;
         }
 
-        // Listen for the login message
-        const messageHandler = (event) => {
-          // Security: verify origin
-          if (event.origin !== 'https://www.mycloudwallet.com') {
-            return;
-          }
+        // Poll for localStorage changes (WAX Cloud Wallet stores session here)
+        const checkLogin = setInterval(() => {
+          try {
+            // Check if popup is closed
+            if (loginWindow.closed) {
+              clearInterval(checkLogin);
 
-          if (event.data && event.data.type === 'cloud_wallet_login_response') {
-            window.removeEventListener('message', messageHandler);
+              // Check if WAX stored session data
+              const sessionData = localStorage.getItem(storageKey);
 
-            if (event.data.data && event.data.data.userAccount) {
-              this.userAccount = event.data.data.userAccount;
-              this.pubKeys = event.data.data.pubKeys || [];
+              if (sessionData) {
+                try {
+                  const session = JSON.parse(sessionData);
+                  if (session && session.userAccount) {
+                    this.userAccount = session.userAccount;
+                    this.pubKeys = session.pubKeys || [];
 
-              // Store for auto-login
-              localStorage.setItem('wax_account', this.userAccount);
-              localStorage.setItem('wax_pubkeys', JSON.stringify(this.pubKeys));
+                    console.log('✅ Logged in as:', this.userAccount);
+                    resolve(this.userAccount);
+                    return;
+                  }
+                } catch (e) {
+                  console.error('Error parsing session:', e);
+                }
+              }
 
-              loginWindow.close();
-              resolve(this.userAccount);
-            } else {
-              reject(new Error('Login failed - no account returned'));
+              // No session found
+              reject(new Error('Login cancelled or failed'));
             }
-          }
-        };
-
-        window.addEventListener('message', messageHandler);
-
-        // Check if window was closed without login
-        const checkClosed = setInterval(() => {
-          if (loginWindow.closed) {
-            clearInterval(checkClosed);
-            window.removeEventListener('message', messageHandler);
-
-            // Check if we got an account
-            if (!this.userAccount) {
-              reject(new Error('Login cancelled'));
-            }
+          } catch (e) {
+            clearInterval(checkLogin);
+            reject(new Error('Login error: ' + e.message));
           }
         }, 500);
+
+        // Timeout after 5 minutes
+        setTimeout(() => {
+          if (!loginWindow.closed) {
+            loginWindow.close();
+          }
+          clearInterval(checkLogin);
+          if (!this.userAccount) {
+            reject(new Error('Login timeout'));
+          }
+        }, 5 * 60 * 1000);
       });
     }
 
