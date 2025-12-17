@@ -98,6 +98,18 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
     const enabledTemplates = db.templates.getEnabled();
     const whitelistTemplates = enabledTemplates.map(t => t.template_id);
 
+    // Check if templates are configured
+    if (whitelistTemplates.length === 0) {
+      return res.json({
+        success: true,
+        account,
+        eligible: false,
+        whitelistTemplates: [],
+        eligibleAssets: [],
+        message: 'No templates configured'
+      });
+    }
+
     const eligibleAssets = await wax.checkEligibility(account, config.collection_name, whitelistTemplates);
 
     // Add template configuration to each eligible asset
@@ -120,7 +132,11 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
     });
   } catch (error) {
     console.error('Error checking eligibility:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      whitelistTemplates: []
+    });
   }
 });
 

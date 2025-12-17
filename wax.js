@@ -4,8 +4,12 @@ const { JsSignatureProvider } = require('eosjs/dist/eosjs-jssig');
 const { TextEncoder, TextDecoder } = require('util');
 require('dotenv').config();
 
-// Configuration
-const ATOMIC_API = process.env.ATOMIC_API || 'https://wax.api.atomicassets.io';
+// Configuration - Multiple AtomicAssets API endpoints for fallback
+const ATOMIC_APIS = [
+  'https://aa.wax.blacklusion.io',
+  'https://atomic.wax.eosrio.io',
+  'https://wax.api.atomicassets.io'
+];
 const WAX_RPC_ENDPOINT = process.env.WAX_RPC_ENDPOINT || 'https://api.waxsweden.org';
 const WAX_ACCOUNT = process.env.WAX_ACCOUNT;
 const WAX_PRIVATE_KEY = process.env.WAX_PRIVATE_KEY;
@@ -30,25 +34,34 @@ if (WAX_PRIVATE_KEY) {
  * @returns {Promise<Array>} Array of assets
  */
 async function getUserAssets(account, collection = null) {
-  try {
-    let url = `${ATOMIC_API}/atomicassets/v1/assets?owner=${account}&limit=1000`;
-    if (collection) {
-      url += `&collection_name=${collection}`;
+  let lastError = null;
+
+  // Try multiple API endpoints with fallback
+  for (const ATOMIC_API of ATOMIC_APIS) {
+    try {
+      let url = `${ATOMIC_API}/atomicassets/v1/assets?owner=${account}&limit=1000`;
+      if (collection) {
+        url += `&collection_name=${collection}`;
+      }
+
+      const response = await fetch(url, { timeout: 10000 });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log(`✅ Fetched assets from ${ATOMIC_API}`);
+      return data.data || [];
+    } catch (error) {
+      console.warn(`❌ Failed ${ATOMIC_API}:`, error.message);
+      lastError = error;
+      continue; // Try next endpoint
     }
-
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`AtomicAssets API error (${response.status}): ${errorText || response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.data || [];
-  } catch (error) {
-    console.error('Error fetching user assets:', error);
-    throw error;
   }
+
+  // All endpoints failed
+  throw new Error(`All AtomicAssets APIs unavailable. Last error: ${lastError?.message}`);
 }
 
 /**
