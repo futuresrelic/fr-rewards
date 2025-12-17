@@ -21,6 +21,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// Serve WaxJS from node_modules
+app.use('/libs/waxjs', express.static('node_modules/@waxio/waxjs/dist'));
+app.use('/libs/eosjs', express.static('node_modules/eosjs/dist'));
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
