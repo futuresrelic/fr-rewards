@@ -299,14 +299,33 @@ app.post('/api/user/unpack-url', async (req, res) => {
     }
 
     // Get blockchain info for transaction header
-    const { JsonRpc } = require('eosjs');
+    const { JsonRpc, Serialize } = require('eosjs');
+    const { TextEncoder, TextDecoder } = require('util');
     const fetch = require('node-fetch');
     const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
 
     const info = await rpc.get_info();
     const blockInfo = await rpc.get_block(info.head_block_num);
 
-    // Build proper transaction
+    // Fetch ABI for atomicassets contract to serialize data
+    const abiResponse = await rpc.get_abi('atomicassets');
+    const abi = abiResponse.abi;
+
+    // Serialize the action data
+    const buffer = new Serialize.SerialBuffer({ textEncoder: new TextEncoder(), textDecoder: new TextDecoder() });
+    const abiTypes = Serialize.getTypesFromAbi(Serialize.createInitialTypes(), abi);
+    const actionType = abiTypes.get('transfer');
+
+    actionType.serialize(buffer, {
+      from: account,
+      to: 'atomicpacksx',
+      asset_ids: [asset_id],
+      memo: 'unbox'
+    });
+
+    const serializedData = Buffer.from(buffer.asUint8Array()).toString('hex');
+
+    // Build proper transaction with serialized data
     const transaction = {
       expiration: new Date(Date.now() + 90000).toISOString().slice(0, -1),
       ref_block_num: info.head_block_num & 0xFFFF,
@@ -322,12 +341,7 @@ app.post('/api/user/unpack-url', async (req, res) => {
           actor: account,
           permission: 'active'
         }],
-        data: {
-          from: account,
-          to: 'atomicpacksx',
-          asset_ids: [asset_id],
-          memo: 'unbox'
-        }
+        data: serializedData
       }],
       transaction_extensions: []
     };
