@@ -63,13 +63,13 @@ app.use('/libs/eosjs', express.static('node_modules/eosjs/dist'));
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 500, // limit each IP to 500 requests per windowMs (increased for testing)
   validate: { trustProxy: false } // Disable trust proxy validation warning
 });
 
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10, // stricter limit for claim endpoints
+  max: 50, // stricter limit for claim endpoints (increased for testing)
   validate: { trustProxy: false } // Disable trust proxy validation warning
 });
 
