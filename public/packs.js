@@ -345,27 +345,27 @@ async function unpackPack(assetId, packName, button) {
       });
       transactionId = result.transaction_id || result.transactionId || result.processed?.id;
     } else if (currentWalletType === 'wcw') {
-      // Get signing URL from backend
-      const urlResponse = await fetch(`${API_URL}/api/user/unpack-url`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: currentAccount, asset_id: assetId })
+      // Use the SimpleWaxAPI transact method directly
+      const result = await wax.transact({
+        actions: [{
+          account: 'atomicassets',
+          name: 'transfer',
+          authorization: [{
+            actor: currentAccount,
+            permission: 'active'
+          }],
+          data: {
+            from: currentAccount,
+            to: 'atomicpacksx',
+            asset_ids: [assetId],
+            memo: 'unbox'
+          }
+        }]
+      }, {
+        blocksBehind: 3,
+        expireSeconds: 90
       });
-      const urlData = await urlResponse.json();
-
-      // Open WAX Cloud Wallet signing page
-      const signingWindow = window.open(urlData.signing_url, 'WaxSigning', 'width=400,height=600');
-
-      // Poll for completion
-      const checkInterval = setInterval(() => {
-        if (signingWindow.closed) {
-          clearInterval(checkInterval);
-          button.disabled = false;
-          button.textContent = '🎁 Unpack';
-          setTimeout(() => loadUserPacks(), 2000);
-        }
-      }, 500);
-      return;
+      transactionId = result.transaction_id;
     } else {
       throw new Error('No wallet connected');
     }
