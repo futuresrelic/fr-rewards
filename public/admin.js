@@ -306,7 +306,7 @@ async function loadTemplates() {
     tbody.innerHTML = '';
 
     if (templates.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center">No templates configured. Add one above!</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center">No templates configured. Add one above!</td></tr>';
       return;
     }
 
@@ -315,16 +315,18 @@ async function loadTemplates() {
       row.innerHTML = `
         <td><strong>${template.template_id}</strong></td>
         <td>${template.name || '-'}</td>
-        <td>${template.reward_template_id}</td>
-        <td>${template.cooldown_hours}</td>
+        <td>
+          <button class="btn btn-sm btn-primary" onclick="openRewardsModal(${template.template_id}, '${(template.name || 'Template ' + template.template_id).replace(/'/g, "\\'")}')">
+            🎁 Manage Rewards
+          </button>
+        </td>
         <td>
           <span class="status-badge ${template.enabled ? 'success' : 'error'}" style="padding: 5px 10px; border-radius: 5px; font-size: 0.85rem;">
             ${template.enabled ? '✅ Enabled' : '❌ Disabled'}
           </span>
         </td>
         <td>
-          <button class="btn btn-sm btn-secondary" onclick="editTemplate(${template.template_id})">✏️ Edit</button>
-          <button class="btn btn-sm btn-secondary" onclick="toggleTemplate(${template.template_id}, ${template.enabled})">${template.enabled ? '⏸️' : '▶️'}</button>
+          <button class="btn btn-sm btn-secondary" onclick="toggleTemplate(${template.template_id}, ${template.enabled})">${template.enabled ? '⏸️ Disable' : '▶️ Enable'}</button>
           <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="deleteTemplate(${template.template_id})">🗑️</button>
         </td>
       `;
@@ -666,6 +668,153 @@ async function loadBranding() {
   } catch (error) {
     console.error('Error loading branding:', error);
   }
+}
+
+// ==================== REWARDS MANAGEMENT ====================
+
+let currentTemplateId = null;
+
+// Open rewards modal
+async function openRewardsModal(templateId, templateName) {
+  currentTemplateId = templateId;
+  document.getElementById('modal-template-id').textContent = templateId;
+  document.getElementById('modal-template-name').textContent = templateName;
+  document.getElementById('reward-template-id-hidden').value = templateId;
+  document.getElementById('rewards-modal').style.display = 'block';
+  await loadRewards(templateId);
+}
+
+// Close rewards modal
+document.getElementById('close-rewards-modal').addEventListener('click', () => {
+  document.getElementById('rewards-modal').style.display = 'none';
+  currentTemplateId = null;
+});
+
+// Load rewards for a template
+async function loadRewards(templateId) {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/template-rewards/${templateId}`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+
+    if (!response.ok) throw new Error('Failed to load rewards');
+
+    const data = await response.json();
+    const rewards = data.rewards;
+
+    const rewardsList = document.getElementById('rewards-list');
+    rewardsList.innerHTML = '';
+
+    if (rewards.length === 0) {
+      rewardsList.innerHTML = '<p style="color: var(--text-secondary);">No rewards configured yet. Add one above!</p>';
+      return;
+    }
+
+    rewards.forEach(reward => {
+      const rewardCard = document.createElement('div');
+      rewardCard.style.cssText = 'background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 2px solid var(--border);';
+      rewardCard.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 15px;">
+          <div style="flex: 1; min-width: 200px;">
+            <h4 style="margin: 0 0 10px 0;">
+              ${reward.reward_name || `Reward Template #${reward.reward_template_id}`}
+            </h4>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 0.9rem; color: var(--text-secondary);">
+              <div><strong>Template ID:</strong> ${reward.reward_template_id}</div>
+              <div><strong>Cooldown:</strong> ${reward.cooldown_hours}h</div>
+              <div><strong>Max Claims:</strong> ${reward.max_claims || 'N/A'}</div>
+              <div><strong>Match Quantity:</strong> ${reward.match_quantity ? '✅ Yes' : '❌ No'}</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="deleteReward(${reward.id})">🗑️ Delete</button>
+          </div>
+        </div>
+      `;
+      rewardsList.appendChild(rewardCard);
+    });
+  } catch (error) {
+    console.error('Error loading rewards:', error);
+    showRewardsMessage('Error loading rewards: ' + error.message, 'error');
+  }
+}
+
+// Add new reward
+document.getElementById('add-reward-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const templateId = currentTemplateId;
+  const rewardTemplateId = document.getElementById('reward-template-id-input').value;
+  const rewardName = document.getElementById('reward-name-input').value.trim();
+  const cooldownHours = document.getElementById('reward-cooldown-input').value;
+  const maxClaims = document.getElementById('reward-max-claims-input').value;
+  const matchQuantity = document.getElementById('reward-match-quantity-input').checked;
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/template-rewards`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        template_id: parseInt(templateId),
+        reward_template_id: parseInt(rewardTemplateId),
+        reward_name: rewardName || null,
+        cooldown_hours: parseInt(cooldownHours),
+        max_claims: maxClaims ? parseInt(maxClaims) : null,
+        match_quantity: matchQuantity
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to add reward');
+    }
+
+    showRewardsMessage('Reward added successfully!', 'success');
+    document.getElementById('add-reward-form').reset();
+    document.getElementById('reward-cooldown-input').value = '24'; // Reset to default
+    await loadRewards(templateId);
+  } catch (error) {
+    showRewardsMessage('Error: ' + error.message, 'error');
+  }
+});
+
+// Delete reward
+async function deleteReward(rewardId) {
+  if (!confirm('Are you sure you want to delete this reward?')) return;
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/template-rewards/${rewardId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to delete reward');
+    }
+
+    showRewardsMessage('Reward deleted successfully!', 'success');
+    await loadRewards(currentTemplateId);
+  } catch (error) {
+    showRewardsMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// Show rewards message
+function showRewardsMessage(message, type) {
+  const messageEl = document.getElementById('rewards-message');
+  messageEl.textContent = message;
+  messageEl.className = `alert alert-${type}`;
+  messageEl.style.display = 'block';
+
+  setTimeout(() => {
+    messageEl.style.display = 'none';
+  }, 5000);
 }
 
 // Auto-refresh stats every 30 seconds

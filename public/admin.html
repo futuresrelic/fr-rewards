@@ -100,8 +100,7 @@
               <tr>
                 <th>Template ID</th>
                 <th>Name</th>
-                <th>Reward Template</th>
-                <th>Cooldown (hours)</th>
+                <th>Rewards</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -114,6 +113,64 @@
           </table>
         </div>
         <div id="template-message" class="alert" style="display: none;"></div>
+      </div>
+
+      <!-- Rewards Management Modal -->
+      <div id="rewards-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; overflow-y: auto; padding: 20px;">
+        <div class="card" style="max-width: 900px; margin: 40px auto; position: relative;">
+          <button id="close-rewards-modal" style="position: absolute; top: 20px; right: 20px; background: var(--bg-card-hover); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">×</button>
+
+          <h2>🎁 Manage Rewards for Template <span id="modal-template-id"></span></h2>
+          <p id="modal-template-name" style="color: var(--text-secondary); margin-bottom: 30px;"></p>
+
+          <!-- Add New Reward Form -->
+          <div style="background: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h3>Add New Reward</h3>
+            <form id="add-reward-form">
+              <input type="hidden" id="reward-template-id-hidden">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div class="form-group">
+                  <label>Reward Template ID:</label>
+                  <input type="number" id="reward-template-id-input" class="form-control" required>
+                  <small>Template to mint</small>
+                </div>
+                <div class="form-group">
+                  <label>Reward Name (optional):</label>
+                  <input type="text" id="reward-name-input" class="form-control">
+                  <small>Display name</small>
+                </div>
+                <div class="form-group">
+                  <label>Cooldown (hours):</label>
+                  <input type="number" id="reward-cooldown-input" class="form-control" min="1" value="24" required>
+                  <small>Hours between claims</small>
+                </div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                <div class="form-group">
+                  <label>Max Claims:</label>
+                  <input type="number" id="reward-max-claims-input" class="form-control" min="1" placeholder="1">
+                  <small>Leave empty if using match quantity</small>
+                </div>
+                <div class="form-group">
+                  <label style="display: inline-flex; align-items: center; cursor: pointer; margin-top: 10px;">
+                    <input type="checkbox" id="reward-match-quantity-input" style="margin-right: 8px; width: 20px; height: 20px;">
+                    <span>Match Quantity Owned</span>
+                  </label>
+                  <small style="display: block; margin-top: 5px;">Mint as many NFTs as user owns</small>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary" style="margin-top: 15px;">➕ Add Reward</button>
+            </form>
+          </div>
+
+          <!-- Rewards List -->
+          <h3>Current Rewards</h3>
+          <div id="rewards-list" style="display: flex; flex-direction: column; gap: 15px;">
+            <p style="color: var(--text-secondary);">Loading...</p>
+          </div>
+
+          <div id="rewards-message" class="alert" style="display: none; margin-top: 15px;"></div>
+        </div>
       </div>
 
       <!-- Branding -->

@@ -216,50 +216,24 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
   eligibleSection.style.display = 'block';
   nftListEl.innerHTML = '';
 
-  // Group cooldowns by template
+  // Build cooldown map by template_id + reward_id
   const cooldownMap = {};
   cooldownData.cooldowns.forEach(cd => {
-    cooldownMap[cd.template_id] = cd;
+    const key = `${cd.template_id}-${cd.reward_id}`;
+    cooldownMap[key] = cd;
   });
 
-  // Group assets by template_id (to show quantity)
-  const templateGroups = {};
+  // Display each eligible template with its rewards
   eligibilityData.eligibleAssets.forEach(asset => {
     const templateId = parseInt(asset.template_id);
-    if (!templateGroups[templateId]) {
-      templateGroups[templateId] = {
-        asset: asset,
-        quantity: 0,
-        assetIds: []
-      };
-    }
-    templateGroups[templateId].quantity++;
-    templateGroups[templateId].assetIds.push(asset.asset_id);
-  });
-
-  // Display each unique template (grouped by template_id)
-  Object.values(templateGroups).forEach(group => {
-    const asset = group.asset;
-    const quantity = group.quantity;
-    const templateId = parseInt(asset.template_id);
-    const cooldown = cooldownMap[templateId];
-    const templateConfig = asset.template_config || (cooldown && cooldown.template_config);
+    const quantity = asset.quantity_owned;
 
     const nftCard = document.createElement('div');
     nftCard.className = 'nft-card';
 
-    const canClaim = cooldown ? cooldown.can_claim : true;
-    const remainingSeconds = cooldown ? cooldown.remaining_seconds : 0;
-
-    // Get template-specific info
-    const templateName = templateConfig?.name || '';
-    const rewardTemplate = templateConfig?.reward_template_id || '?';
-    const cooldownHours = templateConfig?.cooldown_hours || 24;
-
     // Get image/video URLs
     const nftMediaUrl = asset.image_url;
     const isVideo = asset.is_video;
-    const rewardImageUrl = asset.reward_image_url;
 
     // Build media element (video or image)
     let nftMediaHtml = '📦';
@@ -271,6 +245,47 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
       }
     }
 
+    // Build rewards buttons
+    let rewardsHtml = '';
+    if (asset.rewards && asset.rewards.length > 0) {
+      asset.rewards.forEach((reward, index) => {
+        const cooldownKey = `${templateId}-${reward.reward_id}`;
+        const cooldown = cooldownMap[cooldownKey];
+        const canClaim = cooldown ? cooldown.can_claim : true;
+        const remainingSeconds = cooldown ? cooldown.remaining_seconds : 0;
+
+        const rewardName = reward.reward_name || `Template #${reward.reward_template_id}`;
+        const quantityInfo = reward.match_quantity ? `×${reward.available_quantity}` : `(max ${reward.max_claims || 1})`;
+
+        rewardsHtml += `
+          <div style="margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+              ${reward.reward_image_url
+                ? `<img src="${reward.reward_image_url}" alt="${rewardName}" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px; background: rgba(16, 185, 129, 0.1); padding: 2px;">`
+                : ''}
+              <div>
+                <div style="font-weight: 600;">${rewardName}</div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                  ${quantityInfo} • ${reward.cooldown_hours}h cooldown
+                </div>
+              </div>
+            </div>
+            <div class="nft-status ${canClaim ? 'ready' : 'cooldown'}" style="margin-bottom: 8px;">
+              ${canClaim ? '✅ Ready to claim!' : '⏰ Next claim in: <span class="countdown reward-countdown-${templateId}-${reward.reward_id}" data-seconds="' + remainingSeconds + '"></span>'}
+            </div>
+            <button class="btn btn-sm ${canClaim ? 'btn-success' : 'btn-primary'} reward-claim-btn"
+                    data-template="${templateId}"
+                    data-reward="${reward.reward_id}"
+                    ${canClaim ? '' : 'disabled'}>
+              ${canClaim ? `🎁 Claim ${rewardName}` : 'Cooldown Active'}
+            </button>
+          </div>
+        `;
+      });
+    } else {
+      rewardsHtml = '<p style="color: var(--text-secondary); font-size: 0.9rem;">No rewards configured for this template.</p>';
+    }
+
     nftCard.innerHTML = `
       <div class="nft-header">
         <div class="nft-icon">
@@ -278,45 +293,38 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
         </div>
         <div class="nft-info">
           <div class="nft-name">
-            ${asset.name || templateName || 'NFT #' + asset.asset_id}
+            ${asset.name || 'Template #' + templateId}
             ${quantity > 1 ? `<span class="quantity-badge">×${quantity}</span>` : ''}
           </div>
           <div class="nft-template">Template ID: ${templateId}</div>
-          <div class="nft-template" style="font-size: 0.85rem; color: var(--text-secondary);">
-            Reward: Template #${rewardTemplate} | Cooldown: ${cooldownHours}h
-          </div>
         </div>
-        ${rewardImageUrl
-          ? `<div class="reward-preview">
-              <img src="${rewardImageUrl}" alt="Reward" class="reward-image" onerror="this.style.display='none';">
-              <div class="reward-label">Reward</div>
-            </div>`
-          : ''}
       </div>
-      <div class="nft-status ${canClaim ? 'ready' : 'cooldown'}">
-        ${canClaim ? '✅ Ready to claim!' : '⏰ Next claim in: <span class="countdown" data-seconds="' + remainingSeconds + '"></span>'}
+      <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
+        <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.95rem;">Available Rewards:</h4>
+        ${rewardsHtml}
       </div>
-      <button class="btn ${canClaim ? 'btn-success' : 'btn-primary'}"
-              data-template="${templateId}"
-              ${canClaim ? '' : 'disabled'}>
-        ${canClaim ? '🎁 Claim Reward' : 'Cooldown Active'}
-      </button>
     `;
 
     nftListEl.appendChild(nftCard);
 
-    // Add claim button listener
-    const claimBtn = nftCard.querySelector('button');
-    claimBtn.addEventListener('click', () => claimReward(templateId, claimBtn));
-
-    // Start countdown if needed
-    if (!canClaim) {
-      const countdownEl = nftCard.querySelector('.countdown');
-      startCountdown(countdownEl, remainingSeconds, () => {
-        // Reload when countdown finishes
-        loadUserData();
+    // Add claim button listeners for each reward
+    nftCard.querySelectorAll('.reward-claim-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const templateId = btn.dataset.template;
+        const rewardId = btn.dataset.reward;
+        claimReward(templateId, rewardId, btn);
       });
-    }
+    });
+
+    // Start countdowns for each reward
+    nftCard.querySelectorAll('[class^="reward-countdown-"]').forEach(countdownEl => {
+      const seconds = parseInt(countdownEl.dataset.seconds);
+      if (seconds > 0) {
+        startCountdown(countdownEl, seconds, () => {
+          loadUserData();
+        });
+      }
+    });
   });
 
   // Show claim history
@@ -360,7 +368,7 @@ function showNotEligibleState(eligibilityData) {
 }
 
 // Claim reward
-async function claimReward(templateId, button) {
+async function claimReward(templateId, rewardId, button) {
   try {
     button.disabled = true;
     button.textContent = 'Claiming...';
@@ -372,7 +380,8 @@ async function claimReward(templateId, button) {
       },
       body: JSON.stringify({
         account: currentAccount,
-        template_id: templateId
+        template_id: templateId,
+        reward_id: rewardId
       })
     });
 
@@ -383,7 +392,9 @@ async function claimReward(templateId, button) {
     }
 
     // Show success
-    showError(`Success! Reward claimed. TX: ${data.transaction_id}`, 'success');
+    const txIds = data.transaction_ids || [data.transaction_id];
+    const quantityMsg = data.quantity_minted > 1 ? ` (${data.quantity_minted}x NFTs)` : '';
+    showError(`Success! Reward claimed${quantityMsg}. TX: ${txIds[0]}`, 'success');
 
     // Reload user data
     setTimeout(() => loadUserData(), 2000);
