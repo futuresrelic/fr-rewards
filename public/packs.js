@@ -358,6 +358,10 @@ async function unpackPack(assetId, packName, button) {
         throw new Error(txData.error || 'Failed to build transaction');
       }
 
+      // DEBUG: Log the transaction details
+      console.log('📝 Transaction to sign:', JSON.stringify(txData.transaction, null, 2));
+      console.log('🔗 Signing URL:', txData.signing_url);
+
       // Open new WAX Cloud Wallet with transaction
       const signingWindow = window.open(txData.signing_url, 'WaxSigning', 'width=400,height=600');
 
