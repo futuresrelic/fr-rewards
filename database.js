@@ -152,6 +152,42 @@ function initializeTables() {
     // Columns might already exist, ignore error
   }
 
+  // Migration: Create template_rewards table if it doesn't exist
+  try {
+    const templateRewardsExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='template_rewards'
+    `).get();
+
+    if (!templateRewardsExists) {
+      console.log('🔄 Migrating database: Creating template_rewards table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS template_rewards (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          template_id INTEGER NOT NULL,
+          reward_template_id INTEGER NOT NULL,
+          reward_name TEXT,
+          cooldown_hours INTEGER NOT NULL DEFAULT 24,
+          max_claims INTEGER,
+          match_quantity INTEGER NOT NULL DEFAULT 0,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (template_id) REFERENCES templates(template_id) ON DELETE CASCADE
+        );
+      `);
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_template_rewards_template
+        ON template_rewards(template_id);
+      `);
+
+      console.log('✅ template_rewards table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
   // Migration: Add reward_id column to claims table if it doesn't exist
   try {
     const claimsTableInfo = db.prepare('PRAGMA table_info(claims)').all();
