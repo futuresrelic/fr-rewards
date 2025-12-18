@@ -80,6 +80,29 @@ function initializeTables() {
       );
     `);
 
+    // Create template_rewards table for multiple rewards per template
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS template_rewards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_id INTEGER NOT NULL,
+        reward_template_id INTEGER NOT NULL,
+        reward_name TEXT,
+        cooldown_hours INTEGER NOT NULL DEFAULT 24,
+        max_claims INTEGER,
+        match_quantity INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (template_id) REFERENCES templates(template_id) ON DELETE CASCADE
+      );
+    `);
+
+    // Create index for template_rewards
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_template_rewards_template
+      ON template_rewards(template_id);
+    `);
+
     // Insert default configuration (keeping for backward compatibility)
     const whitelistTemplates = process.env.WHITELIST_TEMPLATES || '217679,217680,217682';
     const rewardTemplate = process.env.REWARD_TEMPLATE || '251276';
@@ -127,6 +150,55 @@ function initializeTables() {
     }
   } catch (error) {
     // Columns might already exist, ignore error
+  }
+
+  // Migration: Add reward_id column to claims table if it doesn't exist
+  try {
+    const claimsTableInfo = db.prepare('PRAGMA table_info(claims)').all();
+    const hasRewardId = claimsTableInfo.some(col => col.name === 'reward_id');
+
+    if (!hasRewardId) {
+      console.log('🔄 Migrating database: Adding reward_id to claims table...');
+      db.exec(`ALTER TABLE claims ADD COLUMN reward_id INTEGER`);
+      console.log('✅ reward_id column added to claims table');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Migrate existing templates to template_rewards if needed
+  try {
+    const existingTemplates = db.prepare('SELECT * FROM templates').all();
+    const existingRewards = db.prepare('SELECT COUNT(*) as count FROM template_rewards').get();
+
+    if (existingTemplates.length > 0 && existingRewards.count === 0) {
+      console.log('🔄 Migrating existing templates to template_rewards system...');
+
+      for (const template of existingTemplates) {
+        // Check if this template already has rewards
+        const hasReward = db.prepare(
+          'SELECT id FROM template_rewards WHERE template_id = ? AND reward_template_id = ?'
+        ).get(template.template_id, template.reward_template_id);
+
+        if (!hasReward) {
+          db.prepare(`
+            INSERT INTO template_rewards (template_id, reward_template_id, reward_name, cooldown_hours, max_claims, match_quantity, enabled)
+            VALUES (?, ?, ?, ?, 1, 0, ?)
+          `).run(
+            template.template_id,
+            template.reward_template_id,
+            null, // reward_name
+            template.cooldown_hours,
+            template.enabled
+          );
+          console.log(`   Migrated template ${template.template_id} -> reward ${template.reward_template_id}`);
+        }
+      }
+
+      console.log('✅ Template migration complete');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
   }
 
   // Seed default templates if they don't exist (runs every time)
@@ -207,12 +279,12 @@ const config = {
 
 // Claims methods
 const claims = {
-  add: (wallet_account, template_id, reward_template, transaction_id, cooldown_hours) => {
+  add: (wallet_account, template_id, reward_template, transaction_id, cooldown_hours, reward_id = null) => {
     const stmt = db.prepare(`
-      INSERT INTO claims (wallet_account, template_id, reward_template, transaction_id, next_claim_at)
-      VALUES (?, ?, ?, ?, datetime('now', '+' || ? || ' hours'))
+      INSERT INTO claims (wallet_account, template_id, reward_template, transaction_id, next_claim_at, reward_id)
+      VALUES (?, ?, ?, ?, datetime('now', '+' || ? || ' hours'), ?)
     `);
-    return stmt.run(wallet_account, template_id, reward_template, transaction_id, cooldown_hours);
+    return stmt.run(wallet_account, template_id, reward_template, transaction_id, cooldown_hours, reward_id);
   },
 
   getByAccount: (wallet_account) => {
@@ -235,22 +307,40 @@ const claims = {
     return db.prepare(`
       SELECT
         template_id,
+        reward_id,
         MAX(next_claim_at) as next_claim_at,
         MAX(claimed_at) as last_claimed_at
       FROM claims
       WHERE wallet_account = ?
-      GROUP BY template_id
+      GROUP BY template_id, reward_id
     `).all(wallet_account);
   },
 
-  canClaim: (wallet_account, template_id) => {
-    const result = db.prepare(`
-      SELECT next_claim_at
-      FROM claims
-      WHERE wallet_account = ? AND template_id = ?
-      ORDER BY next_claim_at DESC
-      LIMIT 1
-    `).get(wallet_account, template_id);
+  canClaim: (wallet_account, template_id, reward_id = null) => {
+    let query, params;
+
+    if (reward_id) {
+      query = `
+        SELECT next_claim_at
+        FROM claims
+        WHERE wallet_account = ? AND template_id = ? AND reward_id = ?
+        ORDER BY next_claim_at DESC
+        LIMIT 1
+      `;
+      params = [wallet_account, template_id, reward_id];
+    } else {
+      // Legacy support: check without reward_id
+      query = `
+        SELECT next_claim_at
+        FROM claims
+        WHERE wallet_account = ? AND template_id = ? AND (reward_id IS NULL OR reward_id = ?)
+        ORDER BY next_claim_at DESC
+        LIMIT 1
+      `;
+      params = [wallet_account, template_id, reward_id];
+    }
+
+    const result = db.prepare(query).get(...params);
 
     if (!result) return true;
 
@@ -344,10 +434,84 @@ const templates = {
   }
 };
 
+// Template Rewards methods (multiple rewards per template)
+const templateRewards = {
+  getAll: () => {
+    return db.prepare('SELECT * FROM template_rewards ORDER BY template_id, id ASC').all();
+  },
+
+  getByTemplateId: (template_id) => {
+    return db.prepare('SELECT * FROM template_rewards WHERE template_id = ? ORDER BY id ASC').all(template_id);
+  },
+
+  getEnabledByTemplateId: (template_id) => {
+    return db.prepare('SELECT * FROM template_rewards WHERE template_id = ? AND enabled = 1 ORDER BY id ASC').all(template_id);
+  },
+
+  getById: (id) => {
+    return db.prepare('SELECT * FROM template_rewards WHERE id = ?').get(id);
+  },
+
+  add: (template_id, reward_template_id, reward_name, cooldown_hours, max_claims, match_quantity) => {
+    const stmt = db.prepare(`
+      INSERT INTO template_rewards (template_id, reward_template_id, reward_name, cooldown_hours, max_claims, match_quantity, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `);
+    return stmt.run(template_id, reward_template_id, reward_name, cooldown_hours, max_claims, match_quantity ? 1 : 0);
+  },
+
+  update: (id, data) => {
+    const stmt = db.prepare(`
+      UPDATE template_rewards
+      SET reward_template_id = ?,
+          reward_name = ?,
+          cooldown_hours = ?,
+          max_claims = ?,
+          match_quantity = ?,
+          enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(
+      data.reward_template_id,
+      data.reward_name,
+      data.cooldown_hours,
+      data.max_claims,
+      data.match_quantity ? 1 : 0,
+      data.enabled,
+      id
+    );
+  },
+
+  delete: (id) => {
+    return db.prepare('DELETE FROM template_rewards WHERE id = ?').run(id);
+  },
+
+  enable: (id) => {
+    return db.prepare('UPDATE template_rewards SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  },
+
+  disable: (id) => {
+    return db.prepare('UPDATE template_rewards SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  },
+
+  // Get all rewards across all enabled templates (for eligibility checking)
+  getAllEnabled: () => {
+    return db.prepare(`
+      SELECT tr.*, t.name as template_name
+      FROM template_rewards tr
+      JOIN templates t ON tr.template_id = t.template_id
+      WHERE tr.enabled = 1 AND t.enabled = 1
+      ORDER BY tr.template_id, tr.id ASC
+    `).all();
+  }
+};
+
 module.exports = {
   db,
   config,
   claims,
   admin,
-  templates
+  templates,
+  templateRewards
 };
