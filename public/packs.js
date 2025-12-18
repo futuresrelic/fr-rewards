@@ -44,22 +44,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Wait for wallet libraries to load
 async function waitForLibraries() {
-  // Wait for WaxJS to load
+  // Wait for WaxJS to load (check multiple possible export names)
   let waxAttempts = 0;
-  while (!window.waxjs && waxAttempts < 50) {
+  while (!(window.waxjs || window.WaxJS) && waxAttempts < 50) {
     await new Promise(resolve => setTimeout(resolve, 100));
     waxAttempts++;
   }
 
-  if (window.waxjs) {
+  const WaxLib = window.waxjs || window.WaxJS;
+
+  if (WaxLib) {
     console.log('✅ WaxJS loaded');
     // Initialize WaxJS instance
-    window.waxInstance = new window.waxjs.WaxJS({
+    window.waxInstance = new WaxLib.WaxJS({
       rpcEndpoint: 'https://wax.greymass.com',
       tryAutoLogin: false
     });
   } else {
-    console.error('❌ WaxJS not loaded');
+    console.error('❌ WaxJS not loaded. Available globals:', Object.keys(window).filter(k => k.toLowerCase().includes('wax')));
   }
 
   // Wait a bit for Anchor to load (it loads async)
