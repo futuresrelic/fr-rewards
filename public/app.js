@@ -187,6 +187,9 @@ async function disconnect() {
 // Load user data
 async function loadUserData() {
   try {
+    // Clear existing countdowns before refreshing
+    clearCountdowns();
+
     loadingSection.style.display = 'block';
     eligibleSection.style.display = 'none';
     notEligibleSection.style.display = 'none';
@@ -271,7 +274,7 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
               </div>
             </div>
             <div class="nft-status ${canClaim ? 'ready' : 'cooldown'}" style="margin-bottom: 8px;">
-              ${canClaim ? '✅ Ready to claim!' : '⏰ Next claim in: <span class="countdown reward-countdown-${templateId}-${reward.reward_id}" data-seconds="' + remainingSeconds + '"></span>'}
+              ${canClaim ? '✅ Ready to claim!' : `⏰ Next claim in: <span class="countdown reward-countdown-${templateId}-${reward.reward_id}" data-seconds="${remainingSeconds}"></span>`}
             </div>
             <button class="btn btn-sm ${canClaim ? 'btn-success' : 'btn-primary'} reward-claim-btn"
                     data-template="${templateId}"
