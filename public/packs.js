@@ -345,27 +345,38 @@ async function unpackPack(assetId, packName, button) {
       });
       transactionId = result.transaction_id || result.transactionId || result.processed?.id;
     } else if (currentWalletType === 'wcw') {
-      // Use the SimpleWaxAPI transact method directly
-      const result = await wax.transact({
-        actions: [{
-          account: 'atomicassets',
-          name: 'transfer',
-          authorization: [{
-            actor: currentAccount,
-            permission: 'active'
-          }],
-          data: {
-            from: currentAccount,
-            to: 'atomicpacksx',
-            asset_ids: [assetId],
-            memo: 'unbox'
-          }
-        }]
-      }, {
-        blocksBehind: 3,
-        expireSeconds: 90
+      // Get properly formatted transaction from backend
+      const txResponse = await fetch(`${API_URL}/api/user/unpack-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: currentAccount, asset_id: assetId })
       });
-      transactionId = result.transaction_id;
+
+      const txData = await txResponse.json();
+
+      if (!txData.success) {
+        throw new Error(txData.error || 'Failed to build transaction');
+      }
+
+      // Open new WAX Cloud Wallet with transaction
+      const signingWindow = window.open(txData.signing_url, 'WaxSigning', 'width=400,height=600');
+
+      if (!signingWindow) {
+        throw new Error('Popup blocked');
+      }
+
+      // Poll for window close (assume success)
+      const checkInterval = setInterval(() => {
+        if (signingWindow.closed) {
+          clearInterval(checkInterval);
+          button.disabled = false;
+          button.textContent = '🎁 Unpack';
+          showError('Transaction sent! Refreshing packs...', 'success');
+          setTimeout(() => loadUserPacks(), 2000);
+        }
+      }, 500);
+
+      return;
     } else {
       throw new Error('No wallet connected');
     }
