@@ -345,42 +345,24 @@ async function unpackPack(assetId, packName, button) {
       });
       transactionId = result.transaction_id || result.transactionId || result.processed?.id;
     } else if (currentWalletType === 'wcw') {
-      // Get properly formatted transaction from backend
-      const txResponse = await fetch(`${API_URL}/api/user/unpack-url`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: currentAccount, asset_id: assetId })
+      // Use simple parameter-based transaction (new wallet doesn't support full serialized tx in URL)
+      const result = await wax.transact({
+        actions: [{
+          account: 'atomicassets',
+          name: 'transfer',
+          authorization: [{
+            actor: currentAccount,
+            permission: 'active'
+          }],
+          data: {
+            from: currentAccount,
+            to: 'atomicpacksx',
+            asset_ids: [assetId],
+            memo: 'unbox'
+          }
+        }]
       });
-
-      const txData = await txResponse.json();
-
-      if (!txData.success) {
-        throw new Error(txData.error || 'Failed to build transaction');
-      }
-
-      // DEBUG: Log the transaction details
-      console.log('📝 Transaction to sign:', JSON.stringify(txData.transaction, null, 2));
-      console.log('🔗 Signing URL:', txData.signing_url);
-
-      // Open new WAX Cloud Wallet with transaction
-      const signingWindow = window.open(txData.signing_url, 'WaxSigning', 'width=400,height=600');
-
-      if (!signingWindow) {
-        throw new Error('Popup blocked');
-      }
-
-      // Poll for window close (assume success)
-      const checkInterval = setInterval(() => {
-        if (signingWindow.closed) {
-          clearInterval(checkInterval);
-          button.disabled = false;
-          button.textContent = '🎁 Unpack';
-          showError('Transaction sent! Refreshing packs...', 'success');
-          setTimeout(() => loadUserPacks(), 2000);
-        }
-      }, 500);
-
-      return;
+      transactionId = result.transaction_id || 'completed';
     } else {
       throw new Error('No wallet connected');
     }
