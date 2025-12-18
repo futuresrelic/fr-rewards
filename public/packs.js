@@ -44,15 +44,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Wait for wallet libraries to load
 async function waitForLibraries() {
-  // Wait for WaxJS to load
+  // Wait for WaxJS class to load from CDN
   let waxAttempts = 0;
-  while (!window.wax && waxAttempts < 50) {
+  while ((!window.waxjs?.WaxJS && !window.WaxJS) && waxAttempts < 100) {
     await new Promise(resolve => setTimeout(resolve, 100));
     waxAttempts++;
   }
 
-  if (window.wax) {
+  if (window.waxjs?.WaxJS || window.WaxJS) {
     console.log('✅ WaxJS loaded');
+    // Initialize WAX instance
+    const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
+    window.waxInstance = new WaxJS({
+      rpcEndpoint: 'https://wax.greymass.com',
+      tryAutoLogin: false
+    });
   } else {
     console.error('❌ WaxJS not loaded');
   }
@@ -106,8 +112,8 @@ async function checkExistingSession() {
     try {
       // Try auto-login
       if (savedWallet === 'wcw') {
-        if (window.wax) {
-          wax = window.wax;
+        if (window.waxInstance) {
+          wax = window.waxInstance;
           const isAvailable = await wax.isAutoLoginAvailable();
           if (isAvailable) {
             currentAccount = wax.userAccount;
@@ -158,9 +164,9 @@ async function connectWallet(walletType) {
 
 // Connect Wax Cloud Wallet
 async function connectWCW() {
-  if (!window.wax) throw new Error('WaxJS not loaded');
+  if (!window.waxInstance) throw new Error('WaxJS not loaded');
 
-  wax = window.wax;
+  wax = window.waxInstance;
   currentAccount = await wax.login();
 }
 
