@@ -15,10 +15,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'public', 'uploads');
+// Create uploads directory in persistent volume
+const uploadsDir = path.join(__dirname, 'data', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('📁 Created uploads directory in persistent volume');
 }
 
 // Configure multer for image uploads
@@ -59,6 +60,9 @@ app.use(express.static('public'));
 // Serve WaxJS from node_modules
 app.use('/libs/waxjs', express.static('node_modules/@waxio/waxjs/dist'));
 app.use('/libs/eosjs', express.static('node_modules/eosjs/dist'));
+
+// Serve uploads from persistent volume
+app.use('/uploads', express.static(uploadsDir));
 
 // Rate limiting
 const limiter = rateLimit({
