@@ -82,32 +82,24 @@ class SimpleWaxAPI {
       throw new Error('Not logged in');
     }
 
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       try {
-        // Get transaction header info
-        const info = await fetch(`${this.rpcEndpoint}/v1/chain/get_info`).then(r => r.json());
-        const blockInfo = await fetch(`${this.rpcEndpoint}/v1/chain/get_block`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ block_num_or_id: info.head_block_num })
-        }).then(r => r.json());
+        // Simplified: Let WAX Cloud Wallet build the transaction
+        const actionsArray = actions.actions || actions;
+        const action = actionsArray[0]; // For single action (pack unpack)
 
-        // Build transaction
-        const tx = {
-          expiration: new Date(Date.now() + (options.expireSeconds || 90) * 1000).toISOString().slice(0, -1),
-          ref_block_num: info.head_block_num & 0xFFFF,
-          ref_block_prefix: Buffer.from(blockInfo.id, 'hex').readUInt32LE(8),
-          max_net_usage_words: 0,
-          max_cpu_usage_ms: 0,
-          delay_sec: 0,
-          context_free_actions: [],
-          actions: actions.actions || actions,
-          transaction_extensions: []
-        };
+        // Build URL with action parameters
+        const params = new URLSearchParams({
+          account: this.userAccount,
+          contract: action.account,
+          action: action.name,
+          from: action.data.from,
+          to: action.data.to,
+          asset_ids: action.data.asset_ids.join(','),
+          memo: action.data.memo
+        });
 
-        // Encode and open WAX Cloud Wallet
-        const txJson = JSON.stringify(tx);
-        const url = `https://all-access.wax.io/cloud-wallet/signing/?freeBandwidth=true&transaction=${encodeURIComponent(txJson)}`;
+        const url = `https://all-access.wax.io/cloud-wallet/signing/sign-transaction?${params.toString()}`;
 
         const signingWindow = window.open(url, 'WAX Signing', 'width=400,height=600');
 
@@ -116,7 +108,7 @@ class SimpleWaxAPI {
           return;
         }
 
-        // Listen for transaction completion
+        // Listen for completion
         const messageHandler = (event) => {
           if (event.origin !== 'https://www.mycloudwallet.com' &&
               event.origin !== 'https://all-access.wax.io') {
@@ -128,11 +120,13 @@ class SimpleWaxAPI {
           if (event.data && typeof event.data === 'object') {
             if (event.data.type === 'TX_SIGNED' || event.data.transaction_id) {
               window.removeEventListener('message', messageHandler);
+              clearInterval(checkClosed);
               resolve({
-                transaction_id: event.data.transaction_id || event.data.data?.transaction_id
+                transaction_id: event.data.transaction_id || 'completed'
               });
             } else if (event.data.type === 'TX_CANCELLED') {
               window.removeEventListener('message', messageHandler);
+              clearInterval(checkClosed);
               reject(new Error('Transaction cancelled'));
             }
           }
@@ -145,8 +139,8 @@ class SimpleWaxAPI {
           if (signingWindow.closed) {
             clearInterval(checkClosed);
             window.removeEventListener('message', messageHandler);
-            // Don't reject - user may have completed tx and closed window
-            setTimeout(() => resolve({ transaction_id: 'completed' }), 1000);
+            // Assume success if window closed
+            resolve({ transaction_id: 'completed' });
           }
         }, 1000);
 
