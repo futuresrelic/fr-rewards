@@ -336,6 +336,9 @@ app.post('/api/user/unpack-url', async (req, res) => {
     const txJson = JSON.stringify(transaction);
     const signingUrl = `https://www.mycloudwallet.com/sign?transaction=${encodeURIComponent(txJson)}`;
 
+    console.log('📝 Built transaction:', JSON.stringify(transaction, null, 2));
+    console.log('🔗 Signing URL:', signingUrl);
+
     res.json({
       success: true,
       signing_url: signingUrl,
