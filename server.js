@@ -287,6 +287,27 @@ app.get('/api/user/packs/:account', async (req, res) => {
 });
 
 /**
+ * POST /api/user/unpack-url
+ * Generate WAX Cloud Wallet signing URL for atomicpacksx
+ */
+app.post('/api/user/unpack-url', async (req, res) => {
+  try {
+    const { account, asset_id } = req.body;
+
+    const unpackUrl = `https://all-access.wax.io/cloud-wallet/signing/sign-transaction?account=${account}&contract=atomicassets&action=transfer&data=${encodeURIComponent(JSON.stringify({
+      from: account,
+      to: 'atomicpacksx',
+      asset_ids: [asset_id],
+      memo: 'unbox'
+    }))}`;
+
+    res.json({ success: true, signing_url: unpackUrl });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/user/cooldowns/:account
  * Get cooldown status for user's whitelisted templates
  */
