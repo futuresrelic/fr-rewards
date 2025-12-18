@@ -321,31 +321,9 @@ async function unpackPack(assetId, packName, button) {
 
     console.log(`🎁 Unpacking ${packName} (Asset ID: ${assetId})`);
 
-    // Transfer pack to atomicpacksx contract with memo "unbox"
     let transactionId;
 
-    if (currentWalletType === 'wcw' && wax) {
-      const result = await wax.api.transact({
-        actions: [{
-          account: 'atomicassets',
-          name: 'transfer',
-          authorization: [{
-            actor: currentAccount,
-            permission: 'active'
-          }],
-          data: {
-            from: currentAccount,
-            to: 'atomicpacksx',
-            asset_ids: [assetId],
-            memo: 'unbox'
-          }
-        }]
-      }, {
-        blocksBehind: 3,
-        expireSeconds: 90
-      });
-      transactionId = result.transaction_id;
-    } else if (currentWalletType === 'anchor' && anchor) {
+    if (currentWalletType === 'anchor' && anchor) {
       const result = await anchor.transact({
         actions: [{
           account: 'atomicassets',
@@ -366,6 +344,13 @@ async function unpackPack(assetId, packName, button) {
         expireSeconds: 90
       });
       transactionId = result.transaction_id || result.transactionId || result.processed?.id;
+    } else if (currentWalletType === 'wcw') {
+      // For WCW, open NeftyBlocks unpack page (simplest solution)
+      window.open(`https://neftyblocks.com/c/futuresrelic/packs/unpack/${assetId}`, '_blank');
+      button.disabled = false;
+      button.textContent = '🎁 Unpack';
+      showError('Opening NeftyBlocks to unpack your pack', 'success');
+      return;
     } else {
       throw new Error('No wallet connected');
     }
