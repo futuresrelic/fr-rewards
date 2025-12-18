@@ -320,7 +320,7 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
     });
 
     // Start countdowns for each reward
-    nftCard.querySelectorAll('[class^="reward-countdown-"]').forEach(countdownEl => {
+    nftCard.querySelectorAll('[class*="reward-countdown-"]').forEach(countdownEl => {
       const seconds = parseInt(countdownEl.dataset.seconds);
       if (seconds > 0) {
         startCountdown(countdownEl, seconds, () => {
