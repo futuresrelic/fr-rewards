@@ -30,17 +30,46 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load branding
   await loadPublicConfig();
 
+  // Wait for wallet libraries to load
+  await waitForLibraries();
+
   // Connect wallet buttons
-  document.getElementById('connect-wcw').addEventListener('click', () => connectWallet('wax'));
+  document.getElementById('connect-wcw').addEventListener('click', () => connectWallet('wcw'));
   document.getElementById('connect-anchor').addEventListener('click', () => connectWallet('anchor'));
   document.getElementById('disconnect-btn').addEventListener('click', disconnectWallet);
 
   // Check for existing session
   await checkExistingSession();
-
-  console.log('✅ WaxJS loaded');
-  console.log('✅ Anchor wallet loaded');
 });
+
+// Wait for wallet libraries to load
+async function waitForLibraries() {
+  // Wait for WaxJS to load
+  let waxAttempts = 0;
+  while (!window.wax && waxAttempts < 50) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    waxAttempts++;
+  }
+
+  if (window.wax) {
+    console.log('✅ WaxJS loaded');
+  } else {
+    console.error('❌ WaxJS not loaded');
+  }
+
+  // Wait a bit for Anchor to load (it loads async)
+  let anchorAttempts = 0;
+  while (!window.AnchorWallet && anchorAttempts < 50) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    anchorAttempts++;
+  }
+
+  if (window.AnchorWallet) {
+    console.log('✅ Anchor wallet loaded');
+  } else {
+    console.warn('⚠️ Anchor wallet not available');
+  }
+}
 
 // Load public branding config
 async function loadPublicConfig() {
@@ -74,32 +103,48 @@ async function checkExistingSession() {
 
   if (savedAccount && savedWallet) {
     console.log(`Found saved session: ${savedAccount} (${savedWallet})`);
-    await connectWallet(savedWallet, true);
+    try {
+      // Try auto-login
+      if (savedWallet === 'wcw') {
+        if (window.wax) {
+          wax = window.wax;
+          const isAvailable = await wax.isAutoLoginAvailable();
+          if (isAvailable) {
+            currentAccount = wax.userAccount;
+            currentWalletType = 'wcw';
+            showConnectedState();
+            await loadUserPacks();
+          }
+        }
+      } else if (savedWallet === 'anchor') {
+        if (window.AnchorWallet) {
+          anchor = window.AnchorWallet;
+          const restored = await anchor.restoreSession();
+          if (restored) {
+            currentAccount = savedAccount;
+            currentWalletType = 'anchor';
+            showConnectedState();
+            await loadUserPacks();
+          }
+        }
+      }
+    } catch (error) {
+      console.log('Auto-login failed, user will need to reconnect:', error.message);
+    }
   }
 }
 
 // Connect wallet
-async function connectWallet(walletType = 'wax', isReconnect = false) {
+async function connectWallet(walletType) {
   try {
-    if (walletType === 'wax') {
-      if (!isReconnect) {
-        currentAccount = await waxLogin();
-      } else {
-        currentAccount = await waxIsAutoLoginAvailable();
-      }
-      wax = window.wax;
-      currentWalletType = 'wax';
+    if (walletType === 'wcw') {
+      await connectWCW();
     } else if (walletType === 'anchor') {
-      if (!isReconnect) {
-        currentAccount = await anchorLogin();
-      } else {
-        currentAccount = await anchorRestore();
-      }
-      anchor = window.anchorWallet;
-      currentWalletType = 'anchor';
+      await connectAnchor();
     }
 
     if (currentAccount) {
+      currentWalletType = walletType;
       localStorage.setItem('wax_account', currentAccount);
       localStorage.setItem('wax_wallet', walletType);
       showConnectedState();
@@ -109,6 +154,24 @@ async function connectWallet(walletType = 'wax', isReconnect = false) {
     console.error('Connection error:', error);
     showError('Failed to connect wallet: ' + error.message);
   }
+}
+
+// Connect Wax Cloud Wallet
+async function connectWCW() {
+  if (!window.wax) throw new Error('WaxJS not loaded');
+
+  wax = window.wax;
+  currentAccount = await wax.login();
+}
+
+// Connect Anchor
+async function connectAnchor() {
+  if (!window.AnchorWallet) {
+    throw new Error('Anchor wallet not loaded. Please refresh the page or use WAX Cloud Wallet.');
+  }
+
+  anchor = window.AnchorWallet;
+  currentAccount = await anchor.login();
 }
 
 // Disconnect wallet
@@ -290,7 +353,7 @@ async function unpackPack(assetId, packName, button) {
     // Transfer pack to atomicpacksx contract with memo "unbox"
     let transactionId;
 
-    if (currentWalletType === 'wax') {
+    if (currentWalletType === 'wcw' && wax) {
       const result = await wax.api.transact({
         actions: [{
           account: 'atomicassets',
@@ -311,7 +374,7 @@ async function unpackPack(assetId, packName, button) {
         expireSeconds: 90
       });
       transactionId = result.transaction_id;
-    } else if (currentWalletType === 'anchor') {
+    } else if (currentWalletType === 'anchor' && anchor) {
       const result = await anchor.transact({
         actions: [{
           account: 'atomicassets',
@@ -332,6 +395,8 @@ async function unpackPack(assetId, packName, button) {
         expireSeconds: 90
       });
       transactionId = result.transaction_id || result.transactionId || result.processed?.id;
+    } else {
+      throw new Error('No wallet connected');
     }
 
     showError(`Success! Pack unpacked. TX: ${transactionId}`, 'success');
