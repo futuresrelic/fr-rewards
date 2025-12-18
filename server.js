@@ -288,21 +288,61 @@ app.get('/api/user/packs/:account', async (req, res) => {
 
 /**
  * POST /api/user/unpack-url
- * Generate WAX Cloud Wallet signing URL for atomicpacksx
+ * Generate properly formatted transaction for WAX Cloud Wallet unpacking
  */
 app.post('/api/user/unpack-url', async (req, res) => {
   try {
     const { account, asset_id } = req.body;
 
-    const unpackUrl = `https://all-access.wax.io/cloud-wallet/signing/sign-transaction?account=${account}&contract=atomicassets&action=transfer&data=${encodeURIComponent(JSON.stringify({
-      from: account,
-      to: 'atomicpacksx',
-      asset_ids: [asset_id],
-      memo: 'unbox'
-    }))}`;
+    if (!account || !asset_id) {
+      return res.status(400).json({ error: 'Missing account or asset_id' });
+    }
 
-    res.json({ success: true, signing_url: unpackUrl });
+    // Get blockchain info for transaction header
+    const { JsonRpc } = require('eosjs');
+    const fetch = require('node-fetch');
+    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+
+    const info = await rpc.get_info();
+    const blockInfo = await rpc.get_block(info.head_block_num);
+
+    // Build proper transaction
+    const transaction = {
+      expiration: new Date(Date.now() + 90000).toISOString().slice(0, -1),
+      ref_block_num: info.head_block_num & 0xFFFF,
+      ref_block_prefix: blockInfo.ref_block_prefix,
+      max_net_usage_words: 0,
+      max_cpu_usage_ms: 0,
+      delay_sec: 0,
+      context_free_actions: [],
+      actions: [{
+        account: 'atomicassets',
+        name: 'transfer',
+        authorization: [{
+          actor: account,
+          permission: 'active'
+        }],
+        data: {
+          from: account,
+          to: 'atomicpacksx',
+          asset_ids: [asset_id],
+          memo: 'unbox'
+        }
+      }],
+      transaction_extensions: []
+    };
+
+    // Create signing URL for new WAX Cloud Wallet
+    const txJson = JSON.stringify(transaction);
+    const signingUrl = `https://www.mycloudwallet.com/sign?transaction=${encodeURIComponent(txJson)}`;
+
+    res.json({
+      success: true,
+      signing_url: signingUrl,
+      transaction: transaction
+    });
   } catch (error) {
+    console.error('Error generating unpack URL:', error);
     res.status(500).json({ error: error.message });
   }
 });
