@@ -258,6 +258,35 @@ app.get('/api/user/claims/:account', async (req, res) => {
 });
 
 /**
+ * GET /api/user/packs/:account
+ * Get user's packs (filtered by pack template IDs)
+ */
+app.get('/api/user/packs/:account', async (req, res) => {
+  try {
+    const { account } = req.params;
+    const packTemplates = [204194]; // Help Wanted pack - can be made configurable later
+
+    // Get all user's assets
+    const allAssets = await wax.getUserAssets(account);
+
+    // Filter for pack templates
+    const packs = allAssets.filter(asset =>
+      packTemplates.includes(parseInt(asset.template.template_id))
+    );
+
+    res.json({
+      success: true,
+      account,
+      total: packs.length,
+      packs
+    });
+  } catch (error) {
+    console.error('Error fetching packs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/user/cooldowns/:account
  * Get cooldown status for user's whitelisted templates
  */

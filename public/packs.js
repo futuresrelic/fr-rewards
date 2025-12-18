@@ -202,13 +202,15 @@ async function loadUserPacks() {
     packsSection.style.display = 'none';
     noPacksSection.style.display = 'none';
 
-    // Fetch user's assets
-    const assets = await fetchUserAssets(currentAccount);
+    // Fetch packs from backend API (avoids CORS issues)
+    const response = await fetch(`${API_URL}/api/user/packs/${currentAccount}`);
 
-    // Filter for pack templates
-    const packs = assets.filter(asset =>
-      PACK_TEMPLATES.includes(parseInt(asset.template.template_id))
-    );
+    if (!response.ok) {
+      throw new Error(`Failed to fetch packs: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const packs = data.packs || [];
 
     loadingSection.style.display = 'none';
 
@@ -222,39 +224,6 @@ async function loadUserPacks() {
     showError('Error loading packs: ' + error.message);
     console.error('Error:', error);
   }
-}
-
-// Fetch user's assets from AtomicAssets API
-async function fetchUserAssets(account) {
-  const ATOMIC_API = 'https://wax.api.atomicassets.io';
-  let allAssets = [];
-  let page = 1;
-  const limit = 1000;
-
-  while (true) {
-    const url = `${ATOMIC_API}/atomicassets/v1/assets?owner=${account}&page=${page}&limit=${limit}`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`AtomicAssets API error: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.success || !data.data || data.data.length === 0) {
-      break;
-    }
-
-    allAssets = allAssets.concat(data.data);
-
-    if (data.data.length < limit) {
-      break;
-    }
-
-    page++;
-  }
-
-  return allAssets;
 }
 
 // Display packs
