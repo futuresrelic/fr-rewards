@@ -44,19 +44,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Wait for wallet libraries to load
 async function waitForLibraries() {
-  // Wait for SimpleWaxAPI to load
+  // Wait for WaxJS to load
   let waxAttempts = 0;
-  while (!window.SimpleWaxAPI && waxAttempts < 50) {
+  while (!window.waxjs && waxAttempts < 50) {
     await new Promise(resolve => setTimeout(resolve, 100));
     waxAttempts++;
   }
 
-  if (window.SimpleWaxAPI) {
-    console.log('✅ WAX API loaded');
-    // Initialize WAX instance
-    window.waxInstance = new window.SimpleWaxAPI();
+  if (window.waxjs) {
+    console.log('✅ WaxJS loaded');
+    // Initialize WaxJS instance
+    window.waxInstance = new window.waxjs.WaxJS({
+      rpcEndpoint: 'https://wax.greymass.com',
+      tryAutoLogin: false
+    });
   } else {
-    console.error('❌ WAX API not loaded');
+    console.error('❌ WaxJS not loaded');
   }
 
   // Wait a bit for Anchor to load (it loads async)
@@ -345,22 +348,25 @@ async function unpackPack(assetId, packName, button) {
       });
       transactionId = result.transaction_id || result.transactionId || result.processed?.id;
     } else if (currentWalletType === 'wcw') {
-      // Use simple parameter-based transaction (new wallet doesn't support full serialized tx in URL)
-      const result = await wax.transact({
+      // Use official WaxJS API
+      const result = await wax.api.transact({
         actions: [{
           account: 'atomicassets',
           name: 'transfer',
           authorization: [{
-            actor: currentAccount,
+            actor: wax.userAccount,
             permission: 'active'
           }],
           data: {
-            from: currentAccount,
+            from: wax.userAccount,
             to: 'atomicpacksx',
             asset_ids: [assetId],
             memo: 'unbox'
           }
         }]
+      }, {
+        blocksBehind: 3,
+        expireSeconds: 1200
       });
       transactionId = result.transaction_id || 'completed';
     } else {
