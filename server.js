@@ -348,7 +348,7 @@ app.post('/api/user/unpack-url', async (req, res) => {
 
     // Create signing URL for new WAX Cloud Wallet
     const txJson = JSON.stringify(transaction);
-    const signingUrl = `https://www.mycloudwallet.com/sign?transaction=${encodeURIComponent(txJson)}`;
+    const signingUrl = `https://www.mycloudwallet.com/cloud-wallet/signing/?transaction=${encodeURIComponent(txJson)}`;
 
     console.log('📝 Built transaction:', JSON.stringify(transaction, null, 2));
     console.log('🔗 Signing URL:', signingUrl);

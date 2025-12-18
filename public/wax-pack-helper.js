@@ -45,7 +45,7 @@ class SimpleWaxAPI {
       const top = (window.screen.height / 2) - (height / 2);
 
       const loginWindow = window.open(
-        'https://all-access.wax.io/cloud-wallet/login/',
+        'https://www.mycloudwallet.com/cloud-wallet/login/',
         'WAX Login',
         `width=${width},height=${height},left=${left},top=${top}`
       );
@@ -99,7 +99,7 @@ class SimpleWaxAPI {
           memo: action.data.memo
         });
 
-        const url = `https://all-access.wax.io/cloud-wallet/signing/sign-transaction?${params.toString()}`;
+        const url = `https://www.mycloudwallet.com/cloud-wallet/signing/sign-transaction?${params.toString()}`;
 
         const signingWindow = window.open(url, 'WAX Signing', 'width=400,height=600');
 
