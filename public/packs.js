@@ -201,14 +201,17 @@ async function disconnectWallet() {
 }
 
 // Load user's packs
-async function loadUserPacks() {
+async function loadUserPacks(bustCache = false) {
   try {
     loadingSection.style.display = 'block';
     packsSection.style.display = 'none';
     noPacksSection.style.display = 'none';
 
     // Fetch packs from backend API (avoids CORS issues)
-    const response = await fetch(`${API_URL}/api/user/packs/${currentAccount}`);
+    const url = bustCache
+      ? `${API_URL}/api/user/packs/${currentAccount}?t=${Date.now()}`
+      : `${API_URL}/api/user/packs/${currentAccount}`;
+    const response = await fetch(url);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch packs: ${response.statusText}`);
@@ -377,8 +380,27 @@ async function unpackPack(assetId, packName, button) {
 
     showError(`Success! Pack unpacked. TX: ${transactionId}`, 'success');
 
-    // Reload packs after a delay
-    setTimeout(() => loadUserPacks(), 3000);
+    // Immediately hide the unpacked pack from UI
+    button.textContent = '✅ Unpacked!';
+    const packInstance = button.closest('div[style*="margin-bottom"]');
+    if (packInstance) {
+      packInstance.style.transition = 'opacity 0.5s';
+      packInstance.style.opacity = '0';
+      setTimeout(() => packInstance.remove(), 500);
+    }
+
+    // Reload packs with multiple attempts (API needs time to update)
+    let attempts = 0;
+    const maxAttempts = 3;
+    const reloadInterval = setInterval(async () => {
+      attempts++;
+      console.log(`🔄 Refreshing pack list (attempt ${attempts}/${maxAttempts})...`);
+      await loadUserPacks(true); // Force fresh data with cache busting
+
+      if (attempts >= maxAttempts) {
+        clearInterval(reloadInterval);
+      }
+    }, 4000); // Check every 4 seconds, 3 times = 12 seconds total
 
   } catch (error) {
     console.error('Unpack error:', error);
