@@ -200,6 +200,45 @@ async function disconnectWallet() {
   showNotConnectedState();
 }
 
+// Track unpacked assets to filter out cached results
+function trackUnpackedAsset(assetId) {
+  const key = 'unpacked_assets';
+  const now = Date.now();
+  let unpacked = JSON.parse(localStorage.getItem(key) || '{}');
+
+  // Add this asset with current timestamp
+  unpacked[assetId] = now;
+
+  // Clean up old entries (older than 30 minutes)
+  const thirtyMinutes = 30 * 60 * 1000;
+  Object.keys(unpacked).forEach(id => {
+    if (now - unpacked[id] > thirtyMinutes) {
+      delete unpacked[id];
+    }
+  });
+
+  localStorage.setItem(key, JSON.stringify(unpacked));
+  console.log(`📝 Tracked unpacked asset: ${assetId}`);
+}
+
+// Filter out recently unpacked assets (workaround for API cache)
+function filterRecentlyUnpacked(packs) {
+  const key = 'unpacked_assets';
+  const unpacked = JSON.parse(localStorage.getItem(key) || '{}');
+  const unpackedIds = Object.keys(unpacked);
+
+  if (unpackedIds.length === 0) return packs;
+
+  const filtered = packs.filter(pack => !unpackedIds.includes(pack.asset_id));
+
+  const removed = packs.length - filtered.length;
+  if (removed > 0) {
+    console.log(`🗑️ Filtered out ${removed} recently unpacked asset(s)`);
+  }
+
+  return filtered;
+}
+
 // Load user's packs
 async function loadUserPacks(bustCache = false) {
   try {
@@ -218,7 +257,10 @@ async function loadUserPacks(bustCache = false) {
     }
 
     const data = await response.json();
-    const packs = data.packs || [];
+    let packs = data.packs || [];
+
+    // Filter out recently unpacked assets (API cache workaround)
+    packs = filterRecentlyUnpacked(packs);
 
     loadingSection.style.display = 'none';
 
@@ -380,6 +422,9 @@ async function unpackPack(assetId, packName, button) {
 
     showError(`Success! Pack unpacked. TX: ${transactionId}`, 'success');
 
+    // Track this asset as unpacked (prevent showing in cached API results)
+    trackUnpackedAsset(assetId);
+
     // Immediately hide the unpacked pack from UI
     button.textContent = '✅ Unpacked!';
     const packInstance = button.closest('div[style*="margin-bottom"]');
@@ -409,6 +454,9 @@ async function unpackPack(assetId, packName, button) {
     const errorMsg = error.message || '';
     if (errorMsg.includes("doesn't own") || errorMsg.includes("Sender doesn't own")) {
       showError('This pack was already unpacked!', 'info');
+
+      // Track as unpacked to filter out from future loads
+      trackUnpackedAsset(assetId);
 
       // Remove it from the UI immediately
       const packInstance = button.closest('div[style*="margin-bottom"]');
