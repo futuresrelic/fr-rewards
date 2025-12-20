@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFT Holder Rewards</title>
+  <title>Story Progress</title>
   <link rel="stylesheet" href="styles.css">
 
-  <!-- Local WaxJS implementation -->
-  <script src="waxjs-simple.js"></script>
+  <!-- Official WaxJS Library (local copy from GitHub) -->
+  <script src="waxjs.js"></script>
   <!-- Local Anchor implementation -->
   <script src="anchor-simple.js"></script>
 </head>
@@ -17,24 +17,27 @@
       <div class="header-content">
         <img id="page-logo" src="" alt="" style="display: none; height: 3em; width: auto; margin-right: 1em; object-fit: contain;">
         <div class="header-text">
-          <h1 id="page-title">🎨 NFT Holder Rewards</h1>
-          <p class="subtitle" id="page-subtitle">Connect your wallet to claim rewards!</p>
+          <h1 id="page-title">📖 Story Progress</h1>
+          <p class="subtitle" id="page-subtitle">Follow your journey through the story!</p>
         </div>
       </div>
     </header>
 
     <!-- Navigation -->
     <nav class="nav-tabs">
-      <a href="index.html" class="nav-tab active">🎁 Claim Rewards</a>
+      <a href="index.html" class="nav-tab">🎁 Claim Rewards</a>
       <a href="packs.html" class="nav-tab">📦 Unpack</a>
-      <a href="story.html" class="nav-tab">📖 Story</a>
+      <a href="story.html" class="nav-tab active">📖 Story</a>
     </nav>
+
+    <!-- Error/Success Messages -->
+    <div id="error-message" class="alert alert-error" style="display: none;"></div>
 
     <!-- Not Connected State -->
     <div id="not-connected" class="state-section">
       <div class="card">
         <h2>Connect Your Wallet</h2>
-        <p>Connect your WAX wallet to check eligibility and claim rewards.</p>
+        <p>Connect your WAX wallet to view your story progress and complete actions.</p>
 
         <div class="wallet-buttons">
           <button id="connect-wcw" class="btn btn-primary">
@@ -48,11 +51,12 @@
         </div>
 
         <div class="info-box">
-          <h3>How it works:</h3>
+          <h3>About Story Mode:</h3>
           <ol>
             <li>Connect your WAX wallet</li>
-            <li>Hold eligible NFTs from the collection</li>
-            <li>Claim rewards every <span id="cooldown-info">24</span> hours</li>
+            <li>View story steps in chronological order</li>
+            <li>Complete actions to progress through the story</li>
+            <li>Track your achievements and completed tasks</li>
           </ol>
         </div>
       </div>
@@ -71,49 +75,31 @@
       <!-- Loading State -->
       <div id="loading" class="card">
         <div class="loader"></div>
-        <p>Checking your NFT holdings...</p>
+        <p>Loading your story progress...</p>
       </div>
 
-      <!-- Eligible State -->
-      <div id="eligible" class="card" style="display: none;">
-        <div class="status-badge success">
-          <span class="badge-icon">✅</span>
-          <span>You are eligible!</span>
-        </div>
-
-        <div id="nft-list" class="nft-list"></div>
-
-        <div id="claim-history" class="history-section" style="display: none;">
-          <h3>Claim History</h3>
-          <div id="history-list" class="history-list"></div>
-        </div>
+      <!-- Story Progress Display -->
+      <div id="story-section" style="display: none;">
+        <div id="story-steps" style="display: flex; flex-direction: column; gap: 30px;"></div>
       </div>
 
-      <!-- Not Eligible State -->
-      <div id="not-eligible" class="card" style="display: none;">
-        <div class="status-badge error">
-          <span class="badge-icon">❌</span>
-          <span>No eligible NFTs found</span>
+      <!-- No Story State -->
+      <div id="no-story" class="card" style="display: none;">
+        <div class="status-badge">
+          <span class="badge-icon">📭</span>
+          <span>No story configured</span>
         </div>
-
-        <p>You need to hold one of these NFT templates:</p>
-        <div id="whitelist-info" class="whitelist-list"></div>
-
-        <a href="#" id="marketplace-link" class="btn btn-secondary" target="_blank">
-          View on NeftyBlocks
-        </a>
+        <p style="margin-top: 1em; color: var(--text-secondary);">
+          The story system has not been configured yet. Check back later!
+        </p>
       </div>
     </div>
 
-    <!-- Error State -->
-    <div id="error-message" class="alert alert-error" style="display: none;"></div>
-
     <footer>
-      <p>Powered by WAX Blockchain | <a href="/admin">Admin Panel</a></p>
+      <p>Powered by WAX Blockchain | <a href="admin.html">Admin Panel</a> | <a href="index.html">Claims</a></p>
     </footer>
   </div>
 
-  <!-- App Script - remove defer to ensure libraries are loaded first -->
-  <script src="app.js"></script>
+  <script src="story.js"></script>
 </body>
 </html>

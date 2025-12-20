@@ -1013,6 +1013,184 @@ app.get('/api/config/public', async (req, res) => {
 
 // ==================== FRONTEND ROUTES ====================
 
+// ==================== WORKFLOW ADMIN ENDPOINTS ====================
+
+/**
+ * GET /api/admin/workflow/steps
+ * Get all workflow steps
+ */
+app.get('/api/admin/workflow/steps', authenticateAdmin, async (req, res) => {
+  try {
+    const steps = db.workflowSteps.getAll();
+    res.json({ success: true, steps });
+  } catch (error) {
+    console.error('Error fetching workflow steps:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/workflow/steps
+ * Add a new workflow step
+ */
+app.post('/api/admin/workflow/steps', authenticateAdmin, async (req, res) => {
+  try {
+    const { step_order, name, description } = req.body;
+
+    if (!step_order || !name) {
+      return res.status(400).json({ error: 'step_order and name are required' });
+    }
+
+    const result = db.workflowSteps.add(
+      parseInt(step_order),
+      name,
+      description || null
+    );
+
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    console.error('Error adding workflow step:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/workflow/steps/:id
+ * Update a workflow step
+ */
+app.put('/api/admin/workflow/steps/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { step_order, name, description, enabled } = req.body;
+
+    const existingStep = db.workflowSteps.getById(parseInt(id));
+    if (!existingStep) {
+      return res.status(404).json({ error: 'Step not found' });
+    }
+
+    const updateData = {
+      step_order: step_order !== undefined ? parseInt(step_order) : existingStep.step_order,
+      name: name !== undefined ? name : existingStep.name,
+      description: description !== undefined ? description : existingStep.description,
+      enabled: enabled !== undefined ? (enabled ? 1 : 0) : existingStep.enabled
+    };
+
+    db.workflowSteps.update(parseInt(id), updateData);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating workflow step:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/workflow/steps/:id
+ * Delete a workflow step
+ */
+app.delete('/api/admin/workflow/steps/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    db.workflowSteps.delete(parseInt(id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting workflow step:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/workflow/actions
+ * Get workflow actions (optionally filtered by step_id)
+ */
+app.get('/api/admin/workflow/actions', authenticateAdmin, async (req, res) => {
+  try {
+    const { step_id } = req.query;
+
+    let actions;
+    if (step_id) {
+      actions = db.workflowActions.getByStepId(parseInt(step_id));
+    } else {
+      actions = db.workflowActions.getAll();
+    }
+
+    res.json({ success: true, actions });
+  } catch (error) {
+    console.error('Error fetching workflow actions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/workflow/actions
+ * Add a new workflow action
+ */
+app.post('/api/admin/workflow/actions', authenticateAdmin, async (req, res) => {
+  try {
+    const { step_id, action_order, action_type, name, description, config } = req.body;
+
+    if (!step_id || action_order === undefined || !action_type || !name) {
+      return res.status(400).json({ error: 'step_id, action_order, action_type, and name are required' });
+    }
+
+    // Validate action_type
+    const validActionTypes = ['CLAIM', 'UNPACK', 'BLEND', 'DROP', 'MARKET_SCOUT'];
+    if (!validActionTypes.includes(action_type)) {
+      return res.status(400).json({ error: 'Invalid action_type' });
+    }
+
+    const result = db.workflowActions.add(
+      parseInt(step_id),
+      parseInt(action_order),
+      action_type,
+      name,
+      description || null,
+      config || null
+    );
+
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    console.error('Error adding workflow action:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/workflow/actions/:id
+ * Delete a workflow action
+ */
+app.delete('/api/admin/workflow/actions/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    db.workflowActions.delete(parseInt(id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting workflow action:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/workflow/progress/:account
+ * Get user's workflow progress (public endpoint)
+ */
+app.get('/api/workflow/progress/:account', async (req, res) => {
+  try {
+    const { account } = req.params;
+
+    if (!account) {
+      return res.status(400).json({ error: 'account parameter required' });
+    }
+
+    const progress = db.userWorkflowProgress.getProgressWithContext(account);
+
+    res.json({ success: true, progress });
+  } catch (error) {
+    console.error('Error fetching user workflow progress:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

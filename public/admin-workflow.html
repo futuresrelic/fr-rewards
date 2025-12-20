@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Admin - NFT Rewards</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📖 Story Workflow Manager</h1>
+      <p class="subtitle">Configure chronological story progression</p>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <a href="admin.html" class="nav-tab">⚙️ Main Admin</a>
+      <a href="admin-workflow.html" class="nav-tab active">📖 Story Workflow</a>
+    </nav>
+
+    <!-- Login Section -->
+    <div id="admin-login" class="card">
+      <h2>Admin Authentication</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="admin-password">Admin Password:</label>
+          <input type="password" id="admin-password" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+      <div id="login-error" class="alert alert-error" style="display: none;"></div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="admin-dashboard" style="display: none;">
+      <div class="user-header">
+        <div class="user-info">
+          <span class="label">Workflow Admin Session</span>
+        </div>
+        <button id="admin-logout" class="btn btn-secondary btn-sm">Logout</button>
+      </div>
+
+      <!-- Quick Guide -->
+      <div class="card">
+        <h2>📚 How Workflow System Works</h2>
+        <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px;">
+          <ol style="margin: 0; padding-left: 20px;">
+            <li><strong>Create Steps:</strong> Story progression is organized into chronological steps (e.g., "Episode 1", "Episode 2")</li>
+            <li><strong>Add Actions:</strong> Each step can have multiple actions (CLAIM, UNPACK, BLEND, DROP, MARKET_SCOUT)</li>
+            <li><strong>Set Conditions:</strong> Actions can have conditions that must be met (e.g., "Own templates X, Y, Z")</li>
+            <li><strong>Users Progress:</strong> Users complete actions in order, unlocking the next steps in the story</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- Workflow Steps Management -->
+      <div class="card">
+        <h2>🎬 Story Steps</h2>
+        <p>Define the chronological steps of your story. Each step can contain multiple actions.</p>
+
+        <!-- Add New Step Form -->
+        <div class="card" style="background: var(--bg-dark); margin: 20px 0; padding: 20px;">
+          <h3>Add New Step</h3>
+          <form id="add-step-form">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+              <div class="form-group">
+                <label for="new-step-order">Step Order:</label>
+                <input type="number" id="new-step-order" class="form-control" required min="1">
+                <small>Chronological order (1, 2, 3...)</small>
+              </div>
+              <div class="form-group">
+                <label for="new-step-name">Step Name:</label>
+                <input type="text" id="new-step-name" class="form-control" required placeholder="Episode 1: The Beginning">
+                <small>Display name for this step</small>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="new-step-description">Description (optional):</label>
+              <textarea id="new-step-description" class="form-control" rows="2" placeholder="Describe what happens in this story step..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">➕ Add Step</button>
+          </form>
+        </div>
+
+        <!-- Steps List -->
+        <div id="steps-list" style="display: flex; flex-direction: column; gap: 20px; margin-top: 20px;">
+          <p style="color: var(--text-secondary);">Loading...</p>
+        </div>
+        <div id="step-message" class="alert" style="display: none;"></div>
+      </div>
+
+      <!-- Action Configuration Modal -->
+      <div id="actions-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; overflow-y: auto; padding: 20px;">
+        <div class="card" style="max-width: 1000px; margin: 40px auto; position: relative;">
+          <button id="close-actions-modal" style="position: absolute; top: 20px; right: 20px; background: var(--bg-card-hover); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">×</button>
+
+          <h2>⚡ Manage Actions for Step: <span id="modal-step-name"></span></h2>
+          <p id="modal-step-description" style="color: var(--text-secondary); margin-bottom: 30px;"></p>
+
+          <!-- Add New Action Form -->
+          <div style="background: var(--bg-dark); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <h3>Add New Action</h3>
+            <form id="add-action-form">
+              <input type="hidden" id="action-step-id-hidden">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div class="form-group">
+                  <label>Action Order:</label>
+                  <input type="number" id="action-order-input" class="form-control" required min="0" value="0">
+                  <small>Order within step</small>
+                </div>
+                <div class="form-group">
+                  <label>Action Type:</label>
+                  <select id="action-type-input" class="form-control" required>
+                    <option value="CLAIM">CLAIM - Claim NFT reward</option>
+                    <option value="UNPACK">UNPACK - Unpack a pack</option>
+                    <option value="BLEND">BLEND - Blend assets</option>
+                    <option value="DROP">DROP - Drop/Airdrop</option>
+                    <option value="MARKET_SCOUT">MARKET_SCOUT - Find cheap assets</option>
+                  </select>
+                  <small>Type of action</small>
+                </div>
+                <div class="form-group">
+                  <label>Action Name:</label>
+                  <input type="text" id="action-name-input" class="form-control" required placeholder="Claim starter pack">
+                  <small>Display name</small>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Description (optional):</label>
+                <textarea id="action-description-input" class="form-control" rows="2" placeholder="Describe what this action does..."></textarea>
+              </div>
+              <div class="form-group">
+                <label>Action Configuration (JSON):</label>
+                <textarea id="action-config-input" class="form-control" rows="5" placeholder='{"template_id": 12345, "pack_template": 67890}'></textarea>
+                <small>JSON configuration for this action type. Leave empty for no config.</small>
+              </div>
+              <button type="submit" class="btn btn-primary" style="margin-top: 15px;">➕ Add Action</button>
+            </form>
+          </div>
+
+          <!-- Actions List -->
+          <h3>Current Actions</h3>
+          <div id="actions-list" style="display: flex; flex-direction: column; gap: 15px;">
+            <p style="color: var(--text-secondary);">Loading...</p>
+          </div>
+
+          <div id="actions-message" class="alert" style="display: none; margin-top: 15px;"></div>
+        </div>
+      </div>
+
+      <div class="back-link">
+        <a href="admin.html" class="btn btn-secondary">← Back to Main Admin</a>
+        <a href="/" class="btn btn-secondary" style="margin-left: 10px;">← Back to Main Page</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin-workflow.js"></script>
+</body>
+</html>

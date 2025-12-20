@@ -543,11 +543,192 @@ const templateRewards = {
   }
 };
 
+// Workflow Steps methods
+const workflowSteps = {
+  getAll: () => {
+    return db.prepare('SELECT * FROM workflow_steps ORDER BY step_order ASC').all();
+  },
+
+  getEnabled: () => {
+    return db.prepare('SELECT * FROM workflow_steps WHERE enabled = 1 ORDER BY step_order ASC').all();
+  },
+
+  getById: (id) => {
+    return db.prepare('SELECT * FROM workflow_steps WHERE id = ?').get(id);
+  },
+
+  add: (step_order, name, description) => {
+    const stmt = db.prepare(`
+      INSERT INTO workflow_steps (step_order, name, description, enabled)
+      VALUES (?, ?, ?, 1)
+    `);
+    return stmt.run(step_order, name, description);
+  },
+
+  update: (id, data) => {
+    const stmt = db.prepare(`
+      UPDATE workflow_steps
+      SET step_order = ?,
+          name = ?,
+          description = ?,
+          enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(data.step_order, data.name, data.description, data.enabled, id);
+  },
+
+  delete: (id) => {
+    return db.prepare('DELETE FROM workflow_steps WHERE id = ?').run(id);
+  },
+
+  enable: (id) => {
+    return db.prepare('UPDATE workflow_steps SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  },
+
+  disable: (id) => {
+    return db.prepare('UPDATE workflow_steps SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  }
+};
+
+// Workflow Actions methods
+const workflowActions = {
+  getAll: () => {
+    return db.prepare('SELECT * FROM workflow_actions ORDER BY step_id, action_order ASC').all();
+  },
+
+  getByStepId: (step_id) => {
+    return db.prepare('SELECT * FROM workflow_actions WHERE step_id = ? ORDER BY action_order ASC').all(step_id);
+  },
+
+  getEnabledByStepId: (step_id) => {
+    return db.prepare('SELECT * FROM workflow_actions WHERE step_id = ? AND enabled = 1 ORDER BY action_order ASC').all(step_id);
+  },
+
+  getById: (id) => {
+    return db.prepare('SELECT * FROM workflow_actions WHERE id = ?').get(id);
+  },
+
+  add: (step_id, action_order, action_type, name, description, config) => {
+    const stmt = db.prepare(`
+      INSERT INTO workflow_actions (step_id, action_order, action_type, name, description, config, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `);
+    return stmt.run(step_id, action_order, action_type, name, description, config);
+  },
+
+  update: (id, data) => {
+    const stmt = db.prepare(`
+      UPDATE workflow_actions
+      SET step_id = ?,
+          action_order = ?,
+          action_type = ?,
+          name = ?,
+          description = ?,
+          config = ?,
+          enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(
+      data.step_id,
+      data.action_order,
+      data.action_type,
+      data.name,
+      data.description,
+      data.config,
+      data.enabled,
+      id
+    );
+  },
+
+  delete: (id) => {
+    return db.prepare('DELETE FROM workflow_actions WHERE id = ?').run(id);
+  }
+};
+
+// Workflow Conditions methods
+const workflowConditions = {
+  getByActionId: (action_id) => {
+    return db.prepare('SELECT * FROM workflow_conditions WHERE action_id = ?').all(action_id);
+  },
+
+  add: (action_id, condition_type, condition_data) => {
+    const stmt = db.prepare(`
+      INSERT INTO workflow_conditions (action_id, condition_type, condition_data)
+      VALUES (?, ?, ?)
+    `);
+    return stmt.run(action_id, condition_type, condition_data);
+  },
+
+  delete: (id) => {
+    return db.prepare('DELETE FROM workflow_conditions WHERE id = ?').run(id);
+  },
+
+  deleteByActionId: (action_id) => {
+    return db.prepare('DELETE FROM workflow_conditions WHERE action_id = ?').run(action_id);
+  }
+};
+
+// User Workflow Progress methods
+const userWorkflowProgress = {
+  getByAccount: (wallet_account) => {
+    return db.prepare('SELECT * FROM user_workflow_progress WHERE wallet_account = ? ORDER BY completed_at DESC').all(wallet_account);
+  },
+
+  getCompletedActions: (wallet_account) => {
+    return db.prepare('SELECT DISTINCT action_id FROM user_workflow_progress WHERE wallet_account = ?').all(wallet_account);
+  },
+
+  hasCompletedAction: (wallet_account, action_id) => {
+    const result = db.prepare('SELECT COUNT(*) as count FROM user_workflow_progress WHERE wallet_account = ? AND action_id = ?').get(wallet_account, action_id);
+    return result.count > 0;
+  },
+
+  add: (wallet_account, action_id, transaction_id, result_data) => {
+    const stmt = db.prepare(`
+      INSERT INTO user_workflow_progress (wallet_account, action_id, transaction_id, result_data)
+      VALUES (?, ?, ?, ?)
+    `);
+    return stmt.run(wallet_account, action_id, transaction_id, result_data);
+  },
+
+  // Get user's current progress with full workflow context
+  getProgressWithContext: (wallet_account) => {
+    return db.prepare(`
+      SELECT
+        ws.id as step_id,
+        ws.step_order,
+        ws.name as step_name,
+        ws.description as step_description,
+        wa.id as action_id,
+        wa.action_order,
+        wa.action_type,
+        wa.name as action_name,
+        wa.description as action_description,
+        wa.config as action_config,
+        uwp.id as progress_id,
+        uwp.completed_at,
+        uwp.transaction_id,
+        uwp.result_data
+      FROM workflow_steps ws
+      JOIN workflow_actions wa ON ws.id = wa.step_id
+      LEFT JOIN user_workflow_progress uwp ON wa.id = uwp.action_id AND uwp.wallet_account = ?
+      WHERE ws.enabled = 1 AND wa.enabled = 1
+      ORDER BY ws.step_order ASC, wa.action_order ASC
+    `).all(wallet_account);
+  }
+};
+
 module.exports = {
   db,
   config,
   claims,
   admin,
   templates,
-  templateRewards
+  templateRewards,
+  workflowSteps,
+  workflowActions,
+  workflowConditions,
+  userWorkflowProgress
 };
