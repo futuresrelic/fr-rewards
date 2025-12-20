@@ -404,9 +404,28 @@ async function unpackPack(assetId, packName, button) {
 
   } catch (error) {
     console.error('Unpack error:', error);
-    showError('Unpack failed: ' + (error.message || 'Unknown error'));
-    button.disabled = false;
-    button.textContent = '🎁 Unpack';
+
+    // Check if error is "doesn't own asset" - this means it was already unpacked
+    const errorMsg = error.message || '';
+    if (errorMsg.includes("doesn't own") || errorMsg.includes("Sender doesn't own")) {
+      showError('This pack was already unpacked!', 'info');
+
+      // Remove it from the UI immediately
+      const packInstance = button.closest('div[style*="margin-bottom"]');
+      if (packInstance) {
+        packInstance.style.transition = 'opacity 0.5s';
+        packInstance.style.opacity = '0';
+        setTimeout(() => {
+          packInstance.remove();
+          // Reload to get fresh list
+          loadUserPacks(true);
+        }, 500);
+      }
+    } else {
+      showError('Unpack failed: ' + errorMsg);
+      button.disabled = false;
+      button.textContent = '🎁 Unpack';
+    }
   }
 }
 

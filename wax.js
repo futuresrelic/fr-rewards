@@ -52,6 +52,8 @@ async function getUserAssets(account, collection = null) {
         if (collection) {
           url += `&collection_name=${collection}`;
         }
+        // Add cache-busting timestamp
+        url += `&_t=${Date.now()}`;
 
         const response = await fetch(url, { timeout: 15000 });
 
