@@ -237,6 +237,100 @@ function initializeTables() {
     console.warn('⚠️ Migration warning:', error.message);
   }
 
+  // Migration: Create workflow tables if they don't exist
+  try {
+    const workflowStepsExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='workflow_steps'
+    `).get();
+
+    if (!workflowStepsExists) {
+      console.log('🔄 Creating workflow system tables...');
+
+      // Create workflow_steps table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_steps (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          step_order INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(step_order)
+        );
+      `);
+
+      // Create workflow_actions table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_actions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          step_id INTEGER NOT NULL,
+          action_order INTEGER NOT NULL DEFAULT 0,
+          action_type TEXT NOT NULL CHECK(action_type IN ('CLAIM', 'UNPACK', 'BLEND', 'DROP', 'MARKET_SCOUT')),
+          name TEXT NOT NULL,
+          description TEXT,
+          config TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (step_id) REFERENCES workflow_steps(id) ON DELETE CASCADE
+        );
+      `);
+
+      // Create index for workflow_actions
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_workflow_actions_step
+        ON workflow_actions(step_id, action_order);
+      `);
+
+      // Create workflow_conditions table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_conditions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action_id INTEGER NOT NULL,
+          condition_type TEXT NOT NULL CHECK(condition_type IN ('OWNS_TEMPLATES', 'OWNS_ASSET_COUNT', 'HAS_COMPLETED_ACTION', 'HAS_COMPLETED_STEP', 'CUSTOM')),
+          condition_data TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE
+        );
+      `);
+
+      // Create index for workflow_conditions
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_workflow_conditions_action
+        ON workflow_conditions(action_id);
+      `);
+
+      // Create user_workflow_progress table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_workflow_progress (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          wallet_account TEXT NOT NULL,
+          action_id INTEGER NOT NULL,
+          completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          transaction_id TEXT,
+          result_data TEXT,
+          FOREIGN KEY (action_id) REFERENCES workflow_actions(id) ON DELETE CASCADE
+        );
+      `);
+
+      // Create indexes for user_workflow_progress
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_user_progress_wallet
+        ON user_workflow_progress(wallet_account);
+      `);
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_user_progress_action
+        ON user_workflow_progress(wallet_account, action_id);
+      `);
+
+      console.log('✅ Workflow system tables created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Workflow migration warning:', error.message);
+  }
+
   // Seed default templates if they don't exist (runs every time)
   console.log('🌱 Checking default templates...');
 
