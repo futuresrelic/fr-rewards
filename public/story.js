@@ -14,6 +14,8 @@ const storySection = document.getElementById('story-section');
 const noStorySection = document.getElementById('no-story');
 const connectedAccountEl = document.getElementById('connected-account');
 const errorMessageEl = document.getElementById('error-message');
+const dropModal = document.getElementById('drop-modal');
+const dropEmbedContainer = document.getElementById('drop-embed-container');
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -55,6 +57,7 @@ function setupEventListeners() {
   document.getElementById('connect-wcw').addEventListener('click', () => connectWallet('wcw'));
   document.getElementById('connect-anchor').addEventListener('click', () => connectWallet('anchor'));
   document.getElementById('disconnect-btn').addEventListener('click', disconnect);
+  document.getElementById('close-drop-modal').addEventListener('click', closeDropModal);
 }
 
 // Show error message
@@ -62,6 +65,8 @@ function showError(message, type = 'error') {
   errorMessageEl.textContent = message;
   errorMessageEl.className = `alert alert-${type}`;
   errorMessageEl.style.display = 'block';
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 
   setTimeout(() => {
     errorMessageEl.style.display = 'none';
@@ -239,40 +244,300 @@ function displayStoryProgress(progress) {
       </div>
 
       <!-- Actions List -->
-      <div style="display: flex; flex-direction: column; gap: 15px;">
-        ${step.actions.sort((a, b) => a.action_order - b.action_order).map(action => {
-          const isCompleted = !!action.completed_at;
-          const emoji = actionTypeEmoji[action.action_type] || '⚡';
-
-          return `
-            <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 2px solid ${isCompleted ? 'var(--success)' : 'var(--border)'};">
-              <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">
-                <div style="flex: 1;">
-                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                    <span style="font-size: 1.5rem;">${emoji}</span>
-                    <h4 style="margin: 0;">${action.action_name}</h4>
-                    ${isCompleted ? '<span style="background: var(--success); color: white; padding: 4px 12px; border-radius: 15px; font-size: 0.85rem;">✅ Completed</span>' : '<span style="background: var(--bg-card-hover); color: var(--text-secondary); padding: 4px 12px; border-radius: 15px; font-size: 0.85rem;">⏳ Pending</span>'}
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                    <span style="background: var(--bg-card); padding: 5px 10px; border-radius: 5px; font-size: 0.85rem; color: var(--accent); font-weight: bold;">${action.action_type}</span>
-                  </div>
-                  ${action.action_description ? `<p style="margin: 8px 0; color: var(--text-secondary); font-size: 0.9rem;">${action.action_description}</p>` : ''}
-                  ${isCompleted && action.completed_at ? `
-                    <div style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">
-                      Completed: ${new Date(action.completed_at).toLocaleString()}
-                      ${action.transaction_id ? `<br><a href="https://waxblock.io/transaction/${action.transaction_id}" target="_blank" style="color: var(--accent);">View TX →</a>` : ''}
-                    </div>
-                  ` : ''}
-                </div>
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
+      <div id="actions-container-${step.step_id}" style="display: flex; flex-direction: column; gap: 15px;"></div>
     `;
 
     stepsContainer.appendChild(stepCard);
+
+    // Add actions with event listeners
+    const actionsContainer = stepCard.querySelector(`#actions-container-${step.step_id}`);
+    step.actions.sort((a, b) => a.action_order - b.action_order).forEach(action => {
+      const actionCard = createActionCard(action, actionTypeEmoji);
+      actionsContainer.appendChild(actionCard);
+    });
   });
 
   storySection.style.display = 'block';
+}
+
+// Create action card with button
+function createActionCard(action, actionTypeEmoji) {
+  const isCompleted = !!action.completed_at;
+  const emoji = actionTypeEmoji[action.action_type] || '⚡';
+
+  const actionCard = document.createElement('div');
+  actionCard.id = `action-${action.action_id}`;
+  actionCard.style.cssText = `background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 2px solid ${isCompleted ? 'var(--success)' : 'var(--border)'};`;
+
+  actionCard.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">
+      <div style="flex: 1;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+          <span style="font-size: 1.5rem;">${emoji}</span>
+          <h4 style="margin: 0;">${action.action_name}</h4>
+          ${isCompleted ?
+            '<span style="background: var(--success); color: white; padding: 4px 12px; border-radius: 15px; font-size: 0.85rem;">✅ Completed</span>' :
+            '<span style="background: var(--bg-card-hover); color: var(--text-secondary); padding: 4px 12px; border-radius: 15px; font-size: 0.85rem;">⏳ Pending</span>'}
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+          <span style="background: var(--bg-card); padding: 5px 10px; border-radius: 5px; font-size: 0.85rem; color: var(--accent); font-weight: bold;">${action.action_type}</span>
+        </div>
+        ${action.action_description ? `<p style="margin: 8px 0; color: var(--text-secondary); font-size: 0.9rem;">${action.action_description}</p>` : ''}
+        ${isCompleted && action.completed_at ? `
+          <div style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">
+            Completed: ${new Date(action.completed_at).toLocaleString()}
+            ${action.transaction_id ? `<br><a href="https://waxblock.io/transaction/${action.transaction_id}" target="_blank" style="color: var(--accent);">View TX →</a>` : ''}
+          </div>
+        ` : `
+          <div style="margin-top: 15px;">
+            <button class="btn btn-primary" id="action-btn-${action.action_id}" style="width: 100%;">
+              ${getActionButtonText(action.action_type)}
+            </button>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+
+  // Add button event listener if not completed
+  if (!isCompleted) {
+    setTimeout(() => {
+      const btn = document.getElementById(`action-btn-${action.action_id}`);
+      if (btn) {
+        btn.addEventListener('click', () => executeAction(action));
+      }
+    }, 0);
+  }
+
+  return actionCard;
+}
+
+// Get action button text
+function getActionButtonText(actionType) {
+  const texts = {
+    'CLAIM': '🎁 Claim Reward',
+    'UNPACK': '📦 Unpack Now',
+    'BLEND': '🔮 Execute Blend',
+    'DROP': '💧 View Drop',
+    'MARKET_SCOUT': '🔍 Find on Market'
+  };
+  return texts[actionType] || '▶️ Execute Action';
+}
+
+// Execute action
+async function executeAction(action) {
+  console.log('Executing action:', action);
+
+  const btn = document.getElementById(`action-btn-${action.action_id}`);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Processing...';
+  }
+
+  try {
+    let config = null;
+    if (action.action_config) {
+      try {
+        config = JSON.parse(action.action_config);
+      } catch (e) {
+        console.error('Failed to parse action config:', e);
+      }
+    }
+
+    switch (action.action_type) {
+      case 'CLAIM':
+        await executeClaim(action, config);
+        break;
+      case 'UNPACK':
+        await executeUnpack(action, config);
+        break;
+      case 'BLEND':
+        await executeBlend(action, config);
+        break;
+      case 'DROP':
+        await executeDrop(action, config);
+        break;
+      case 'MARKET_SCOUT':
+        await executeMarketScout(action, config);
+        break;
+      default:
+        throw new Error(`Unknown action type: ${action.action_type}`);
+    }
+  } catch (error) {
+    console.error('Action execution error:', error);
+    showError('Error executing action: ' + error.message);
+
+    // Re-enable button
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = getActionButtonText(action.action_type);
+    }
+  }
+}
+
+// Execute CLAIM action
+async function executeClaim(action, config) {
+  if (!config || !config.template_id) {
+    throw new Error('CLAIM action requires template_id in config');
+  }
+
+  const response = await fetch(`${API_URL}/api/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      account: currentAccount,
+      template_id: config.template_id
+    })
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error || 'Claim failed');
+  }
+
+  showError(`Success! Reward claimed. TX: ${data.transaction_id}`, 'success');
+
+  // Reload progress
+  setTimeout(() => loadStoryProgress(), 2000);
+}
+
+// Execute UNPACK action
+async function executeUnpack(action, config) {
+  if (!config || !config.pack_asset_id) {
+    throw new Error('UNPACK action requires pack_asset_id in config');
+  }
+
+  const result = await transact([{
+    account: 'atomicpacksx',
+    name: 'unpack',
+    authorization: [{
+      actor: currentAccount,
+      permission: 'active'
+    }],
+    data: {
+      pack_asset_id: config.pack_asset_id.toString(),
+      pack_owner: currentAccount
+    }
+  }]);
+
+  showError(`Success! Pack unpacked. TX: ${result.transaction_id}`, 'success');
+
+  // Reload progress
+  setTimeout(() => loadStoryProgress(), 2000);
+}
+
+// Execute BLEND action
+async function executeBlend(action, config) {
+  if (!config || !config.blend_id) {
+    throw new Error('BLEND action requires blend_id in config');
+  }
+
+  // Get user's assets to find ingredients
+  const assetsResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${currentAccount}&collection_name=${config.collection_name || 'futuresrelic'}&limit=1000`);
+  const assetsData = await assetsResponse.json();
+
+  if (!assetsData.success) {
+    throw new Error('Failed to fetch assets');
+  }
+
+  // Filter assets by template IDs if specified
+  let ingredientAssets = assetsData.data;
+  if (config.ingredient_templates) {
+    const templateIds = config.ingredient_templates.map(t => t.toString());
+    ingredientAssets = ingredientAssets.filter(asset =>
+      templateIds.includes(asset.template.template_id)
+    );
+  }
+
+  if (ingredientAssets.length < (config.ingredient_count || 1)) {
+    throw new Error('Not enough ingredients to complete blend');
+  }
+
+  // Take required number of assets
+  const assetsForBlend = ingredientAssets.slice(0, config.ingredient_count || 1)
+    .map(a => a.asset_id);
+
+  const result = await transact([{
+    account: 'blend.nefty',
+    name: 'claimblend',
+    authorization: [{
+      actor: currentAccount,
+      permission: 'active'
+    }],
+    data: {
+      blend_id: config.blend_id,
+      claimer: currentAccount,
+      transferred_assets: assetsForBlend
+    }
+  }]);
+
+  showError(`Success! Blend completed. TX: ${result.transaction_id}`, 'success');
+
+  // Reload progress
+  setTimeout(() => loadStoryProgress(), 2000);
+}
+
+// Execute DROP action
+async function executeDrop(action, config) {
+  if (!config || !config.drop_id || !config.collection) {
+    throw new Error('DROP action requires drop_id and collection in config');
+  }
+
+  // Open NeftyBlocks drop embed
+  openDropModal(config.collection, config.drop_id);
+}
+
+// Execute MARKET_SCOUT action
+async function executeMarketScout(action, config) {
+  if (!config || !config.template_id) {
+    throw new Error('MARKET_SCOUT action requires template_id in config');
+  }
+
+  const url = `https://wax.atomichub.io/market?collection_name=${config.collection_name || 'futuresrelic'}&template_id=${config.template_id}&order=asc&sort=price`;
+
+  window.open(url, '_blank');
+
+  showError('Opened AtomicHub marketplace in new tab', 'success');
+}
+
+// Open drop modal
+function openDropModal(collection, dropId) {
+  dropEmbedContainer.innerHTML = `
+    <neftyblocks-drops collection="${collection}" drop-id="${dropId}"></neftyblocks-drops>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@neftyblocks/drops@latest"></script>
+  `;
+
+  dropModal.style.display = 'block';
+}
+
+// Close drop modal
+function closeDropModal() {
+  dropModal.style.display = 'none';
+  dropEmbedContainer.innerHTML = '';
+
+  // Reload progress in case user purchased
+  loadStoryProgress();
+}
+
+// Transaction helper
+async function transact(actions) {
+  if (currentWallet === 'wcw') {
+    return await wax.api.transact({
+      actions: actions
+    }, {
+      blocksBehind: 3,
+      expireSeconds: 90
+    });
+  } else if (currentWallet === 'anchor') {
+    const result = await anchor.transact({
+      actions: actions
+    }, {
+      blocksBehind: 3,
+      expireSeconds: 90
+    });
+    return result;
+  } else {
+    throw new Error('No wallet connected');
+  }
 }
