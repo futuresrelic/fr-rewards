@@ -1229,6 +1229,7 @@ app.post('/api/workflow/complete', async (req, res) => {
 /**
  * GET /api/user/assets/:account/:template_id
  * Proxy endpoint to fetch user's assets from AtomicAssets API (avoids CORS)
+ * Uses wax.getUserAssets with timeout and fallback endpoints
  */
 app.get('/api/user/assets/:account/:template_id', async (req, res) => {
   try {
@@ -1238,23 +1239,22 @@ app.get('/api/user/assets/:account/:template_id', async (req, res) => {
       return res.status(400).json({ error: 'account and template_id are required' });
     }
 
-    const url = `https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${account}&template_id=${template_id}&limit=100`;
-    console.log('Fetching assets from:', url);
+    console.log(`Fetching assets for ${account}, template ${template_id}...`);
 
-    const response = await fetch(url);
+    // Use wax.getUserAssets which has timeout and fallback logic
+    const allAssets = await wax.getUserAssets(account);
 
-    if (!response.ok) {
-      console.error('AtomicAssets API error:', response.status, response.statusText);
-      return res.status(response.status).json({
-        error: `AtomicAssets API returned ${response.status}`,
-        success: false
-      });
-    }
+    // Filter by template ID
+    const matchingAssets = allAssets.filter(asset =>
+      asset.template && asset.template.template_id === template_id
+    );
 
-    const data = await response.json();
-    console.log('Assets fetched successfully:', data.data?.length || 0, 'assets found');
+    console.log(`Found ${matchingAssets.length} assets with template ${template_id}`);
 
-    res.json(data);
+    res.json({
+      success: true,
+      data: matchingAssets
+    });
   } catch (error) {
     console.error('Error fetching user assets:', error);
     res.status(500).json({ error: error.message, success: false });
@@ -1265,6 +1265,7 @@ app.get('/api/user/assets/:account/:template_id', async (req, res) => {
  * GET /api/user/check-ownership/:account
  * Check if user owns specific template IDs (for action status checking)
  * Query params: template_ids (comma-separated list of template IDs)
+ * Uses wax.getUserAssets with timeout and fallback endpoints
  */
 app.get('/api/user/check-ownership/:account', async (req, res) => {
   try {
@@ -1280,20 +1281,16 @@ app.get('/api/user/check-ownership/:account', async (req, res) => {
 
     console.log(`Checking ownership for ${account}:`, templateIdArray);
 
+    // Fetch all user assets once (more efficient)
+    const allAssets = await wax.getUserAssets(account);
+
     // Check each template ID
     for (const templateId of templateIdArray) {
-      const url = `https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${account}&template_id=${templateId}&limit=1`;
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        console.error(`AtomicAssets API error for template ${templateId}:`, response.status);
-        ownershipStatus[templateId] = false;
-        continue;
-      }
-
-      const data = await response.json();
-      ownershipStatus[templateId] = data.success && data.data && data.data.length > 0;
-      console.log(`Template ${templateId}: ${ownershipStatus[templateId] ? 'OWNED' : 'NOT OWNED'}`);
+      const ownsTemplate = allAssets.some(asset =>
+        asset.template && asset.template.template_id === templateId
+      );
+      ownershipStatus[templateId] = ownsTemplate;
+      console.log(`Template ${templateId}: ${ownsTemplate ? 'OWNED' : 'NOT OWNED'}`);
     }
 
     res.json({ success: true, ownership: ownershipStatus });

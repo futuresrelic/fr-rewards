@@ -679,17 +679,20 @@ async function confirmUnpack() {
 }
 
 // Perform the actual unpack
+// Uses same method as Unpack tab: transfer to atomicpacksx with "unbox" memo
 async function doUnpack(assetId, action) {
   const result = await transact([{
-    account: 'atomicpacksx',
-    name: 'unpack',
+    account: 'atomicassets',
+    name: 'transfer',
     authorization: [{
       actor: currentAccount,
       permission: 'active'
     }],
     data: {
-      pack_asset_id: assetId.toString(),
-      pack_owner: currentAccount
+      from: currentAccount,
+      to: 'atomicpacksx',
+      asset_ids: [assetId.toString()],
+      memo: 'unbox'
     }
   }]);
 
