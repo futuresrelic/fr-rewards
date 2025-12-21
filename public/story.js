@@ -32,7 +32,7 @@ let currentDropAction = null;
 document.addEventListener('DOMContentLoaded', async () => {
   await loadPageBranding();
   setupEventListeners();
-  checkExistingConnection();
+  await checkExistingConnection();
 });
 
 // Load page branding
@@ -88,14 +88,56 @@ function showError(message, type = 'error') {
 }
 
 // Check existing connection
-function checkExistingConnection() {
+async function checkExistingConnection() {
   const savedWallet = localStorage.getItem('wallet_type');
   const savedAccount = localStorage.getItem('wallet_account');
 
   if (savedWallet && savedAccount) {
-    currentWallet = savedWallet;
-    currentAccount = savedAccount;
-    showConnected();
+    try {
+      if (savedWallet === 'wcw') {
+        // Initialize WaxJS
+        wax = new waxjs.WaxJS({
+          rpcEndpoint: 'https://wax.greymass.com',
+          tryAutoLogin: true
+        });
+
+        // Check if auto-login is available
+        const isAvailable = await wax.isAutoLoginAvailable();
+        if (isAvailable) {
+          currentAccount = wax.userAccount;
+          currentWallet = 'wcw';
+          showConnected();
+        } else {
+          // Auto-login not available, clear saved session
+          localStorage.removeItem('wallet_type');
+          localStorage.removeItem('wallet_account');
+        }
+      } else if (savedWallet === 'anchor') {
+        // Try to restore Anchor session
+        if (window.AnchorWallet) {
+          anchor = window.AnchorWallet;
+          const restored = await anchor.restoreSession();
+          if (restored) {
+            currentAccount = savedAccount;
+            currentWallet = 'anchor';
+            showConnected();
+          } else {
+            // Session not available, clear saved session
+            localStorage.removeItem('wallet_type');
+            localStorage.removeItem('wallet_account');
+          }
+        } else {
+          console.log('Anchor wallet not loaded yet');
+          localStorage.removeItem('wallet_type');
+          localStorage.removeItem('wallet_account');
+        }
+      }
+    } catch (error) {
+      console.log('Auto-reconnect failed:', error);
+      // Clear invalid saved session
+      localStorage.removeItem('wallet_type');
+      localStorage.removeItem('wallet_account');
+    }
   }
 }
 
@@ -112,7 +154,11 @@ async function connectWallet(type) {
       currentAccount = userAccount;
       currentWallet = 'wcw';
     } else if (type === 'anchor') {
-      anchor = await getAnchorLink();
+      if (!window.AnchorWallet) {
+        throw new Error('Anchor wallet not loaded. Please refresh the page or use WAX Cloud Wallet.');
+      }
+
+      anchor = window.AnchorWallet;
       const identity = await anchor.login('futuresrelic');
       currentAccount = identity.session.auth.actor.toString();
       currentWallet = 'anchor';
