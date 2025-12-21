@@ -509,11 +509,11 @@ function openDropModal(collection, dropId) {
   // Create the neftyblocks-drops web component
   const dropEmbed = document.createElement('neftyblocks-drops');
   dropEmbed.setAttribute('collection', collection);
+  dropEmbed.setAttribute('limit', '1');  // limit is a separate attribute
 
-  // Use options config to show specific drop
+  // Use options config to show specific drop (ids must be comma-separated string)
   const options = {
-    ids: dropId.toString(),
-    limit: 1
+    ids: dropId.toString()
   };
   dropEmbed.setAttribute('options', JSON.stringify(options));
 
