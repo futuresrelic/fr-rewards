@@ -1191,6 +1191,62 @@ app.get('/api/workflow/progress/:account', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/user/assets/:account/:template_id
+ * Proxy endpoint to fetch user's assets from AtomicAssets API (avoids CORS)
+ */
+app.get('/api/user/assets/:account/:template_id', async (req, res) => {
+  try {
+    const { account, template_id } = req.params;
+
+    if (!account || !template_id) {
+      return res.status(400).json({ error: 'account and template_id are required' });
+    }
+
+    const url = `https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${account}&template_id=${template_id}&limit=100`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching user assets:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/user/check-ownership/:account
+ * Check if user owns specific template IDs (for action status checking)
+ * Query params: template_ids (comma-separated list of template IDs)
+ */
+app.get('/api/user/check-ownership/:account', async (req, res) => {
+  try {
+    const { account } = req.params;
+    const { template_ids } = req.query;
+
+    if (!account || !template_ids) {
+      return res.status(400).json({ error: 'account and template_ids query param are required' });
+    }
+
+    const templateIdArray = template_ids.split(',').map(id => id.trim());
+    const ownershipStatus = {};
+
+    // Check each template ID
+    for (const templateId of templateIdArray) {
+      const url = `https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${account}&template_id=${templateId}&limit=1`;
+      const response = await fetch(url);
+      const data = await response.json();
+
+      ownershipStatus[templateId] = data.success && data.data && data.data.length > 0;
+    }
+
+    res.json({ success: true, ownership: ownershipStatus });
+  } catch (error) {
+    console.error('Error checking asset ownership:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

@@ -269,6 +269,88 @@ function displayStoryProgress(progress) {
   storySection.style.display = 'block';
 }
 
+// Check if user owns required assets for an action
+async function checkActionAssetOwnership(action) {
+  if (!action.action_config) {
+    // No config means no specific requirements
+    return { hasAssets: true, status: 'ready' };
+  }
+
+  let config;
+  try {
+    config = JSON.parse(action.action_config);
+  } catch (e) {
+    console.error('Failed to parse action config:', e);
+    return { hasAssets: false, status: 'pending' };
+  }
+
+  const templateIds = [];
+
+  // Determine which templates to check based on action type
+  switch (action.action_type) {
+    case 'CLAIM':
+      // For CLAIM, user typically needs to own a specific template to be eligible
+      if (config.template_id) {
+        templateIds.push(config.template_id);
+      }
+      break;
+
+    case 'UNPACK':
+      // For UNPACK, user needs to own the pack template
+      if (config.pack_template_id) {
+        templateIds.push(config.pack_template_id);
+      }
+      break;
+
+    case 'BLEND':
+      // For BLEND, user needs to own the ingredient templates
+      if (config.ingredient_templates && Array.isArray(config.ingredient_templates)) {
+        templateIds.push(...config.ingredient_templates);
+      }
+      break;
+
+    case 'DROP':
+      // DROP actions are always available (user claims from the drop interface)
+      return { hasAssets: true, status: 'ready' };
+
+    case 'MARKET_SCOUT':
+      // MARKET_SCOUT is always available (just opens market)
+      return { hasAssets: true, status: 'ready' };
+
+    default:
+      return { hasAssets: false, status: 'pending' };
+  }
+
+  // If no template IDs to check, assume ready
+  if (templateIds.length === 0) {
+    return { hasAssets: true, status: 'ready' };
+  }
+
+  // Check ownership via backend proxy
+  try {
+    const response = await fetch(`${API_URL}/api/user/check-ownership/${currentAccount}?template_ids=${templateIds.join(',')}`);
+    const data = await response.json();
+
+    if (!data.success) {
+      return { hasAssets: false, status: 'pending' };
+    }
+
+    // For most actions, user needs ALL templates
+    // For BLEND, this is especially important (need all ingredients)
+    const ownsAll = templateIds.every(tid => data.ownership[tid] === true);
+
+    if (ownsAll) {
+      return { hasAssets: true, status: 'ready' };
+    } else {
+      return { hasAssets: false, status: 'need_assets' };
+    }
+
+  } catch (error) {
+    console.error('Error checking asset ownership:', error);
+    return { hasAssets: false, status: 'pending' };
+  }
+}
+
 // Create action card with button
 function createActionCard(action, actionTypeEmoji) {
   const isCompleted = !!action.completed_at;
@@ -286,7 +368,7 @@ function createActionCard(action, actionTypeEmoji) {
           <h4 style="margin: 0;">${action.action_name}</h4>
           ${isCompleted ?
             '<span style="background: var(--success); color: white; padding: 4px 12px; border-radius: 15px; font-size: 0.85rem;">✅ Completed</span>' :
-            '<span style="background: var(--bg-card-hover); color: var(--text-secondary); padding: 4px 12px; border-radius: 15px; font-size: 0.85rem;">⏳ Pending</span>'}
+            '<span id="status-badge-' + action.action_id + '" style="background: var(--bg-card-hover); color: var(--text-secondary); padding: 4px 12px; border-radius: 15px; font-size: 0.85rem;">⏳ Checking...</span>'}
         </div>
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
           <span style="background: var(--bg-card); padding: 5px 10px; border-radius: 5px; font-size: 0.85rem; color: var(--accent); font-weight: bold;">${action.action_type}</span>
@@ -308,14 +390,43 @@ function createActionCard(action, actionTypeEmoji) {
     </div>
   `;
 
-  // Add button event listener if not completed
+  // Check asset ownership and update status badge if not completed
   if (!isCompleted) {
+    // Add button event listener
     setTimeout(() => {
       const btn = document.getElementById(`action-btn-${action.action_id}`);
       if (btn) {
         btn.addEventListener('click', () => executeAction(action));
       }
     }, 0);
+
+    // Check ownership asynchronously and update status badge
+    checkActionAssetOwnership(action).then(ownershipResult => {
+      const statusBadge = document.getElementById(`status-badge-${action.action_id}`);
+      if (statusBadge) {
+        if (ownershipResult.status === 'ready') {
+          statusBadge.style.background = 'var(--success)';
+          statusBadge.style.color = 'white';
+          statusBadge.textContent = '✅ Ready';
+        } else if (ownershipResult.status === 'need_assets') {
+          statusBadge.style.background = '#f59e0b';
+          statusBadge.style.color = 'white';
+          statusBadge.textContent = '📋 Need Assets';
+        } else {
+          statusBadge.style.background = 'var(--bg-card-hover)';
+          statusBadge.style.color = 'var(--text-secondary)';
+          statusBadge.textContent = '⏳ Pending';
+        }
+      }
+    }).catch(error => {
+      console.error('Error checking ownership:', error);
+      const statusBadge = document.getElementById(`status-badge-${action.action_id}`);
+      if (statusBadge) {
+        statusBadge.style.background = 'var(--bg-card-hover)';
+        statusBadge.style.color = 'var(--text-secondary)';
+        statusBadge.textContent = '⏳ Pending';
+      }
+    });
   }
 
   return actionCard;
@@ -417,8 +528,8 @@ async function executeUnpack(action, config) {
     throw new Error('UNPACK action requires pack_template_id in config');
   }
 
-  // Fetch user's packs of this template
-  const packsResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${currentAccount}&template_id=${config.pack_template_id}&limit=100`);
+  // Fetch user's packs of this template via backend proxy (avoids CORS)
+  const packsResponse = await fetch(`${API_URL}/api/user/assets/${currentAccount}/${config.pack_template_id}`);
   const packsData = await packsResponse.json();
 
   if (!packsData.success || !packsData.data || packsData.data.length === 0) {
