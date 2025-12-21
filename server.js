@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const fs = require('fs');
+const fetch = require('node-fetch');
 require('dotenv').config();
 
 const db = require('./database');
@@ -1192,6 +1193,40 @@ app.get('/api/workflow/progress/:account', async (req, res) => {
 });
 
 /**
+ * POST /api/workflow/complete
+ * Mark an action as completed for a user
+ */
+app.post('/api/workflow/complete', async (req, res) => {
+  try {
+    const { account, action_id, transaction_id, result_data } = req.body;
+
+    if (!account || !action_id) {
+      return res.status(400).json({ error: 'account and action_id are required' });
+    }
+
+    // Check if already completed
+    if (db.userWorkflowProgress.hasCompletedAction(account, action_id)) {
+      return res.json({ success: true, message: 'Action already completed' });
+    }
+
+    // Mark as complete
+    db.userWorkflowProgress.add(
+      account,
+      action_id,
+      transaction_id || null,
+      result_data || null
+    );
+
+    console.log(`✅ Action ${action_id} marked complete for ${account}`);
+
+    res.json({ success: true, message: 'Action marked as completed' });
+  } catch (error) {
+    console.error('Error marking action complete:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * GET /api/user/assets/:account/:template_id
  * Proxy endpoint to fetch user's assets from AtomicAssets API (avoids CORS)
  */
@@ -1204,13 +1239,25 @@ app.get('/api/user/assets/:account/:template_id', async (req, res) => {
     }
 
     const url = `https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${account}&template_id=${template_id}&limit=100`;
+    console.log('Fetching assets from:', url);
+
     const response = await fetch(url);
+
+    if (!response.ok) {
+      console.error('AtomicAssets API error:', response.status, response.statusText);
+      return res.status(response.status).json({
+        error: `AtomicAssets API returned ${response.status}`,
+        success: false
+      });
+    }
+
     const data = await response.json();
+    console.log('Assets fetched successfully:', data.data?.length || 0, 'assets found');
 
     res.json(data);
   } catch (error) {
     console.error('Error fetching user assets:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 
@@ -1231,19 +1278,28 @@ app.get('/api/user/check-ownership/:account', async (req, res) => {
     const templateIdArray = template_ids.split(',').map(id => id.trim());
     const ownershipStatus = {};
 
+    console.log(`Checking ownership for ${account}:`, templateIdArray);
+
     // Check each template ID
     for (const templateId of templateIdArray) {
       const url = `https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${account}&template_id=${templateId}&limit=1`;
       const response = await fetch(url);
-      const data = await response.json();
 
+      if (!response.ok) {
+        console.error(`AtomicAssets API error for template ${templateId}:`, response.status);
+        ownershipStatus[templateId] = false;
+        continue;
+      }
+
+      const data = await response.json();
       ownershipStatus[templateId] = data.success && data.data && data.data.length > 0;
+      console.log(`Template ${templateId}: ${ownershipStatus[templateId] ? 'OWNED' : 'NOT OWNED'}`);
     }
 
     res.json({ success: true, ownership: ownershipStatus });
   } catch (error) {
     console.error('Error checking asset ownership:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 

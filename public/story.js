@@ -16,6 +16,7 @@ const connectedAccountEl = document.getElementById('connected-account');
 const errorMessageEl = document.getElementById('error-message');
 const dropModal = document.getElementById('drop-modal');
 const dropEmbedContainer = document.getElementById('drop-embed-container');
+const markDropCompleteBtn = document.getElementById('mark-drop-complete-btn');
 const packModal = document.getElementById('pack-modal');
 const packSelectionList = document.getElementById('pack-selection-list');
 const confirmUnpackBtn = document.getElementById('confirm-unpack-btn');
@@ -23,6 +24,9 @@ const confirmUnpackBtn = document.getElementById('confirm-unpack-btn');
 // Pack selection state
 let selectedPackAssetId = null;
 let currentUnpackAction = null;
+
+// Drop action state
+let currentDropAction = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -67,6 +71,7 @@ function setupEventListeners() {
   document.getElementById('close-drop-modal').addEventListener('click', closeDropModal);
   document.getElementById('close-pack-modal').addEventListener('click', closePackModal);
   confirmUnpackBtn.addEventListener('click', confirmUnpack);
+  markDropCompleteBtn.addEventListener('click', markDropAsComplete);
 }
 
 // Show error message
@@ -444,6 +449,32 @@ function getActionButtonText(actionType) {
   return texts[actionType] || '▶️ Execute Action';
 }
 
+// Mark action as complete
+async function markActionComplete(action, transactionId = null, resultData = null) {
+  try {
+    const response = await fetch(`${API_URL}/api/workflow/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        account: currentAccount,
+        action_id: action.action_id,
+        transaction_id: transactionId,
+        result_data: resultData
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log('✅ Action marked as complete');
+      // Reload progress to show updated state
+      setTimeout(() => loadStoryProgress(), 1500);
+    }
+  } catch (error) {
+    console.error('Error marking action complete:', error);
+  }
+}
+
 // Execute action
 async function executeAction(action) {
   console.log('Executing action:', action);
@@ -664,8 +695,8 @@ async function doUnpack(assetId, action) {
 
   showError(`Success! Pack unpacked. TX: ${result.transaction_id}`, 'success');
 
-  // Reload progress
-  setTimeout(() => loadStoryProgress(), 2000);
+  // Mark action as complete
+  await markActionComplete(action, result.transaction_id, JSON.stringify({ asset_id: assetId }));
 }
 
 // Execute BLEND action
@@ -725,6 +756,9 @@ async function executeDrop(action, config) {
     throw new Error('DROP action requires drop_id and collection in config');
   }
 
+  // Store action for completion tracking
+  currentDropAction = action;
+
   // Open NeftyBlocks drop embed
   openDropModal(config.collection, config.drop_id);
 }
@@ -747,6 +781,10 @@ function openDropModal(collection, dropId) {
   // Clear previous content
   dropEmbedContainer.innerHTML = '';
 
+  // Reset button state
+  markDropCompleteBtn.disabled = false;
+  markDropCompleteBtn.textContent = '✅ Mark as Complete (After Claiming)';
+
   // Create the neftyblocks-drops web component
   const dropEmbed = document.createElement('neftyblocks-drops');
   dropEmbed.setAttribute('collection', collection);
@@ -762,10 +800,33 @@ function openDropModal(collection, dropId) {
   dropModal.style.display = 'block';
 }
 
+// Mark drop action as complete
+async function markDropAsComplete() {
+  if (!currentDropAction) {
+    showError('No active drop action to complete', 'error');
+    return;
+  }
+
+  markDropCompleteBtn.disabled = true;
+  markDropCompleteBtn.textContent = '⏳ Marking Complete...';
+
+  try {
+    await markActionComplete(currentDropAction, null, null);
+    showError('Drop action marked as complete!', 'success');
+    closeDropModal();
+  } catch (error) {
+    console.error('Error marking drop complete:', error);
+    showError('Failed to mark as complete: ' + error.message, 'error');
+    markDropCompleteBtn.disabled = false;
+    markDropCompleteBtn.textContent = '✅ Mark as Complete (After Claiming)';
+  }
+}
+
 // Close drop modal
 function closeDropModal() {
   dropModal.style.display = 'none';
   dropEmbedContainer.innerHTML = '';
+  currentDropAction = null;
 
   // Reload progress in case user purchased
   loadStoryProgress();
