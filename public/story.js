@@ -503,11 +503,15 @@ async function executeMarketScout(action, config) {
 
 // Open drop modal
 function openDropModal(collection, dropId) {
-  dropEmbedContainer.innerHTML = `
-    <neftyblocks-drops collection="${collection}" drop-id="${dropId}"></neftyblocks-drops>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@neftyblocks/drops@latest"></script>
-  `;
+  // Clear previous content
+  dropEmbedContainer.innerHTML = '';
 
+  // Create the neftyblocks-drops web component
+  const dropEmbed = document.createElement('neftyblocks-drops');
+  dropEmbed.setAttribute('collection', collection);
+  dropEmbed.setAttribute('drop-id', dropId);
+
+  dropEmbedContainer.appendChild(dropEmbed);
   dropModal.style.display = 'block';
 }
 
