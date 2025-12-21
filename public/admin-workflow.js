@@ -22,6 +22,86 @@ function setupEventListeners() {
   document.getElementById('add-step-form').addEventListener('submit', handleAddStep);
   document.getElementById('add-action-form').addEventListener('submit', handleAddAction);
   document.getElementById('close-actions-modal').addEventListener('click', closeActionsModal);
+
+  // Action type change listener
+  document.getElementById('action-type-input').addEventListener('change', handleActionTypeChange);
+}
+
+// Handle action type change to show/hide config fields
+function handleActionTypeChange(e) {
+  const actionType = e.target.value;
+
+  // Hide all config sections
+  document.querySelectorAll('.config-section').forEach(section => {
+    section.style.display = 'none';
+  });
+
+  // Show relevant config section
+  const sectionMap = {
+    'CLAIM': 'config-claim',
+    'UNPACK': 'config-unpack',
+    'BLEND': 'config-blend',
+    'DROP': 'config-drop',
+    'MARKET_SCOUT': 'config-market'
+  };
+
+  const sectionId = sectionMap[actionType];
+  if (sectionId) {
+    document.getElementById(sectionId).style.display = 'block';
+  }
+}
+
+// Build config JSON from form fields based on action type
+function buildConfigFromFields(actionType) {
+  const config = {};
+
+  switch (actionType) {
+    case 'CLAIM':
+      const claimTemplateId = document.getElementById('claim-template-id').value;
+      if (claimTemplateId) {
+        config.template_id = parseInt(claimTemplateId);
+      }
+      break;
+
+    case 'UNPACK':
+      const packTemplate = document.getElementById('unpack-pack-template').value;
+      if (packTemplate) {
+        config.pack_template_id = parseInt(packTemplate);
+      }
+      break;
+
+    case 'BLEND':
+      const blendId = document.getElementById('blend-blend-id').value;
+      const ingredients = document.getElementById('blend-ingredients').value;
+      const count = document.getElementById('blend-count').value;
+      const blendCollection = document.getElementById('blend-collection').value;
+
+      if (blendId) config.blend_id = parseInt(blendId);
+      if (ingredients) {
+        config.ingredient_templates = ingredients.split(',').map(t => parseInt(t.trim()));
+      }
+      if (count) config.ingredient_count = parseInt(count);
+      if (blendCollection) config.collection_name = blendCollection;
+      break;
+
+    case 'DROP':
+      const dropId = document.getElementById('drop-drop-id').value;
+      const dropCollection = document.getElementById('drop-collection').value;
+
+      if (dropId) config.drop_id = dropId; // Keep as string for NeftyBlocks
+      if (dropCollection) config.collection = dropCollection;
+      break;
+
+    case 'MARKET_SCOUT':
+      const marketTemplateId = document.getElementById('market-template-id').value;
+      const marketCollection = document.getElementById('market-collection').value;
+
+      if (marketTemplateId) config.template_id = parseInt(marketTemplateId);
+      if (marketCollection) config.collection_name = marketCollection;
+      break;
+  }
+
+  return Object.keys(config).length > 0 ? config : null;
 }
 
 // Check existing session
@@ -343,18 +423,9 @@ async function handleAddAction(e) {
   const actionType = document.getElementById('action-type-input').value;
   const name = document.getElementById('action-name-input').value;
   const description = document.getElementById('action-description-input').value.trim();
-  const configInput = document.getElementById('action-config-input').value.trim();
 
-  // Validate JSON config if provided
-  let config = null;
-  if (configInput) {
-    try {
-      config = JSON.parse(configInput);
-    } catch (error) {
-      showActionsMessage('Invalid JSON configuration: ' + error.message, 'error');
-      return;
-    }
-  }
+  // Build config from simple fields (no more JSON!)
+  const config = buildConfigFromFields(actionType);
 
   try {
     const response = await fetch(`${API_URL}/api/admin/workflow/actions`, {
@@ -382,6 +453,10 @@ async function handleAddAction(e) {
     showActionsMessage('Action added successfully!', 'success');
     document.getElementById('add-action-form').reset();
     document.getElementById('action-order-input').value = '0';
+    // Reset config fields
+    document.querySelectorAll('.config-section').forEach(section => {
+      section.style.display = 'none';
+    });
     await loadActions(stepId);
   } catch (error) {
     showActionsMessage('Error: ' + error.message, 'error');

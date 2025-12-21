@@ -16,6 +16,13 @@ const connectedAccountEl = document.getElementById('connected-account');
 const errorMessageEl = document.getElementById('error-message');
 const dropModal = document.getElementById('drop-modal');
 const dropEmbedContainer = document.getElementById('drop-embed-container');
+const packModal = document.getElementById('pack-modal');
+const packSelectionList = document.getElementById('pack-selection-list');
+const confirmUnpackBtn = document.getElementById('confirm-unpack-btn');
+
+// Pack selection state
+let selectedPackAssetId = null;
+let currentUnpackAction = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -58,6 +65,8 @@ function setupEventListeners() {
   document.getElementById('connect-anchor').addEventListener('click', () => connectWallet('anchor'));
   document.getElementById('disconnect-btn').addEventListener('click', disconnect);
   document.getElementById('close-drop-modal').addEventListener('click', closeDropModal);
+  document.getElementById('close-pack-modal').addEventListener('click', closePackModal);
+  confirmUnpackBtn.addEventListener('click', confirmUnpack);
 }
 
 // Show error message
@@ -404,10 +413,131 @@ async function executeClaim(action, config) {
 
 // Execute UNPACK action
 async function executeUnpack(action, config) {
-  if (!config || !config.pack_asset_id) {
-    throw new Error('UNPACK action requires pack_asset_id in config');
+  if (!config || !config.pack_template_id) {
+    throw new Error('UNPACK action requires pack_template_id in config');
   }
 
+  // Fetch user's packs of this template
+  const packsResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${currentAccount}&template_id=${config.pack_template_id}&limit=100`);
+  const packsData = await packsResponse.json();
+
+  if (!packsData.success || !packsData.data || packsData.data.length === 0) {
+    throw new Error(`You don't own any packs of template #${config.pack_template_id}`);
+  }
+
+  const packs = packsData.data;
+
+  // Sort by mint number (descending - highest first)
+  packs.sort((a, b) => {
+    const mintA = parseInt(a.template_mint) || 0;
+    const mintB = parseInt(b.template_mint) || 0;
+    return mintB - mintA;
+  });
+
+  // If only one pack, unpack it immediately
+  if (packs.length === 1) {
+    await doUnpack(packs[0].asset_id, action);
+    return;
+  }
+
+  // Multiple packs - show selection modal
+  currentUnpackAction = action;
+  showPackSelectionModal(packs);
+}
+
+// Show pack selection modal
+function showPackSelectionModal(packs) {
+  packSelectionList.innerHTML = '';
+
+  packs.forEach((pack, index) => {
+    const isFirstPack = index === 0;
+    const packOption = document.createElement('div');
+    packOption.style.cssText = `
+      background: ${isFirstPack ? 'var(--accent)' : 'var(--bg-dark)'};
+      padding: 15px;
+      border-radius: 8px;
+      border: 2px solid ${isFirstPack ? 'var(--accent)' : 'var(--border)'};
+      cursor: pointer;
+      transition: all 0.2s;
+    `;
+
+    packOption.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div style="font-weight: bold; font-size: 1.1rem;">Mint #${pack.template_mint || 'Unknown'}</div>
+          <div style="color: var(--text-secondary); font-size: 0.9rem;">Asset ID: ${pack.asset_id}</div>
+          ${isFirstPack ? '<div style="color: white; font-size: 0.85rem; margin-top: 5px;">✨ Highest Mint (Recommended)</div>' : ''}
+        </div>
+        <input type="radio" name="pack-selection" value="${pack.asset_id}" ${isFirstPack ? 'checked' : ''} style="width: 24px; height: 24px; cursor: pointer;">
+      </div>
+    `;
+
+    packOption.addEventListener('click', () => {
+      // Deselect all
+      document.querySelectorAll('input[name="pack-selection"]').forEach(radio => {
+        radio.checked = false;
+        radio.parentElement.parentElement.style.background = 'var(--bg-dark)';
+        radio.parentElement.parentElement.style.borderColor = 'var(--border)';
+      });
+
+      // Select this one
+      const radio = packOption.querySelector('input[type="radio"]');
+      radio.checked = true;
+      packOption.style.background = 'var(--accent)';
+      packOption.style.borderColor = 'var(--accent)';
+      selectedPackAssetId = pack.asset_id;
+    });
+
+    packSelectionList.appendChild(packOption);
+  });
+
+  // Auto-select highest mint
+  selectedPackAssetId = packs[0].asset_id;
+
+  packModal.style.display = 'block';
+}
+
+// Close pack modal
+function closePackModal() {
+  packModal.style.display = 'none';
+  selectedPackAssetId = null;
+  currentUnpackAction = null;
+
+  // Re-enable the unpack button
+  if (currentUnpackAction) {
+    const btn = document.getElementById(`action-btn-${currentUnpackAction.action_id}`);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '📦 Unpack Now';
+    }
+  }
+}
+
+// Confirm unpack
+async function confirmUnpack() {
+  if (!selectedPackAssetId || !currentUnpackAction) {
+    return;
+  }
+
+  try {
+    confirmUnpackBtn.disabled = true;
+    confirmUnpackBtn.textContent = '⏳ Unpacking...';
+
+    await doUnpack(selectedPackAssetId, currentUnpackAction);
+
+    // Close modal
+    packModal.style.display = 'none';
+    selectedPackAssetId = null;
+    currentUnpackAction = null;
+  } catch (error) {
+    confirmUnpackBtn.disabled = false;
+    confirmUnpackBtn.textContent = '📦 Unpack Selected Pack';
+    throw error;
+  }
+}
+
+// Perform the actual unpack
+async function doUnpack(assetId, action) {
   const result = await transact([{
     account: 'atomicpacksx',
     name: 'unpack',
@@ -416,7 +546,7 @@ async function executeUnpack(action, config) {
       permission: 'active'
     }],
     data: {
-      pack_asset_id: config.pack_asset_id.toString(),
+      pack_asset_id: assetId.toString(),
       pack_owner: currentAccount
     }
   }]);

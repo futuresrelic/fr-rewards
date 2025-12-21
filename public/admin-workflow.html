@@ -130,11 +130,85 @@
                 <label>Description (optional):</label>
                 <textarea id="action-description-input" class="form-control" rows="2" placeholder="Describe what this action does..."></textarea>
               </div>
-              <div class="form-group">
-                <label>Action Configuration (JSON):</label>
-                <textarea id="action-config-input" class="form-control" rows="5" placeholder='{"template_id": 12345, "pack_template": 67890}'></textarea>
-                <small>JSON configuration for this action type. Leave empty for no config.</small>
+
+              <!-- Dynamic Config Fields Based on Action Type -->
+              <div id="config-fields">
+                <!-- CLAIM fields -->
+                <div id="config-claim" class="config-section" style="display: none;">
+                  <h4 style="margin: 15px 0 10px 0;">Claim Configuration</h4>
+                  <div class="form-group">
+                    <label>Template ID to Claim:</label>
+                    <input type="number" id="claim-template-id" class="form-control" placeholder="247050">
+                    <small>The template ID users need to own to claim rewards</small>
+                  </div>
+                </div>
+
+                <!-- UNPACK fields -->
+                <div id="config-unpack" class="config-section" style="display: none;">
+                  <h4 style="margin: 15px 0 10px 0;">Unpack Configuration</h4>
+                  <div class="form-group">
+                    <label>Pack Template ID:</label>
+                    <input type="number" id="unpack-pack-template" class="form-control" placeholder="858912">
+                    <small>The pack template ID to unpack (users can select which pack if they own multiple)</small>
+                  </div>
+                </div>
+
+                <!-- BLEND fields -->
+                <div id="config-blend" class="config-section" style="display: none;">
+                  <h4 style="margin: 15px 0 10px 0;">Blend Configuration</h4>
+                  <div class="form-group">
+                    <label>Blend ID:</label>
+                    <input type="number" id="blend-blend-id" class="form-control" placeholder="12467">
+                    <small>The NeftyBlocks blend ID</small>
+                  </div>
+                  <div class="form-group">
+                    <label>Ingredient Template IDs (comma-separated):</label>
+                    <input type="text" id="blend-ingredients" class="form-control" placeholder="391378,391379">
+                    <small>Template IDs required for blend (comma-separated)</small>
+                  </div>
+                  <div class="form-group">
+                    <label>Ingredient Count:</label>
+                    <input type="number" id="blend-count" class="form-control" placeholder="6">
+                    <small>How many ingredients needed</small>
+                  </div>
+                  <div class="form-group">
+                    <label>Collection Name:</label>
+                    <input type="text" id="blend-collection" class="form-control" placeholder="futuresrelic" value="futuresrelic">
+                    <small>WAX collection name</small>
+                  </div>
+                </div>
+
+                <!-- DROP fields -->
+                <div id="config-drop" class="config-section" style="display: none;">
+                  <h4 style="margin: 15px 0 10px 0;">Drop Configuration</h4>
+                  <div class="form-group">
+                    <label>Drop ID:</label>
+                    <input type="number" id="drop-drop-id" class="form-control" placeholder="229014">
+                    <small>The NeftyBlocks drop ID</small>
+                  </div>
+                  <div class="form-group">
+                    <label>Collection Name:</label>
+                    <input type="text" id="drop-collection" class="form-control" placeholder="futuresrelic" value="futuresrelic">
+                    <small>WAX collection name</small>
+                  </div>
+                </div>
+
+                <!-- MARKET_SCOUT fields -->
+                <div id="config-market" class="config-section" style="display: none;">
+                  <h4 style="margin: 15px 0 10px 0;">Market Scout Configuration</h4>
+                  <div class="form-group">
+                    <label>Template ID to Scout:</label>
+                    <input type="number" id="market-template-id" class="form-control" placeholder="391378">
+                    <small>The template ID to find on AtomicHub market</small>
+                  </div>
+                  <div class="form-group">
+                    <label>Collection Name:</label>
+                    <input type="text" id="market-collection" class="form-control" placeholder="futuresrelic" value="futuresrelic">
+                    <small>WAX collection name</small>
+                  </div>
+                </div>
               </div>
+
               <button type="submit" class="btn btn-primary" style="margin-top: 15px;">➕ Add Action</button>
             </form>
           </div>
