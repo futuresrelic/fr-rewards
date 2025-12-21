@@ -509,7 +509,13 @@ function openDropModal(collection, dropId) {
   // Create the neftyblocks-drops web component
   const dropEmbed = document.createElement('neftyblocks-drops');
   dropEmbed.setAttribute('collection', collection);
-  dropEmbed.setAttribute('drop-id', dropId);
+
+  // Use options config to show specific drop
+  const options = {
+    ids: dropId.toString(),
+    limit: 1
+  };
+  dropEmbed.setAttribute('options', JSON.stringify(options));
 
   dropEmbedContainer.appendChild(dropEmbed);
   dropModal.style.display = 'block';
