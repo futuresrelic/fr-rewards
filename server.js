@@ -1423,6 +1423,63 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/pack/check-claimable
+ * Check which pack asset IDs are in the unboxassets table (ready to claim)
+ * Body: { asset_ids: [id1, id2, ...] }
+ */
+app.post('/api/pack/check-claimable', async (req, res) => {
+  try {
+    const { asset_ids } = req.body;
+
+    if (!asset_ids || !Array.isArray(asset_ids)) {
+      return res.status(400).json({ error: 'asset_ids array is required' });
+    }
+
+    console.log(`Checking claimable status for ${asset_ids.length} packs...`);
+
+    const { JsonRpc } = require('eosjs');
+    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+
+    // Query unboxassets table to get all entries
+    const result = await rpc.get_table_rows({
+      json: true,
+      code: 'atomicpacksx',
+      scope: 'atomicpacksx',
+      table: 'unboxassets',
+      limit: 10000,
+      reverse: false,
+      show_payer: false
+    });
+
+    const claimableStatus = {};
+
+    // Check each asset_id
+    for (const assetId of asset_ids) {
+      const rolls = result.rows
+        .filter(row => row.pack_asset_id === assetId)
+        .map(row => parseInt(row.origin_roll_id))
+        .sort((a, b) => a - b);
+
+      claimableStatus[assetId] = {
+        is_claimable: rolls.length > 0,
+        roll_ids: rolls,
+        roll_count: rolls.length
+      };
+    }
+
+    console.log(`✅ Checked ${asset_ids.length} packs, ${Object.values(claimableStatus).filter(s => s.is_claimable).length} are claimable`);
+
+    res.json({
+      success: true,
+      claimable_status: claimableStatus
+    });
+  } catch (error) {
+    console.error('Error checking claimable packs:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
