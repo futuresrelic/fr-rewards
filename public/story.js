@@ -616,22 +616,8 @@ async function executeUnpack(action, config) {
   let packs = packsData.data;
   console.log(`Found ${packs.length} total packs from API`);
 
-  // Check which packs are claimable (in unboxassets table)
-  const assetIds = packs.map(p => p.asset_id);
-  const claimableResponse = await fetch(`${API_URL}/api/pack/check-claimable`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ asset_ids: assetIds })
-  });
-  const claimableData = await claimableResponse.json();
-
-  if (!claimableData.success) {
-    console.warn('Failed to check claimable status, proceeding without it');
-  }
-
-  // Separate packs into claimable and unpackable
-  const claimablePacks = [];
-  const unpackablePacks = [];
+  // Filter out burned/invalid packs
+  const validPacks = [];
   const skippedPacks = [];
 
   packs.forEach(pack => {
@@ -642,70 +628,42 @@ async function executeUnpack(action, config) {
       return;
     }
 
-    const claimStatus = claimableData.success ? claimableData.claimable_status[pack.asset_id] : null;
-
-    if (claimStatus && claimStatus.is_claimable) {
-      // Pack is in unboxassets table - ready to claim
-      pack.claimable = true;
-      pack.roll_ids = claimStatus.roll_ids;
-      pack.roll_count = claimStatus.roll_count;
-      claimablePacks.push(pack);
-      console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is CLAIMABLE (${pack.roll_count} rolls)`);
-    } else if (pack.owner === currentAccount) {
-      // Pack is owned by user - ready to unpack
-      pack.claimable = false;
-      unpackablePacks.push(pack);
-      console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is UNPACKABLE`);
-    } else if (pack.owner === 'atomicpacksx') {
-      // Pack transferred to atomicpacksx but not in unboxassets table
-      // This usually means it's about to be burned or there's a delay
-      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is with atomicpacksx but not claimable yet - skipping`);
+    // Skip packs not owned by user (already transferred, in limbo, etc.)
+    if (pack.owner !== currentAccount) {
+      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is owned by ${pack.owner} - skipping`);
       skippedPacks.push(pack);
-    } else {
-      // Pack is in weird state - not owned and not claimable
-      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is in unknown state - owner: ${pack.owner}, not claimable`);
-      skippedPacks.push(pack);
+      return;
     }
+
+    validPacks.push(pack);
+    console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is ready to unpack`);
   });
 
-  const totalValidPacks = claimablePacks.length + unpackablePacks.length;
-
-  if (totalValidPacks === 0) {
+  if (validPacks.length === 0) {
     if (skippedPacks.length > 0) {
-      throw new Error(`No packs available. Found ${packs.length} packs but ${skippedPacks.length} were already burned or claimed. Try refreshing the page.`);
+      throw new Error(`No packs available. Found ${packs.length} packs but ${skippedPacks.length} were already unpacked or burned. Try refreshing the page.`);
     }
-    throw new Error(`No packs available. Found ${packs.length} packs but none are ready to unpack or claim.`);
+    throw new Error(`No packs available to unpack.`);
   }
 
-  console.log(`Found ${unpackablePacks.length} unpackable, ${claimablePacks.length} claimable, ${skippedPacks.length} skipped`);
+  console.log(`Found ${validPacks.length} valid packs, ${skippedPacks.length} skipped`);
 
-
-  // Combine and sort: claimable first, then by mint number
-  const allPacks = [...claimablePacks, ...unpackablePacks].sort((a, b) => {
-    // Claimable packs first
-    if (a.claimable && !b.claimable) return -1;
-    if (!a.claimable && b.claimable) return 1;
-
-    // Then by mint number (descending - highest first)
+  // Sort by mint number (descending - highest first)
+  validPacks.sort((a, b) => {
     const mintA = parseInt(a.template_mint) || 0;
     const mintB = parseInt(b.template_mint) || 0;
     return mintB - mintA;
   });
 
-  // If only one pack, process it immediately
-  if (allPacks.length === 1) {
-    const pack = allPacks[0];
-    if (pack.claimable) {
-      await doClaim(pack, action);
-    } else {
-      await doUnpack(pack, action);
-    }
+  // If only one pack, unpack it immediately
+  if (validPacks.length === 1) {
+    await doUnpack(validPacks[0], action);
     return;
   }
 
   // Multiple packs - show selection modal
   currentUnpackAction = action;
-  showPackSelectionModal(allPacks);
+  showPackSelectionModal(validPacks);
 }
 
 // Show pack selection modal
@@ -714,30 +672,23 @@ function showPackSelectionModal(packs) {
 
   packs.forEach((pack, index) => {
     const isFirstPack = index === 0;
-    const isClaimable = pack.claimable === true;
 
     const packOption = document.createElement('div');
     packOption.style.cssText = `
       background: ${isFirstPack ? 'var(--accent)' : 'var(--bg-dark)'};
       padding: 15px;
       border-radius: 8px;
-      border: 2px solid ${isFirstPack ? 'var(--accent)' : (isClaimable ? '#ff9800' : 'var(--border)')};
+      border: 2px solid ${isFirstPack ? 'var(--accent)' : 'var(--border)'};
       cursor: pointer;
       transition: all 0.2s;
     `;
-
-    const statusBadge = isClaimable
-      ? `<div style="background: #ff9800; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; display: inline-block; margin-top: 5px;">🎁 Ready to Claim (${pack.roll_count} rolls)</div>`
-      : `<div style="background: #4CAF50; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; display: inline-block; margin-top: 5px;">📦 Ready to Unpack</div>`;
 
     packOption.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
           <div style="font-weight: bold; font-size: 1.1rem;">Mint #${pack.template_mint || 'Unknown'}</div>
           <div style="color: var(--text-secondary); font-size: 0.9rem;">Asset ID: ${pack.asset_id}</div>
-          ${statusBadge}
-          ${isFirstPack && !isClaimable ? '<div style="color: white; font-size: 0.85rem; margin-top: 5px;">✨ Highest Mint (Recommended)</div>' : ''}
-          ${isFirstPack && isClaimable ? '<div style="color: white; font-size: 0.85rem; margin-top: 5px;">⚡ Action Required</div>' : ''}
+          ${isFirstPack ? '<div style="color: white; font-size: 0.85rem; margin-top: 5px;">✨ Highest Mint (Recommended)</div>' : ''}
         </div>
         <input type="radio" name="pack-selection" value="${pack.asset_id}" ${isFirstPack ? 'checked' : ''} style="width: 24px; height: 24px; cursor: pointer;">
       </div>
@@ -757,27 +708,13 @@ function showPackSelectionModal(packs) {
       packOption.style.background = 'var(--accent)';
       packOption.style.borderColor = 'var(--accent)';
       selectedPack = pack;  // Store full pack object
-
-      // Update button text based on pack type
-      if (pack.claimable) {
-        confirmUnpackBtn.textContent = `🎁 Claim ${pack.roll_count} Rolls`;
-      } else {
-        confirmUnpackBtn.textContent = '📦 Unpack Selected Pack';
-      }
     });
 
     packSelectionList.appendChild(packOption);
   });
 
   // Auto-select first pack
-  selectedPack = packs[0];  // Store full pack object
-
-  // Set initial button text
-  if (packs[0].claimable) {
-    confirmUnpackBtn.textContent = `🎁 Claim ${packs[0].roll_count} Rolls`;
-  } else {
-    confirmUnpackBtn.textContent = '📦 Unpack Selected Pack';
-  }
+  selectedPack = packs[0];
 
   packModal.style.display = 'block';
 }
@@ -798,7 +735,7 @@ function closePackModal() {
   }
 }
 
-// Confirm unpack or claim
+// Confirm unpack
 async function confirmUnpack() {
   if (!selectedPack || !currentUnpackAction) {
     return;
@@ -806,16 +743,9 @@ async function confirmUnpack() {
 
   try {
     confirmUnpackBtn.disabled = true;
+    confirmUnpackBtn.textContent = '⏳ Unpacking...';
 
-    if (selectedPack.claimable) {
-      // Pack is already unpacked, just claim it
-      confirmUnpackBtn.textContent = '⏳ Claiming...';
-      await doClaim(selectedPack, currentUnpackAction);
-    } else {
-      // Pack needs to be unpacked first
-      confirmUnpackBtn.textContent = '⏳ Unpacking...';
-      await doUnpack(selectedPack, currentUnpackAction);
-    }
+    await doUnpack(selectedPack, currentUnpackAction);
 
     // Close modal
     packModal.style.display = 'none';
@@ -865,119 +795,37 @@ async function doClaim(pack, action) {
 
 // Perform the actual unpack
 // Uses same method as Unpack tab: transfer to atomicpacksx with "unbox" memo
-// Then claim the unpacked contents
+// Contents are auto-distributed - no claiming step needed for these pack types
 async function doUnpack(pack, action) {
   const assetId = pack.asset_id;
   const packTemplateId = pack.template.template_id;
 
   console.log(`📦 Starting unpack for pack ${assetId} (template ${packTemplateId})`);
 
-  // Step 0: Check if pack is already in unboxassets table (stuck in limbo)
-  // This happens if the pack was transferred but not claimed
-  console.log(`🔍 Checking if pack ${assetId} is already unpacked but unclaimed...`);
-  let rollIds = [];
-  let transferResult = null;
-  let alreadyUnpacked = false;
-
-  try {
-    const checkResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
-    const checkData = await checkResponse.json();
-
-    if (checkData.success && checkData.roll_ids && checkData.roll_ids.length > 0) {
-      rollIds = checkData.roll_ids;
-      alreadyUnpacked = true;
-      console.log(`✅ Pack is already unpacked! Found ${rollIds.length} rolls waiting to be claimed: [${rollIds.join(', ')}]`);
-      showError(`Pack already unpacked - claiming ${rollIds.length} rolls...`, 'info');
-    }
-  } catch (error) {
-    console.log('Pack not in unboxassets table yet, will need to transfer it');
-  }
-
-  // Step 1: Transfer pack to atomicpacksx to unpack it (if not already unpacked)
-  if (!alreadyUnpacked) {
-    transferResult = await transact([{
-      account: 'atomicassets',
-      name: 'transfer',
-      authorization: [{
-        actor: currentAccount,
-        permission: 'active'
-      }],
-      data: {
-        from: currentAccount,
-        to: 'atomicpacksx',
-        asset_ids: [assetId.toString()],
-        memo: 'unbox'
-      }
-    }]);
-
-    showError(`Pack transferred for unpacking. TX: ${transferResult.transaction_id}`, 'success');
-
-    // Step 2: Wait for blockchain to process the unpack and populate unboxassets table
-    // This typically takes 1-2 seconds
-    console.log('⏳ Waiting for blockchain to process unpack...');
-    await new Promise(resolve => setTimeout(resolve, 2500));
-
-    // Step 3: Query the unboxassets table to get EXACT rolls that were created
-    let retryCount = 0;
-    const maxRetries = 3;
-
-    while (retryCount < maxRetries) {
-      try {
-        console.log(`📡 Querying unboxassets table for pack ${assetId} (attempt ${retryCount + 1}/${maxRetries})...`);
-        const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
-        const rollData = await rollResponse.json();
-
-        if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
-          rollIds = rollData.roll_ids;
-          console.log(`✅ Found ${rollIds.length} rolls in unboxassets table: [${rollIds.join(', ')}]`);
-          break;
-        } else {
-          console.warn(`⚠️ No rolls found yet, retrying in 2 seconds...`);
-          retryCount++;
-          if (retryCount < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-        }
-      } catch (error) {
-        console.error('Error querying unboxed rolls:', error);
-        retryCount++;
-        if (retryCount < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      }
-    }
-
-    // If we still couldn't find rolls after retries, throw error
-    if (rollIds.length === 0) {
-      throw new Error(`Failed to find unboxed rolls for pack ${assetId}. The pack may not have unpacked correctly, or the blockchain needs more time to process.`);
-    }
-  }
-
-  // Step 4: Claim the unpacked contents with the EXACT rolls from blockchain
-  console.log(`🎁 Claiming ${rollIds.length} rolls: [${rollIds.join(', ')}]`);
-
-  const claimResult = await transact([{
-    account: 'atomicpacksx',
-    name: 'claimunboxed',
+  // Transfer pack to atomicpacksx to unpack it
+  // The "unbox" memo triggers automatic unpacking and distribution
+  const transferResult = await transact([{
+    account: 'atomicassets',
+    name: 'transfer',
     authorization: [{
       actor: currentAccount,
       permission: 'active'
     }],
     data: {
-      pack_asset_id: assetId.toString(),
-      origin_roll_ids: rollIds  // Use EXACT rolls from blockchain
+      from: currentAccount,
+      to: 'atomicpacksx',
+      asset_ids: [assetId.toString()],
+      memo: 'unbox'
     }
   }]);
 
-  showError(`Success! Pack contents claimed (${rollIds.length} rolls). TX: ${claimResult.transaction_id}`, 'success');
+  showError(`Success! Pack unpacked. TX: ${transferResult.transaction_id}`, 'success');
 
   // Mark action as complete
-  await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
+  await markActionComplete(action, transferResult.transaction_id, JSON.stringify({
     asset_id: assetId,
-    transfer_tx: transferResult ? transferResult.transaction_id : 'already_unpacked',
-    claim_tx: claimResult.transaction_id,
-    num_rolls: rollIds.length,
-    roll_ids: rollIds
+    template_id: packTemplateId,
+    transaction_id: transferResult.transaction_id
   }));
 }
 
