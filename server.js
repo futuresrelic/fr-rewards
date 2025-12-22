@@ -1441,34 +1441,53 @@ app.post('/api/pack/check-claimable', async (req, res) => {
     const { JsonRpc } = require('eosjs');
     const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
 
-    // Query unboxassets table to get all entries
-    const result = await rpc.get_table_rows({
-      json: true,
-      code: 'atomicpacksx',
-      scope: 'atomicpacksx',
-      table: 'unboxassets',
-      limit: 10000,
-      reverse: false,
-      show_payer: false
-    });
-
     const claimableStatus = {};
 
-    // Check each asset_id
+    // Check each asset_id individually using the same query method as /api/pack/unboxed-rolls
     for (const assetId of asset_ids) {
-      const rolls = result.rows
-        .filter(row => row.pack_asset_id === assetId)
-        .map(row => parseInt(row.origin_roll_id))
-        .sort((a, b) => a - b);
+      try {
+        // Query unboxassets table for this specific pack using index
+        const result = await rpc.get_table_rows({
+          json: true,
+          code: 'atomicpacksx',
+          scope: 'atomicpacksx',
+          table: 'unboxassets',
+          lower_bound: assetId,
+          upper_bound: assetId,
+          key_type: 'i64',
+          index_position: 1,
+          limit: 1000,
+          reverse: false,
+          show_payer: false
+        });
 
-      claimableStatus[assetId] = {
-        is_claimable: rolls.length > 0,
-        roll_ids: rolls,
-        roll_count: rolls.length
-      };
+        // Extract roll IDs for this pack - use string comparison to avoid type issues
+        const rolls = result.rows
+          .filter(row => row.pack_asset_id.toString() === assetId.toString())
+          .map(row => parseInt(row.origin_roll_id))
+          .sort((a, b) => a - b);
+
+        claimableStatus[assetId] = {
+          is_claimable: rolls.length > 0,
+          roll_ids: rolls,
+          roll_count: rolls.length
+        };
+
+        if (rolls.length > 0) {
+          console.log(`  ✅ Pack ${assetId} is CLAIMABLE (${rolls.length} rolls: [${rolls.join(', ')}])`);
+        }
+      } catch (error) {
+        console.warn(`  ⚠️ Error checking pack ${assetId}:`, error.message);
+        claimableStatus[assetId] = {
+          is_claimable: false,
+          roll_ids: [],
+          roll_count: 0
+        };
+      }
     }
 
-    console.log(`✅ Checked ${asset_ids.length} packs, ${Object.values(claimableStatus).filter(s => s.is_claimable).length} are claimable`);
+    const claimableCount = Object.values(claimableStatus).filter(s => s.is_claimable).length;
+    console.log(`✅ Checked ${asset_ids.length} packs, ${claimableCount} are claimable`);
 
     res.json({
       success: true,
