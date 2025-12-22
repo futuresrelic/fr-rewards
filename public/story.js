@@ -726,8 +726,10 @@ async function confirmUnpack() {
 
 // Perform the actual unpack
 // Uses same method as Unpack tab: transfer to atomicpacksx with "unbox" memo
+// Then claim the unpacked contents
 async function doUnpack(assetId, action) {
-  const result = await transact([{
+  // Step 1: Transfer pack to atomicpacksx to unpack it
+  const transferResult = await transact([{
     account: 'atomicassets',
     name: 'transfer',
     authorization: [{
@@ -742,10 +744,33 @@ async function doUnpack(assetId, action) {
     }
   }]);
 
-  showError(`Success! Pack unpacked. TX: ${result.transaction_id}`, 'success');
+  showError(`Pack transferred for unpacking. TX: ${transferResult.transaction_id}`, 'success');
+
+  // Step 2: Claim the unpacked contents
+  // Wait a moment for blockchain to process the unpack
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  const claimResult = await transact([{
+    account: 'atomicpacksx',
+    name: 'claimunboxed',
+    authorization: [{
+      actor: currentAccount,
+      permission: 'active'
+    }],
+    data: {
+      pack_asset_id: assetId.toString(),
+      origin_roll_ids: [0, 1]  // Claim all rolls from the pack
+    }
+  }]);
+
+  showError(`Success! Pack contents claimed. TX: ${claimResult.transaction_id}`, 'success');
 
   // Mark action as complete
-  await markActionComplete(action, result.transaction_id, JSON.stringify({ asset_id: assetId }));
+  await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
+    asset_id: assetId,
+    transfer_tx: transferResult.transaction_id,
+    claim_tx: claimResult.transaction_id
+  }));
 }
 
 // Execute BLEND action
