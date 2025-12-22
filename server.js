@@ -1403,13 +1403,14 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
       });
     }
 
-    // Extract all roll IDs for this pack
+    // Extract all roll IDs for this pack - use string comparison to avoid type issues
     const rollIds = result.rows
-      .filter(row => row.pack_asset_id === pack_asset_id)
+      .filter(row => row.pack_asset_id.toString() === pack_asset_id.toString())
       .map(row => parseInt(row.origin_roll_id))
       .sort((a, b) => a - b);  // Sort numerically
 
     console.log(`✅ Found ${rollIds.length} rolls for pack ${pack_asset_id}: [${rollIds.join(', ')}]`);
+    console.log(`Raw table data: ${JSON.stringify(result.rows.slice(0, 3))}`);
 
     res.json({
       success: true,

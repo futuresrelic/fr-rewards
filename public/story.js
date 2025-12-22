@@ -794,16 +794,14 @@ async function doClaim(pack, action) {
 }
 
 // Perform the actual unpack
-// Uses same method as Unpack tab: transfer to atomicpacksx with "unbox" memo
-// Contents are auto-distributed - no claiming step needed for these pack types
+// Two-step process: 1) Transfer to unbox, 2) Claim the rolls
 async function doUnpack(pack, action) {
   const assetId = pack.asset_id;
   const packTemplateId = pack.template.template_id;
 
   console.log(`📦 Starting unpack for pack ${assetId} (template ${packTemplateId})`);
 
-  // Transfer pack to atomicpacksx to unpack it
-  // The "unbox" memo triggers automatic unpacking and distribution
+  // Step 1: Transfer pack to atomicpacksx to unbox it
   const transferResult = await transact([{
     account: 'atomicassets',
     name: 'transfer',
@@ -819,13 +817,69 @@ async function doUnpack(pack, action) {
     }
   }]);
 
-  showError(`Success! Pack unpacked. TX: ${transferResult.transaction_id}`, 'success');
+  showError(`Pack transferred for unpacking. TX: ${transferResult.transaction_id}`, 'success');
+
+  // Step 2: Wait for blockchain to process and populate unboxassets table
+  console.log('⏳ Waiting 3 seconds for blockchain to process...');
+  await new Promise(resolve => setTimeout(resolve, 3000));
+
+  // Step 3: Query unboxassets table to get the roll IDs
+  let rollIds = [];
+  let attempts = 0;
+  const maxAttempts = 5;
+
+  while (attempts < maxAttempts && rollIds.length === 0) {
+    attempts++;
+    console.log(`📡 Querying unboxassets table (attempt ${attempts}/${maxAttempts})...`);
+
+    try {
+      const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
+      const rollData = await rollResponse.json();
+
+      if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
+        rollIds = rollData.roll_ids;
+        console.log(`✅ Found ${rollIds.length} rolls: [${rollIds.join(', ')}]`);
+        break;
+      }
+    } catch (error) {
+      console.warn(`Attempt ${attempts} failed:`, error.message);
+    }
+
+    if (attempts < maxAttempts) {
+      console.log('⏳ Waiting 2 more seconds...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
+  if (rollIds.length === 0) {
+    throw new Error(`Pack unpacked but couldn't find rolls in unboxassets table. You may need to claim manually on NeftyBlocks. Transfer TX: ${transferResult.transaction_id}`);
+  }
+
+  // Step 4: Claim the unpacked rolls
+  console.log(`🎁 Claiming ${rollIds.length} rolls...`);
+
+  const claimResult = await transact([{
+    account: 'atomicpacksx',
+    name: 'claimunboxed',
+    authorization: [{
+      actor: currentAccount,
+      permission: 'active'
+    }],
+    data: {
+      pack_asset_id: assetId.toString(),
+      origin_roll_ids: rollIds
+    }
+  }]);
+
+  showError(`Success! Claimed ${rollIds.length} NFTs from pack. TX: ${claimResult.transaction_id}`, 'success');
 
   // Mark action as complete
-  await markActionComplete(action, transferResult.transaction_id, JSON.stringify({
+  await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
     asset_id: assetId,
     template_id: packTemplateId,
-    transaction_id: transferResult.transaction_id
+    transfer_tx: transferResult.transaction_id,
+    claim_tx: claimResult.transaction_id,
+    rolls_claimed: rollIds.length
   }));
 }
 
