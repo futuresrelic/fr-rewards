@@ -613,7 +613,21 @@ async function executeUnpack(action, config) {
     throw new Error(`You don't own any packs of template #${config.pack_template_id}`);
   }
 
-  const packs = packsData.data;
+  let packs = packsData.data;
+
+  // Filter out packs that are owned by atomicpacksx (in limbo - transferred but not claimed)
+  // This prevents showing packs that have been transferred but are waiting to be claimed
+  console.log(`Filtering ${packs.length} packs to exclude any in limbo...`);
+  packs = packs.filter(pack => {
+    // Only keep packs owned by current account, not atomicpacksx
+    return pack.owner === currentAccount;
+  });
+
+  if (packs.length === 0) {
+    throw new Error(`You don't own any valid packs of template #${config.pack_template_id}. Some packs may be awaiting claim - check the unboxassets table.`);
+  }
+
+  console.log(`Found ${packs.length} valid packs after filtering`);
 
   // Sort by mint number (descending - highest first)
   packs.sort((a, b) => {
@@ -733,63 +747,85 @@ async function doUnpack(pack, action) {
 
   console.log(`📦 Starting unpack for pack ${assetId} (template ${packTemplateId})`);
 
-  // Step 1: Transfer pack to atomicpacksx to unpack it
-  const transferResult = await transact([{
-    account: 'atomicassets',
-    name: 'transfer',
-    authorization: [{
-      actor: currentAccount,
-      permission: 'active'
-    }],
-    data: {
-      from: currentAccount,
-      to: 'atomicpacksx',
-      asset_ids: [assetId.toString()],
-      memo: 'unbox'
-    }
-  }]);
-
-  showError(`Pack transferred for unpacking. TX: ${transferResult.transaction_id}`, 'success');
-
-  // Step 2: Wait for blockchain to process the unpack and populate unboxassets table
-  // This typically takes 1-2 seconds
-  console.log('⏳ Waiting for blockchain to process unpack...');
-  await new Promise(resolve => setTimeout(resolve, 2500));
-
-  // Step 3: Query the unboxassets table to get EXACT rolls that were created
+  // Step 0: Check if pack is already in unboxassets table (stuck in limbo)
+  // This happens if the pack was transferred but not claimed
+  console.log(`🔍 Checking if pack ${assetId} is already unpacked but unclaimed...`);
   let rollIds = [];
-  let retryCount = 0;
-  const maxRetries = 3;
+  let transferResult = null;
+  let alreadyUnpacked = false;
 
-  while (retryCount < maxRetries) {
-    try {
-      console.log(`📡 Querying unboxassets table for pack ${assetId} (attempt ${retryCount + 1}/${maxRetries})...`);
-      const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
-      const rollData = await rollResponse.json();
+  try {
+    const checkResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
+    const checkData = await checkResponse.json();
 
-      if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
-        rollIds = rollData.roll_ids;
-        console.log(`✅ Found ${rollIds.length} rolls in unboxassets table: [${rollIds.join(', ')}]`);
-        break;
-      } else {
-        console.warn(`⚠️ No rolls found yet, retrying in 2 seconds...`);
+    if (checkData.success && checkData.roll_ids && checkData.roll_ids.length > 0) {
+      rollIds = checkData.roll_ids;
+      alreadyUnpacked = true;
+      console.log(`✅ Pack is already unpacked! Found ${rollIds.length} rolls waiting to be claimed: [${rollIds.join(', ')}]`);
+      showError(`Pack already unpacked - claiming ${rollIds.length} rolls...`, 'info');
+    }
+  } catch (error) {
+    console.log('Pack not in unboxassets table yet, will need to transfer it');
+  }
+
+  // Step 1: Transfer pack to atomicpacksx to unpack it (if not already unpacked)
+  if (!alreadyUnpacked) {
+    transferResult = await transact([{
+      account: 'atomicassets',
+      name: 'transfer',
+      authorization: [{
+        actor: currentAccount,
+        permission: 'active'
+      }],
+      data: {
+        from: currentAccount,
+        to: 'atomicpacksx',
+        asset_ids: [assetId.toString()],
+        memo: 'unbox'
+      }
+    }]);
+
+    showError(`Pack transferred for unpacking. TX: ${transferResult.transaction_id}`, 'success');
+
+    // Step 2: Wait for blockchain to process the unpack and populate unboxassets table
+    // This typically takes 1-2 seconds
+    console.log('⏳ Waiting for blockchain to process unpack...');
+    await new Promise(resolve => setTimeout(resolve, 2500));
+
+    // Step 3: Query the unboxassets table to get EXACT rolls that were created
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`📡 Querying unboxassets table for pack ${assetId} (attempt ${retryCount + 1}/${maxRetries})...`);
+        const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
+        const rollData = await rollResponse.json();
+
+        if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
+          rollIds = rollData.roll_ids;
+          console.log(`✅ Found ${rollIds.length} rolls in unboxassets table: [${rollIds.join(', ')}]`);
+          break;
+        } else {
+          console.warn(`⚠️ No rolls found yet, retrying in 2 seconds...`);
+          retryCount++;
+          if (retryCount < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      } catch (error) {
+        console.error('Error querying unboxed rolls:', error);
         retryCount++;
         if (retryCount < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
-    } catch (error) {
-      console.error('Error querying unboxed rolls:', error);
-      retryCount++;
-      if (retryCount < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
     }
-  }
 
-  // If we still couldn't find rolls after retries, throw error
-  if (rollIds.length === 0) {
-    throw new Error(`Failed to find unboxed rolls for pack ${assetId}. The pack may not have unpacked correctly, or the blockchain needs more time to process.`);
+    // If we still couldn't find rolls after retries, throw error
+    if (rollIds.length === 0) {
+      throw new Error(`Failed to find unboxed rolls for pack ${assetId}. The pack may not have unpacked correctly, or the blockchain needs more time to process.`);
+    }
   }
 
   // Step 4: Claim the unpacked contents with the EXACT rolls from blockchain
@@ -813,7 +849,7 @@ async function doUnpack(pack, action) {
   // Mark action as complete
   await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
     asset_id: assetId,
-    transfer_tx: transferResult.transaction_id,
+    transfer_tx: transferResult ? transferResult.transaction_id : 'already_unpacked',
     claim_tx: claimResult.transaction_id,
     num_rolls: rollIds.length,
     roll_ids: rollIds
