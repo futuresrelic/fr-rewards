@@ -430,6 +430,11 @@ function createActionCard(action, actionTypeEmoji) {
             Completed: ${new Date(action.completed_at).toLocaleString()}
             ${action.transaction_id ? `<br><a href="https://waxblock.io/transaction/${action.transaction_id}" target="_blank" style="color: var(--accent);">View TX →</a>` : ''}
           </div>
+          <div style="margin-top: 10px;">
+            <button class="btn btn-secondary" id="action-btn-${action.action_id}" style="padding: 8px 16px; font-size: 0.85rem;">
+              🔄 Try Again
+            </button>
+          </div>
         ` : `
           <div style="margin-top: 15px;">
             <button class="btn btn-primary" id="action-btn-${action.action_id}" style="width: 100%;">
@@ -441,16 +446,16 @@ function createActionCard(action, actionTypeEmoji) {
     </div>
   `;
 
+  // Add button event listener (for both completed and non-completed actions)
+  setTimeout(() => {
+    const btn = document.getElementById(`action-btn-${action.action_id}`);
+    if (btn) {
+      btn.addEventListener('click', () => executeAction(action));
+    }
+  }, 0);
+
   // Check asset ownership and update status badge if not completed
   if (!isCompleted) {
-    // Add button event listener
-    setTimeout(() => {
-      const btn = document.getElementById(`action-btn-${action.action_id}`);
-      if (btn) {
-        btn.addEventListener('click', () => executeAction(action));
-      }
-    }, 0);
-
     // Check ownership asynchronously and update status badge
     checkActionAssetOwnership(action).then(ownershipResult => {
       const statusBadge = document.getElementById(`status-badge-${action.action_id}`);
