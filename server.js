@@ -1300,6 +1300,68 @@ app.get('/api/user/check-ownership/:account', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/pack/roll-count/:pack_template_id
+ * Query atomicpacksx contract to get exact roll count for a pack template
+ */
+app.get('/api/pack/roll-count/:pack_template_id', async (req, res) => {
+  try {
+    const { pack_template_id } = req.params;
+
+    if (!pack_template_id) {
+      return res.status(400).json({ error: 'pack_template_id is required' });
+    }
+
+    console.log(`Querying roll count for pack template ${pack_template_id}...`);
+
+    const { JsonRpc } = require('eosjs');
+    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+
+    // Query the packs table from atomicpacksx contract
+    const result = await rpc.get_table_rows({
+      json: true,
+      code: 'atomicpacksx',
+      scope: 'atomicpacksx',
+      table: 'packs',
+      limit: 1000,
+      reverse: false,
+      show_payer: false
+    });
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({
+        error: 'No packs found in atomicpacksx table',
+        success: false
+      });
+    }
+
+    // Find the pack with matching pack_template_id
+    const pack = result.rows.find(row => row.pack_template_id === parseInt(pack_template_id));
+
+    if (!pack) {
+      return res.status(404).json({
+        error: `Pack template ${pack_template_id} not found in atomicpacksx`,
+        success: false
+      });
+    }
+
+    const rollCount = parseInt(pack.roll_counter);
+    console.log(`✅ Pack template ${pack_template_id}: ${rollCount} rolls (pack_id: ${pack.pack_id})`);
+
+    res.json({
+      success: true,
+      pack_template_id: parseInt(pack_template_id),
+      pack_id: pack.pack_id,
+      roll_count: rollCount,
+      collection_name: pack.collection_name,
+      unlock_time: pack.unlock_time
+    });
+  } catch (error) {
+    console.error('Error fetching pack roll count:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

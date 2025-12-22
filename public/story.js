@@ -729,33 +729,31 @@ async function confirmUnpack() {
 // Then claim the unpacked contents
 async function doUnpack(pack, action) {
   const assetId = pack.asset_id;
+  const packTemplateId = pack.template.template_id;
 
-  // Get number of rolls from pack template data
-  // Check template immutable_data for roll configuration
+  // Query the atomicpacksx contract to get EXACT roll count
   let numRolls = null;
 
-  if (pack.template && pack.template.immutable_data) {
-    const templateData = pack.template.immutable_data;
+  try {
+    console.log(`📡 Querying atomicpacksx for pack template ${packTemplateId}...`);
+    const rollResponse = await fetch(`${API_URL}/api/pack/roll-count/${packTemplateId}`);
+    const rollData = await rollResponse.json();
 
-    // Look for roll count in various possible fields
-    if (templateData.roll_count) {
-      numRolls = parseInt(templateData.roll_count);
-    } else if (templateData.rolls) {
-      numRolls = parseInt(templateData.rolls);
-    } else if (templateData.num_rolls) {
-      numRolls = parseInt(templateData.num_rolls);
+    if (rollData.success && rollData.roll_count) {
+      numRolls = rollData.roll_count;
+      console.log(`✅ Found pack in atomicpacksx table: ${numRolls} rolls (pack_id: ${rollData.pack_id})`);
+    } else {
+      console.warn(`⚠️ Pack template ${packTemplateId} not found in atomicpacksx:`, rollData.error);
     }
-    // Some packs might have rollCount in data
-    else if (pack.data && pack.data.roll_count) {
-      numRolls = parseInt(pack.data.roll_count);
-    }
+  } catch (error) {
+    console.error('Error querying roll count:', error);
   }
 
-  // If we couldn't find roll count in template, use a safe maximum
+  // If we couldn't get roll count from contract, use a safe maximum
   // The contract will only use valid roll IDs and ignore extras
   if (!numRolls || numRolls < 1) {
-    numRolls = 10;  // Safe default - covers most packs (1-10 rolls)
-    console.log(`⚠️ Couldn't detect roll count from template, using safe default of ${numRolls} rolls`);
+    numRolls = 24;  // Safe default - covers up to 24 rolls
+    console.log(`⚠️ Using safe default of ${numRolls} rolls`);
   }
 
   // Generate roll IDs array [0, 1, 2, ..., numRolls-1]
