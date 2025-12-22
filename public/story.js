@@ -731,35 +731,7 @@ async function doUnpack(pack, action) {
   const assetId = pack.asset_id;
   const packTemplateId = pack.template.template_id;
 
-  // Query the atomicpacksx contract to get EXACT roll count
-  let numRolls = null;
-
-  try {
-    console.log(`📡 Querying atomicpacksx for pack template ${packTemplateId}...`);
-    const rollResponse = await fetch(`${API_URL}/api/pack/roll-count/${packTemplateId}`);
-    const rollData = await rollResponse.json();
-
-    if (rollData.success && rollData.roll_count) {
-      numRolls = rollData.roll_count;
-      console.log(`✅ Found pack in atomicpacksx table: ${numRolls} rolls (pack_id: ${rollData.pack_id})`);
-    } else {
-      console.warn(`⚠️ Pack template ${packTemplateId} not found in atomicpacksx:`, rollData.error);
-    }
-  } catch (error) {
-    console.error('Error querying roll count:', error);
-  }
-
-  // If we couldn't get roll count from contract, use a safe maximum
-  // The contract will only use valid roll IDs and ignore extras
-  if (!numRolls || numRolls < 1) {
-    numRolls = 24;  // Safe default - covers up to 24 rolls
-    console.log(`⚠️ Using safe default of ${numRolls} rolls`);
-  }
-
-  // Generate roll IDs array [0, 1, 2, ..., numRolls-1]
-  const rollIds = Array.from({ length: numRolls }, (_, i) => i);
-
-  console.log(`📦 Unpacking pack ${assetId} with ${numRolls} rolls: [${rollIds.join(', ')}]`);
+  console.log(`📦 Starting unpack for pack ${assetId} (template ${packTemplateId})`);
 
   // Step 1: Transfer pack to atomicpacksx to unpack it
   const transferResult = await transact([{
@@ -779,9 +751,49 @@ async function doUnpack(pack, action) {
 
   showError(`Pack transferred for unpacking. TX: ${transferResult.transaction_id}`, 'success');
 
-  // Step 2: Claim the unpacked contents
-  // Wait a moment for blockchain to process the unpack
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  // Step 2: Wait for blockchain to process the unpack and populate unboxassets table
+  // This typically takes 1-2 seconds
+  console.log('⏳ Waiting for blockchain to process unpack...');
+  await new Promise(resolve => setTimeout(resolve, 2500));
+
+  // Step 3: Query the unboxassets table to get EXACT rolls that were created
+  let rollIds = [];
+  let retryCount = 0;
+  const maxRetries = 3;
+
+  while (retryCount < maxRetries) {
+    try {
+      console.log(`📡 Querying unboxassets table for pack ${assetId} (attempt ${retryCount + 1}/${maxRetries})...`);
+      const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
+      const rollData = await rollResponse.json();
+
+      if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
+        rollIds = rollData.roll_ids;
+        console.log(`✅ Found ${rollIds.length} rolls in unboxassets table: [${rollIds.join(', ')}]`);
+        break;
+      } else {
+        console.warn(`⚠️ No rolls found yet, retrying in 2 seconds...`);
+        retryCount++;
+        if (retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    } catch (error) {
+      console.error('Error querying unboxed rolls:', error);
+      retryCount++;
+      if (retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+  }
+
+  // If we still couldn't find rolls after retries, throw error
+  if (rollIds.length === 0) {
+    throw new Error(`Failed to find unboxed rolls for pack ${assetId}. The pack may not have unpacked correctly, or the blockchain needs more time to process.`);
+  }
+
+  // Step 4: Claim the unpacked contents with the EXACT rolls from blockchain
+  console.log(`🎁 Claiming ${rollIds.length} rolls: [${rollIds.join(', ')}]`);
 
   const claimResult = await transact([{
     account: 'atomicpacksx',
@@ -792,18 +804,19 @@ async function doUnpack(pack, action) {
     }],
     data: {
       pack_asset_id: assetId.toString(),
-      origin_roll_ids: rollIds  // Claim all rolls dynamically
+      origin_roll_ids: rollIds  // Use EXACT rolls from blockchain
     }
   }]);
 
-  showError(`Success! Pack contents claimed (${numRolls} rolls). TX: ${claimResult.transaction_id}`, 'success');
+  showError(`Success! Pack contents claimed (${rollIds.length} rolls). TX: ${claimResult.transaction_id}`, 'success');
 
   // Mark action as complete
   await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
     asset_id: assetId,
     transfer_tx: transferResult.transaction_id,
     claim_tx: claimResult.transaction_id,
-    num_rolls: numRolls
+    num_rolls: rollIds.length,
+    roll_ids: rollIds
   }));
 }
 

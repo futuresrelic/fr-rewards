@@ -1362,6 +1362,67 @@ app.get('/api/pack/roll-count/:pack_template_id', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/pack/unboxed-rolls/:pack_asset_id
+ * Query atomicpacksx unboxassets table to get actual rolls created after unpacking
+ * This is the EXACT method - queries what the blockchain actually created
+ */
+app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
+  try {
+    const { pack_asset_id } = req.params;
+
+    if (!pack_asset_id) {
+      return res.status(400).json({ error: 'pack_asset_id is required' });
+    }
+
+    console.log(`Querying unboxed rolls for pack asset ${pack_asset_id}...`);
+
+    const { JsonRpc } = require('eosjs');
+    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+
+    // Query the unboxassets table from atomicpacksx contract
+    // This table is populated AFTER the pack is transferred for unpacking
+    const result = await rpc.get_table_rows({
+      json: true,
+      code: 'atomicpacksx',
+      scope: 'atomicpacksx',
+      table: 'unboxassets',
+      lower_bound: pack_asset_id,
+      upper_bound: pack_asset_id,
+      key_type: 'i64',
+      index_position: 1,
+      limit: 1000,
+      reverse: false,
+      show_payer: false
+    });
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({
+        error: `No unboxed rolls found for pack asset ${pack_asset_id}. Pack may not have been unpacked yet, or blockchain may need more time to process.`,
+        success: false
+      });
+    }
+
+    // Extract all roll IDs for this pack
+    const rollIds = result.rows
+      .filter(row => row.pack_asset_id === pack_asset_id)
+      .map(row => parseInt(row.origin_roll_id))
+      .sort((a, b) => a - b);  // Sort numerically
+
+    console.log(`✅ Found ${rollIds.length} rolls for pack ${pack_asset_id}: [${rollIds.join(', ')}]`);
+
+    res.json({
+      success: true,
+      pack_asset_id: pack_asset_id,
+      roll_ids: rollIds,
+      roll_count: rollIds.length
+    });
+  } catch (error) {
+    console.error('Error fetching unboxed rolls:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
