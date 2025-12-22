@@ -22,7 +22,7 @@ const packSelectionList = document.getElementById('pack-selection-list');
 const confirmUnpackBtn = document.getElementById('confirm-unpack-btn');
 
 // Pack selection state
-let selectedPackAssetId = null;
+let selectedPack = null;  // Store full pack object with template data
 let currentUnpackAction = null;
 
 // Drop action state
@@ -624,7 +624,7 @@ async function executeUnpack(action, config) {
 
   // If only one pack, unpack it immediately
   if (packs.length === 1) {
-    await doUnpack(packs[0].asset_id, action);
+    await doUnpack(packs[0], action);
     return;
   }
 
@@ -673,14 +673,14 @@ function showPackSelectionModal(packs) {
       radio.checked = true;
       packOption.style.background = 'var(--accent)';
       packOption.style.borderColor = 'var(--accent)';
-      selectedPackAssetId = pack.asset_id;
+      selectedPack = pack;  // Store full pack object
     });
 
     packSelectionList.appendChild(packOption);
   });
 
   // Auto-select highest mint
-  selectedPackAssetId = packs[0].asset_id;
+  selectedPack = packs[0];  // Store full pack object
 
   packModal.style.display = 'block';
 }
@@ -688,7 +688,7 @@ function showPackSelectionModal(packs) {
 // Close pack modal
 function closePackModal() {
   packModal.style.display = 'none';
-  selectedPackAssetId = null;
+  selectedPack = null;
   currentUnpackAction = null;
 
   // Re-enable the unpack button
@@ -703,7 +703,7 @@ function closePackModal() {
 
 // Confirm unpack
 async function confirmUnpack() {
-  if (!selectedPackAssetId || !currentUnpackAction) {
+  if (!selectedPack || !currentUnpackAction) {
     return;
   }
 
@@ -711,11 +711,11 @@ async function confirmUnpack() {
     confirmUnpackBtn.disabled = true;
     confirmUnpackBtn.textContent = '⏳ Unpacking...';
 
-    await doUnpack(selectedPackAssetId, currentUnpackAction);
+    await doUnpack(selectedPack, currentUnpackAction);
 
     // Close modal
     packModal.style.display = 'none';
-    selectedPackAssetId = null;
+    selectedPack = null;
     currentUnpackAction = null;
   } catch (error) {
     confirmUnpackBtn.disabled = false;
@@ -727,7 +727,42 @@ async function confirmUnpack() {
 // Perform the actual unpack
 // Uses same method as Unpack tab: transfer to atomicpacksx with "unbox" memo
 // Then claim the unpacked contents
-async function doUnpack(assetId, action) {
+async function doUnpack(pack, action) {
+  const assetId = pack.asset_id;
+
+  // Get number of rolls from pack template data
+  // Check template immutable_data for roll configuration
+  let numRolls = null;
+
+  if (pack.template && pack.template.immutable_data) {
+    const templateData = pack.template.immutable_data;
+
+    // Look for roll count in various possible fields
+    if (templateData.roll_count) {
+      numRolls = parseInt(templateData.roll_count);
+    } else if (templateData.rolls) {
+      numRolls = parseInt(templateData.rolls);
+    } else if (templateData.num_rolls) {
+      numRolls = parseInt(templateData.num_rolls);
+    }
+    // Some packs might have rollCount in data
+    else if (pack.data && pack.data.roll_count) {
+      numRolls = parseInt(pack.data.roll_count);
+    }
+  }
+
+  // If we couldn't find roll count in template, use a safe maximum
+  // The contract will only use valid roll IDs and ignore extras
+  if (!numRolls || numRolls < 1) {
+    numRolls = 10;  // Safe default - covers most packs (1-10 rolls)
+    console.log(`⚠️ Couldn't detect roll count from template, using safe default of ${numRolls} rolls`);
+  }
+
+  // Generate roll IDs array [0, 1, 2, ..., numRolls-1]
+  const rollIds = Array.from({ length: numRolls }, (_, i) => i);
+
+  console.log(`📦 Unpacking pack ${assetId} with ${numRolls} rolls: [${rollIds.join(', ')}]`);
+
   // Step 1: Transfer pack to atomicpacksx to unpack it
   const transferResult = await transact([{
     account: 'atomicassets',
@@ -759,17 +794,18 @@ async function doUnpack(assetId, action) {
     }],
     data: {
       pack_asset_id: assetId.toString(),
-      origin_roll_ids: [0, 1]  // Claim all rolls from the pack
+      origin_roll_ids: rollIds  // Claim all rolls dynamically
     }
   }]);
 
-  showError(`Success! Pack contents claimed. TX: ${claimResult.transaction_id}`, 'success');
+  showError(`Success! Pack contents claimed (${numRolls} rolls). TX: ${claimResult.transaction_id}`, 'success');
 
   // Mark action as complete
   await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
     asset_id: assetId,
     transfer_tx: transferResult.transaction_id,
-    claim_tx: claimResult.transaction_id
+    claim_tx: claimResult.transaction_id,
+    num_rolls: numRolls
   }));
 }
 
