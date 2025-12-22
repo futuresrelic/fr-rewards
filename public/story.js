@@ -632,8 +632,16 @@ async function executeUnpack(action, config) {
   // Separate packs into claimable and unpackable
   const claimablePacks = [];
   const unpackablePacks = [];
+  const skippedPacks = [];
 
   packs.forEach(pack => {
+    // Skip burned assets (they show in API cache but don't exist on blockchain)
+    if (pack.burned_at_block || pack.burned_at_time || pack.burned_by_account) {
+      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) was BURNED - skipping`);
+      skippedPacks.push(pack);
+      return;
+    }
+
     const claimStatus = claimableData.success ? claimableData.claimable_status[pack.asset_id] : null;
 
     if (claimStatus && claimStatus.is_claimable) {
@@ -648,19 +656,29 @@ async function executeUnpack(action, config) {
       pack.claimable = false;
       unpackablePacks.push(pack);
       console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is UNPACKABLE`);
+    } else if (pack.owner === 'atomicpacksx') {
+      // Pack transferred to atomicpacksx but not in unboxassets table
+      // This usually means it's about to be burned or there's a delay
+      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is with atomicpacksx but not claimable yet - skipping`);
+      skippedPacks.push(pack);
     } else {
       // Pack is in weird state - not owned and not claimable
-      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is in limbo - owner: ${pack.owner}, not claimable`);
+      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is in unknown state - owner: ${pack.owner}, not claimable`);
+      skippedPacks.push(pack);
     }
   });
 
   const totalValidPacks = claimablePacks.length + unpackablePacks.length;
 
   if (totalValidPacks === 0) {
+    if (skippedPacks.length > 0) {
+      throw new Error(`No packs available. Found ${packs.length} packs but ${skippedPacks.length} were already burned or claimed. Try refreshing the page.`);
+    }
     throw new Error(`No packs available. Found ${packs.length} packs but none are ready to unpack or claim.`);
   }
 
-  console.log(`Found ${unpackablePacks.length} unpackable, ${claimablePacks.length} claimable`);
+  console.log(`Found ${unpackablePacks.length} unpackable, ${claimablePacks.length} claimable, ${skippedPacks.length} skipped`);
+
 
   // Combine and sort: claimable first, then by mint number
   const allPacks = [...claimablePacks, ...unpackablePacks].sort((a, b) => {
