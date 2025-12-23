@@ -113,12 +113,13 @@
       <div class="card" style="max-width: 600px; margin: 40px auto; position: relative;">
         <button id="close-pack-modal" style="position: absolute; top: 20px; right: 20px; background: var(--bg-card-hover); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">×</button>
 
-        <h2>📦 Select Pack to Unpack</h2>
-        <p style="color: var(--text-secondary); margin-bottom: 20px;">You own multiple packs. Select which one to unpack:</p>
+        <h2 id="pack-modal-title">📦 Select Pack</h2>
+        <p id="pack-modal-subtitle" style="color: var(--text-secondary); margin-bottom: 20px;">You own multiple packs. Select which one to interact with:</p>
 
         <div id="pack-selection-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;"></div>
 
-        <button id="confirm-unpack-btn" class="btn btn-primary" style="width: 100%;">📦 Unpack Selected Pack</button>
+        <button id="confirm-unpack-btn" class="btn btn-primary" style="width: 100%; display: none;">📦 Unpack Selected Pack</button>
+        <button id="confirm-claim-btn" class="btn btn-primary" style="width: 100%; display: none; background: orange;">🎁 Claim Selected Pack</button>
       </div>
     </div>
 

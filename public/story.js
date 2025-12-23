@@ -20,6 +20,9 @@ const markDropCompleteBtn = document.getElementById('mark-drop-complete-btn');
 const packModal = document.getElementById('pack-modal');
 const packSelectionList = document.getElementById('pack-selection-list');
 const confirmUnpackBtn = document.getElementById('confirm-unpack-btn');
+const confirmClaimBtn = document.getElementById('confirm-claim-btn');
+const packModalTitle = document.getElementById('pack-modal-title');
+const packModalSubtitle = document.getElementById('pack-modal-subtitle');
 
 // Pack selection state
 let selectedPack = null;  // Store full pack object with template data
@@ -71,6 +74,7 @@ function setupEventListeners() {
   document.getElementById('close-drop-modal').addEventListener('click', closeDropModal);
   document.getElementById('close-pack-modal').addEventListener('click', closePackModal);
   confirmUnpackBtn.addEventListener('click', confirmUnpack);
+  confirmClaimBtn.addEventListener('click', confirmClaim);
   markDropCompleteBtn.addEventListener('click', markDropAsComplete);
 }
 
@@ -753,6 +757,9 @@ function showPackSelectionModal(packs) {
       packOption.style.background = 'var(--accent)';
       packOption.style.borderColor = 'var(--accent)';
       selectedPack = pack;  // Store full pack object
+
+      // Update button visibility based on pack type
+      updateModalButtons(pack);
     });
 
     packSelectionList.appendChild(packOption);
@@ -761,7 +768,29 @@ function showPackSelectionModal(packs) {
   // Auto-select first pack
   selectedPack = packs[0];
 
+  // Update button visibility for initial selection
+  updateModalButtons(packs[0]);
+
   packModal.style.display = 'block';
+}
+
+// Update modal buttons based on pack type
+function updateModalButtons(pack) {
+  const isClaimable = pack.is_claimable === true;
+
+  if (isClaimable) {
+    // Show claim button, hide unpack button
+    confirmClaimBtn.style.display = 'block';
+    confirmUnpackBtn.style.display = 'none';
+    packModalTitle.textContent = '🎁 Claim Pack Contents';
+    packModalSubtitle.textContent = 'This pack has already been unpacked. Select which pack to claim:';
+  } else {
+    // Show unpack button, hide claim button
+    confirmUnpackBtn.style.display = 'block';
+    confirmClaimBtn.style.display = 'none';
+    packModalTitle.textContent = '📦 Unpack Pack';
+    packModalSubtitle.textContent = 'Select which pack to unpack:';
+  }
 }
 
 // Close pack modal
@@ -799,6 +828,29 @@ async function confirmUnpack() {
   } catch (error) {
     confirmUnpackBtn.disabled = false;
     confirmUnpackBtn.textContent = '📦 Unpack Selected Pack';
+    throw error;
+  }
+}
+
+// Confirm claim
+async function confirmClaim() {
+  if (!selectedPack || !currentUnpackAction) {
+    return;
+  }
+
+  try {
+    confirmClaimBtn.disabled = true;
+    confirmClaimBtn.textContent = '⏳ Claiming...';
+
+    await doClaim(selectedPack, currentUnpackAction);
+
+    // Close modal
+    packModal.style.display = 'none';
+    selectedPack = null;
+    currentUnpackAction = null;
+  } catch (error) {
+    confirmClaimBtn.disabled = false;
+    confirmClaimBtn.textContent = '🎁 Claim Selected Pack';
     throw error;
   }
 }
@@ -860,36 +912,14 @@ async function doUnpack(pack, action) {
 
   const verifyData = await verifyResponse.json();
 
-  // If pack is burned or already claimed, it's invalid
+  // Check if pack is burned
   if (verifyData.is_burned) {
     throw new Error(`Pack ${assetId} has already been burned/claimed. It no longer exists.`);
   }
 
-  // If pack is not owned by user, check if it's in unboxassets table (ready to claim)
+  // Check if pack is owned by user
   if (!verifyData.is_owned) {
-    console.log(`⚠️ Pack ${assetId} is not owned by ${currentAccount} (current owner: ${verifyData.current_owner})`);
-    console.log(`🔍 Checking if pack is in unboxassets table (already unpacked, ready to claim)...`);
-
-    try {
-      const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
-      const rollData = await rollResponse.json();
-
-      if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
-        // Pack is already unpacked! Redirect to claim flow
-        console.log(`✅ Pack ${assetId} is ready to claim with ${rollData.roll_ids.length} rolls: [${rollData.roll_ids.join(', ')}]`);
-        showError(`Pack already unpacked! Claiming ${rollData.roll_ids.length} NFTs...`, 'info');
-
-        // Use the doClaim function with the roll IDs we found
-        pack.roll_ids = rollData.roll_ids;
-        await doClaim(pack, action);
-        return;
-      }
-    } catch (error) {
-      console.warn(`Error checking unboxassets:`, error);
-    }
-
-    // Pack not owned and not in unboxassets - it's in limbo or invalid
-    throw new Error(`Pack ${assetId} is currently owned by ${verifyData.current_owner}. It may be in transition or already claimed. Please refresh and try again.`);
+    throw new Error(`Pack ${assetId} is not owned by you (current owner: ${verifyData.current_owner || 'unknown'}). It may have already been unpacked. Please use the "Claim" button if it's ready to claim, or refresh the page.`);
   }
 
   console.log(`✅ Ownership verified. Pack ${assetId} is owned by ${currentAccount}`);
