@@ -1553,6 +1553,67 @@ app.post('/api/asset/verify-ownership', async (req, res) => {
 });
 
 /**
+ * POST /api/asset/verify-ownership-rpc
+ * Verify current ownership of an asset by querying BLOCKCHAIN DIRECTLY via RPC
+ * This bypasses AtomicAssets API cache and gets real-time blockchain state
+ * Body: { asset_id: string, expected_owner: string }
+ */
+app.post('/api/asset/verify-ownership-rpc', async (req, res) => {
+  try {
+    const { asset_id, expected_owner } = req.body;
+
+    if (!asset_id || !expected_owner) {
+      return res.status(400).json({ error: 'asset_id and expected_owner are required' });
+    }
+
+    console.log(`🔗 Verifying ownership via RPC for asset ${asset_id} (expecting: ${expected_owner})...`);
+
+    // Query atomicassets contract DIRECTLY via RPC - this is the SOURCE OF TRUTH
+    const result = await rpc.get_table_rows({
+      code: 'atomicassets',
+      scope: 'atomicassets',
+      table: 'assets',
+      lower_bound: asset_id,
+      upper_bound: asset_id,
+      limit: 1,
+      reverse: false,
+      show_payer: false
+    });
+
+    // If asset not found in blockchain table, it's been burned/transferred
+    if (!result.rows || result.rows.length === 0) {
+      console.log(`  ❌ Asset ${asset_id} NOT FOUND in blockchain (burned or never existed)`);
+      return res.json({
+        success: true,
+        is_owned: false,
+        is_burned: true,
+        current_owner: null,
+        asset_id: asset_id,
+        source: 'blockchain_rpc'
+      });
+    }
+
+    const assetRow = result.rows[0];
+    const currentOwner = assetRow.owner;
+    const isOwned = currentOwner === expected_owner;
+
+    console.log(`  ${isOwned ? '✅' : '❌'} Asset ${asset_id} blockchain owner: ${currentOwner} (expected: ${expected_owner})`);
+
+    res.json({
+      success: true,
+      is_owned: isOwned,
+      is_burned: false,
+      current_owner: currentOwner,
+      asset_id: asset_id,
+      source: 'blockchain_rpc'
+    });
+  } catch (error) {
+    console.error('Error verifying asset ownership via RPC:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * GET /api/admin/atomic-apis
  * Get list of available Atomic API endpoints and current preferred one
  */

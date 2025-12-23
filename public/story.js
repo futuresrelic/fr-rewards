@@ -660,9 +660,9 @@ async function showPackDropdown(action) {
   }
 
   // Find the action card button and replace it with dropdown UI
-  const actionCard = document.querySelector(`[data-action-id="${action.id}"]`);
+  const actionCard = document.querySelector(`[data-action-id="${action.action_id}"]`);
   if (!actionCard) {
-    console.error('Could not find action card for action:', action.id);
+    console.error('Could not find action card for action:', action.action_id);
     return;
   }
 
@@ -817,9 +817,9 @@ async function verifyAndUpdatePackStatus() {
       return;
     }
 
-    // Step 2: Not claimable, check if we own it
-    console.log(`🔍 Checking ownership of pack ${selectedAssetId}...`);
-    const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership`, {
+    // Step 2: Not claimable, check if we own it via BLOCKCHAIN RPC (bypasses cache)
+    console.log(`🔍 Checking ownership via blockchain RPC for pack ${selectedAssetId}...`);
+    const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership-rpc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -898,7 +898,7 @@ async function removeCurrentPackAndAdvance() {
 
   if (remainingPacks.length === 0) {
     // No more packs
-    const actionCard = document.querySelector(`[data-action-id="${currentUnpackAction.id}"]`);
+    const actionCard = document.querySelector(`[data-action-id="${currentUnpackAction.action_id}"]`);
     if (actionCard) {
       const buttonContainer = actionCard.querySelector('.action-buttons');
       if (buttonContainer) {
@@ -1159,10 +1159,10 @@ async function doUnpack(pack, action) {
 
   console.log(`📦 Starting unpack for pack ${assetId} (template ${packTemplateId})`);
 
-  // PRE-FLIGHT CHECK: Verify ownership before attempting transfer
-  console.log(`🔍 Verifying ownership of asset ${assetId}...`);
+  // PRE-FLIGHT CHECK: Verify ownership via BLOCKCHAIN RPC before attempting transfer
+  console.log(`🔍 Verifying ownership via blockchain RPC for asset ${assetId}...`);
 
-  const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership`, {
+  const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership-rpc`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
