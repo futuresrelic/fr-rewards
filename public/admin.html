@@ -239,6 +239,60 @@
         <div id="config-message" class="alert" style="display: none;"></div>
       </div>
 
+      <!-- Atomic API Endpoint Management -->
+      <div class="card">
+        <h2>🌐 Atomic API Endpoints</h2>
+        <p>Manage AtomicAssets API endpoints. Test speeds and select the fastest one for your region.</p>
+
+        <div class="form-group" style="margin-top: 20px;">
+          <label>Current Preferred Endpoint:</label>
+          <div id="current-api" style="padding: 10px; background: var(--bg-dark); border-radius: 4px; margin-top: 5px; font-family: monospace;">
+            Loading...
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 20px;">
+          <label for="api-selector">Select Endpoint:</label>
+          <select id="api-selector" class="form-control" style="margin-bottom: 10px;">
+            <option value="">Loading...</option>
+          </select>
+          <button id="set-api-btn" class="btn btn-primary">Set as Preferred</button>
+          <button id="test-api-btn" class="btn btn-secondary" style="margin-left: 10px;">Test Speed</button>
+          <button id="test-all-apis-btn" class="btn btn-secondary" style="margin-left: 10px;">Test All</button>
+        </div>
+
+        <div id="api-test-results" style="margin-top: 20px; display: none;">
+          <h3 style="font-size: 1.1rem; margin-bottom: 10px;">Speed Test Results:</h3>
+          <div class="table-container">
+            <table id="api-speed-table">
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Response Time</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="api-speed-results">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+          <label for="custom-api-input">Add Custom Endpoint:</label>
+          <div style="display: flex; gap: 10px;">
+            <input type="text" id="custom-api-input" class="form-control" placeholder="https://your-api.com" style="flex: 1;">
+            <button id="add-custom-api-btn" class="btn btn-secondary">Add</button>
+          </div>
+          <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
+            Add a custom AtomicAssets API endpoint for testing
+          </small>
+        </div>
+
+        <div id="api-message" class="alert" style="display: none; margin-top: 15px;"></div>
+      </div>
+
       <!-- Export/Import Settings -->
       <div class="card">
         <h2>💾 Backup & Restore</h2>

@@ -5,11 +5,44 @@ const { TextEncoder, TextDecoder } = require('util');
 require('dotenv').config();
 
 // Configuration - Multiple AtomicAssets API endpoints for fallback
-const ATOMIC_APIS = [
+let ATOMIC_APIS = [
   'https://aa.wax.blacklusion.io',
   'https://atomic.wax.eosrio.io',
-  'https://wax.api.atomicassets.io'
+  'https://wax.api.atomicassets.io',
+  'https://aa.dapplica.io',
+  'https://aa-api-wax-mainnet.neftyblocks.com'
 ];
+
+// Allow runtime configuration
+let preferredAtomicAPI = process.env.PREFERRED_ATOMIC_API || null;
+
+// Function to set preferred API endpoint
+function setPreferredAtomicAPI(endpoint) {
+  if (endpoint && !ATOMIC_APIS.includes(endpoint)) {
+    ATOMIC_APIS.unshift(endpoint); // Add to front of list
+  }
+  preferredAtomicAPI = endpoint;
+  console.log(`✅ Preferred Atomic API set to: ${endpoint}`);
+}
+
+// Function to add custom endpoint
+function addCustomAtomicAPI(endpoint) {
+  if (!ATOMIC_APIS.includes(endpoint)) {
+    ATOMIC_APIS.push(endpoint);
+    console.log(`✅ Added custom Atomic API: ${endpoint}`);
+    return true;
+  }
+  return false;
+}
+
+// Function to get current endpoints list
+function getAtomicAPIs() {
+  return {
+    preferred: preferredAtomicAPI,
+    endpoints: ATOMIC_APIS
+  };
+}
+
 const WAX_RPC_ENDPOINT = process.env.WAX_RPC_ENDPOINT || 'https://api.waxsweden.org';
 const WAX_ACCOUNT = process.env.WAX_ACCOUNT;
 const WAX_PRIVATE_KEY = process.env.WAX_PRIVATE_KEY;
@@ -36,8 +69,13 @@ if (WAX_PRIVATE_KEY) {
 async function getUserAssets(account, collection = null) {
   let lastError = null;
 
+  // Prioritize preferred endpoint, then try others
+  const endpointsToTry = preferredAtomicAPI
+    ? [preferredAtomicAPI, ...ATOMIC_APIS.filter(api => api !== preferredAtomicAPI)]
+    : ATOMIC_APIS;
+
   // Try multiple API endpoints with fallback
-  for (const ATOMIC_API of ATOMIC_APIS) {
+  for (const ATOMIC_API of endpointsToTry) {
     try {
       console.log(`🔄 Fetching assets from ${ATOMIC_API}...`);
 
@@ -417,6 +455,9 @@ module.exports = {
   verifyTransaction,
   getAccountResources,
   getIpfsUrl,
+  getAtomicAPIs,
+  setPreferredAtomicAPI,
+  addCustomAtomicAPI,
   ATOMIC_APIS,
   WAX_ACCOUNT
 };

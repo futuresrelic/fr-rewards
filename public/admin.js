@@ -817,6 +817,211 @@ function showRewardsMessage(message, type) {
   }, 5000);
 }
 
+// ==================== API ENDPOINT MANAGEMENT ====================
+
+// Load Atomic API endpoints
+async function loadAtomicAPIs() {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/atomic-apis`);
+    const data = await response.json();
+
+    if (data.success) {
+      // Update current preferred endpoint
+      document.getElementById('current-api').textContent = data.preferred || 'None (using fallback)';
+
+      // Populate dropdown
+      const selector = document.getElementById('api-selector');
+      selector.innerHTML = '';
+      data.endpoints.forEach(endpoint => {
+        const option = document.createElement('option');
+        option.value = endpoint;
+        option.textContent = endpoint;
+        if (endpoint === data.preferred) {
+          option.textContent += ' (current)';
+        }
+        selector.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error loading Atomic APIs:', error);
+  }
+}
+
+// Set preferred API endpoint
+document.getElementById('set-api-btn').addEventListener('click', async () => {
+  const endpoint = document.getElementById('api-selector').value;
+  if (!endpoint) return;
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/atomic-apis/set-preferred`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint })
+    });
+    const data = await response.json();
+
+    showAPIMessage(data.message, data.success ? 'success' : 'error');
+    if (data.success) {
+      loadAtomicAPIs();
+    }
+  } catch (error) {
+    showAPIMessage('Error setting preferred API: ' + error.message, 'error');
+  }
+});
+
+// Test single API endpoint
+document.getElementById('test-api-btn').addEventListener('click', async () => {
+  const endpoint = document.getElementById('api-selector').value;
+  if (!endpoint) return;
+
+  showAPIMessage('Testing endpoint...', 'info');
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/atomic-apis/test-speed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint })
+    });
+    const data = await response.json();
+
+    displaySpeedTestResults([data]);
+    showAPIMessage('Test complete!', 'success');
+  } catch (error) {
+    showAPIMessage('Error testing API: ' + error.message, 'error');
+  }
+});
+
+// Test all API endpoints
+document.getElementById('test-all-apis-btn').addEventListener('click', async () => {
+  const selector = document.getElementById('api-selector');
+  const endpoints = Array.from(selector.options).map(opt => opt.value);
+
+  showAPIMessage(`Testing ${endpoints.length} endpoints...`, 'info');
+  document.getElementById('api-test-results').style.display = 'block';
+  document.getElementById('api-speed-results').innerHTML = '<tr><td colspan="4">Testing...</td></tr>';
+
+  const results = [];
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(`${API_URL}/api/admin/atomic-apis/test-speed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint })
+      });
+      const data = await response.json();
+      results.push(data);
+    } catch (error) {
+      results.push({
+        success: false,
+        endpoint: endpoint,
+        error: error.message
+      });
+    }
+  }
+
+  // Sort by response time (fastest first)
+  results.sort((a, b) => {
+    if (!a.responseTime) return 1;
+    if (!b.responseTime) return -1;
+    return a.responseTime - b.responseTime;
+  });
+
+  displaySpeedTestResults(results);
+  showAPIMessage('All tests complete!', 'success');
+});
+
+// Display speed test results
+function displaySpeedTestResults(results) {
+  const tbody = document.getElementById('api-speed-results');
+  tbody.innerHTML = '';
+
+  results.forEach((result, index) => {
+    const row = document.createElement('tr');
+    const isFastest = index === 0 && result.success;
+
+    row.innerHTML = `
+      <td style="font-family: monospace; font-size: 0.85rem;">${result.endpoint}</td>
+      <td style="font-weight: ${isFastest ? 'bold' : 'normal'}; color: ${isFastest ? 'var(--success)' : 'inherit'};">
+        ${result.responseTime ? result.responseTime + ' ms' : 'N/A'}
+        ${isFastest ? ' ⚡' : ''}
+      </td>
+      <td>
+        <span class="status-badge ${result.success ? 'status-active' : 'status-error'}">
+          ${result.success ? 'OK' : (result.error || 'Failed')}
+        </span>
+      </td>
+      <td>
+        <button onclick="setAPIFromTest('${result.endpoint}')" class="btn btn-secondary" style="padding: 4px 12px; font-size: 0.85rem;">
+          Use This
+        </button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  document.getElementById('api-test-results').style.display = 'block';
+}
+
+// Set API from test results
+window.setAPIFromTest = async function(endpoint) {
+  try {
+    const response = await fetch(`${API_URL}/api/admin/atomic-apis/set-preferred`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint })
+    });
+    const data = await response.json();
+
+    showAPIMessage(data.message, data.success ? 'success' : 'error');
+    if (data.success) {
+      loadAtomicAPIs();
+    }
+  } catch (error) {
+    showAPIMessage('Error setting preferred API: ' + error.message, 'error');
+  }
+};
+
+// Add custom API endpoint
+document.getElementById('add-custom-api-btn').addEventListener('click', async () => {
+  const endpoint = document.getElementById('custom-api-input').value.trim();
+  if (!endpoint) {
+    showAPIMessage('Please enter an endpoint URL', 'error');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/atomic-apis/add-custom`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint })
+    });
+    const data = await response.json();
+
+    showAPIMessage(data.message, data.success ? 'success' : 'error');
+    if (data.success && data.added) {
+      document.getElementById('custom-api-input').value = '';
+      loadAtomicAPIs();
+    }
+  } catch (error) {
+    showAPIMessage('Error adding custom API: ' + error.message, 'error');
+  }
+});
+
+// Show API message
+function showAPIMessage(message, type) {
+  const messageEl = document.getElementById('api-message');
+  messageEl.textContent = message;
+  messageEl.className = `alert alert-${type}`;
+  messageEl.style.display = 'block';
+
+  setTimeout(() => {
+    messageEl.style.display = 'none';
+  }, 5000);
+}
+
+// Load APIs on page load
+loadAtomicAPIs();
+
 // Auto-refresh stats every 30 seconds
 setInterval(() => {
   if (adminToken && dashboardSection.style.display !== 'none') {

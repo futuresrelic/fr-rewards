@@ -1552,6 +1552,123 @@ app.post('/api/asset/verify-ownership', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/atomic-apis
+ * Get list of available Atomic API endpoints and current preferred one
+ */
+app.get('/api/admin/atomic-apis', (req, res) => {
+  try {
+    const apis = wax.getAtomicAPIs();
+    res.json({
+      success: true,
+      ...apis
+    });
+  } catch (error) {
+    console.error('Error getting Atomic APIs:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/admin/atomic-apis/set-preferred
+ * Set preferred Atomic API endpoint
+ * Body: { endpoint: string }
+ */
+app.post('/api/admin/atomic-apis/set-preferred', (req, res) => {
+  try {
+    const { endpoint } = req.body;
+
+    if (!endpoint) {
+      return res.status(400).json({ error: 'endpoint is required' });
+    }
+
+    wax.setPreferredAtomicAPI(endpoint);
+
+    res.json({
+      success: true,
+      message: `Preferred API set to: ${endpoint}`
+    });
+  } catch (error) {
+    console.error('Error setting preferred API:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/admin/atomic-apis/add-custom
+ * Add custom Atomic API endpoint
+ * Body: { endpoint: string }
+ */
+app.post('/api/admin/atomic-apis/add-custom', (req, res) => {
+  try {
+    const { endpoint } = req.body;
+
+    if (!endpoint) {
+      return res.status(400).json({ error: 'endpoint is required' });
+    }
+
+    const added = wax.addCustomAtomicAPI(endpoint);
+
+    res.json({
+      success: true,
+      added: added,
+      message: added ? `Added custom API: ${endpoint}` : `API already exists: ${endpoint}`
+    });
+  } catch (error) {
+    console.error('Error adding custom API:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/admin/atomic-apis/test-speed
+ * Test speed of an Atomic API endpoint
+ * Body: { endpoint: string }
+ */
+app.post('/api/admin/atomic-apis/test-speed', async (req, res) => {
+  try {
+    const { endpoint } = req.body;
+
+    if (!endpoint) {
+      return res.status(400).json({ error: 'endpoint is required' });
+    }
+
+    const testAccount = 'wax';
+    const startTime = Date.now();
+
+    const testUrl = `${endpoint}/atomicassets/v1/assets?owner=${testAccount}&limit=10&_t=${Date.now()}`;
+    const response = await fetch(testUrl, { timeout: 10000 });
+
+    const endTime = Date.now();
+    const responseTime = endTime - startTime;
+
+    if (!response.ok) {
+      return res.json({
+        success: false,
+        endpoint: endpoint,
+        error: `HTTP ${response.status}`,
+        responseTime: responseTime
+      });
+    }
+
+    const data = await response.json();
+
+    res.json({
+      success: true,
+      endpoint: endpoint,
+      responseTime: responseTime,
+      assetsReturned: data.data?.length || 0
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      endpoint: req.body.endpoint,
+      error: error.message,
+      responseTime: null
+    });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
