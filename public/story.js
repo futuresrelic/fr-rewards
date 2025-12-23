@@ -623,18 +623,17 @@ async function executeUnpack(action, config) {
   }
 
   let packs = packsData.data;
-  console.log(`Found ${packs.length} total packs from API (may include stale cache)`);
+  console.log(`📦 Found ${packs.length} total packs from API`);
 
-  // STEP 1: Check ALL packs for claimability (query unboxassets table)
-  console.log(`🔍 Step 1: Checking ${packs.length} packs for claimability...`);
+  // Check claimability ONLY (fast - single batch query)
+  console.log(`🔍 Checking ${packs.length} packs for claimability...`);
   const claimableMap = {};
-  const allAssetIds = packs.map(p => p.asset_id);
 
   try {
     const claimableResponse = await fetch(`${API_URL}/api/pack/check-claimable`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ asset_ids: allAssetIds })
+      body: JSON.stringify({ asset_ids: packs.map(p => p.asset_id) })
     });
     const claimableData = await claimableResponse.json();
 
@@ -645,77 +644,44 @@ async function executeUnpack(action, config) {
           claimableMap[assetId] = status;
         }
       });
-      console.log(`Found ${Object.keys(claimableMap).length} packs in unboxassets table`);
+      console.log(`✅ Found ${Object.keys(claimableMap).length} claimable packs`);
     }
   } catch (error) {
-    console.warn('Error checking claimable status:', error);
+    console.warn('⚠️ Error checking claimable status:', error);
   }
 
-  // STEP 2: Verify ACTUAL ownership of each pack (eliminate stale API cache)
-  console.log(`🔍 Step 2: Verifying actual ownership for ${packs.length} packs...`);
-  const verifiedPacks = [];
-  let checkedCount = 0;
+  // Filter and mark packs
+  const validPacks = [];
 
-  for (const pack of packs) {
-    checkedCount++;
-    const assetId = pack.asset_id;
+  packs.forEach(pack => {
+    // Skip obviously burned packs
+    if (pack.burned_at_block || pack.burned_at_time || pack.burned_by_account) {
+      console.log(`❌ Pack ${pack.asset_id} (mint #${pack.template_mint}) is burned`);
+      return;
+    }
 
-    // If in unboxassets table, it's claimable
-    if (claimableMap[assetId]) {
-      pack.roll_ids = claimableMap[assetId].roll_ids;
+    // Mark claimable packs
+    if (claimableMap[pack.asset_id]) {
+      pack.roll_ids = claimableMap[pack.asset_id].roll_ids;
       pack.is_claimable = true;
-      verifiedPacks.push(pack);
-      console.log(`✅ [${checkedCount}/${packs.length}] Pack ${assetId} (mint #${pack.template_mint}) is CLAIMABLE (${claimableMap[assetId].roll_count} rolls)`);
-      continue;
+      console.log(`🎁 Pack ${pack.asset_id} (mint #${pack.template_mint}) CLAIMABLE (${pack.roll_ids.length} rolls)`);
     }
 
-    // Verify if actually owned (not stale cache)
-    try {
-      const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          asset_id: assetId,
-          expected_owner: currentAccount
-        })
-      });
-
-      if (!verifyResponse.ok) {
-        console.warn(`⚠️ [${checkedCount}/${packs.length}] Pack ${assetId} verification failed (${verifyResponse.status})`);
-        continue;
-      }
-
-      const verifyData = await verifyResponse.json();
-
-      if (verifyData.success && verifyData.is_owned && !verifyData.is_burned) {
-        verifiedPacks.push(pack);
-        console.log(`✅ [${checkedCount}/${packs.length}] Pack ${assetId} (mint #${pack.template_mint}) is OWNED - ready to unpack`);
-      } else {
-        console.log(`❌ [${checkedCount}/${packs.length}] Pack ${assetId} (mint #${pack.template_mint}) NOT VALID (owned: ${verifyData.is_owned}, burned: ${verifyData.is_burned}, owner: ${verifyData.current_owner || 'none'})`);
-      }
-    } catch (error) {
-      console.warn(`⚠️ [${checkedCount}/${packs.length}] Could not verify pack ${assetId}:`, error.message);
-    }
-  }
-
-  if (verifiedPacks.length === 0) {
-    throw new Error(`No packs available. All packs have been unpacked, claimed, or are no longer in your wallet.`);
-  }
-
-  const claimableCount = verifiedPacks.filter(p => p.is_claimable).length;
-  const ownedCount = verifiedPacks.filter(p => !p.is_claimable).length;
-  console.log(`✅ Verified ${verifiedPacks.length} valid packs (${claimableCount} claimable, ${ownedCount} owned)`);
-
-  // Sort by mint number (lowest first for easier browsing)
-  verifiedPacks.sort((a, b) => {
-    const mintA = parseInt(a.template_mint) || 0;
-    const mintB = parseInt(b.template_mint) || 0;
-    return mintA - mintB;  // Ascending order
+    validPacks.push(pack);
   });
 
-  // Always show modal (even for 1 pack - user can review before action)
+  if (validPacks.length === 0) {
+    throw new Error(`No packs available.`);
+  }
+
+  const claimableCount = validPacks.filter(p => p.is_claimable).length;
+  console.log(`✅ ${validPacks.length} packs (${claimableCount} claimable, ${validPacks.length - claimableCount} to unpack)`);
+
+  // Sort by lowest mint first
+  validPacks.sort((a, b) => parseInt(a.template_mint || 0) - parseInt(b.template_mint || 0));
+
   currentUnpackAction = action;
-  showPackSelectionModal(verifiedPacks);
+  showPackSelectionModal(validPacks);
 }
 
 // Pack pagination
