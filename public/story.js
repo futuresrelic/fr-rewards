@@ -659,14 +659,21 @@ async function showPackDropdown(action) {
     return;
   }
 
-  // Find the action card button and replace it with dropdown UI
-  const actionCard = document.querySelector(`[data-action-id="${action.action_id}"]`);
+  // Find the action card and replace the button with dropdown UI
+  const actionCard = document.getElementById(`action-${action.action_id}`);
   if (!actionCard) {
     console.error('Could not find action card for action:', action.action_id);
     return;
   }
 
-  const buttonContainer = actionCard.querySelector('.action-buttons');
+  // Find the button and replace its parent container
+  const actionBtn = document.getElementById(`action-btn-${action.action_id}`);
+  if (!actionBtn) {
+    console.error('Could not find action button');
+    return;
+  }
+
+  const buttonContainer = actionBtn.parentElement;
   if (!buttonContainer) {
     console.error('Could not find button container');
     return;
@@ -898,17 +905,20 @@ async function removeCurrentPackAndAdvance() {
 
   if (remainingPacks.length === 0) {
     // No more packs
-    const actionCard = document.querySelector(`[data-action-id="${currentUnpackAction.action_id}"]`);
+    const actionCard = document.getElementById(`action-${currentUnpackAction.action_id}`);
     if (actionCard) {
-      const buttonContainer = actionCard.querySelector('.action-buttons');
-      if (buttonContainer) {
-        buttonContainer.innerHTML = `
-          <div style="padding: 15px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;">
-            <div style="font-size: 1.5rem; margin-bottom: 10px;">🎉</div>
-            <div style="font-weight: bold; margin-bottom: 5px;">All packs processed!</div>
-            <div style="font-size: 0.9rem; color: var(--text-secondary);">No more packs available to unpack.</div>
-          </div>
-        `;
+      const actionBtn = document.getElementById(`action-btn-${currentUnpackAction.action_id}`);
+      if (actionBtn) {
+        const buttonContainer = actionBtn.parentElement;
+        if (buttonContainer) {
+          buttonContainer.innerHTML = `
+            <div style="padding: 15px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;">
+              <div style="font-size: 1.5rem; margin-bottom: 10px;">🎉</div>
+              <div style="font-weight: bold; margin-bottom: 5px;">All packs processed!</div>
+              <div style="font-size: 0.9rem; color: var(--text-secondary);">No more packs available to unpack.</div>
+            </div>
+          `;
+        }
       }
     }
     return;
