@@ -621,37 +621,69 @@ async function executeUnpack(action, config) {
   let packs = packsData.data;
   console.log(`Found ${packs.length} total packs from API`);
 
-  // Filter out burned/invalid packs
-  const validPacks = [];
+  // Categorize packs as: owned (ready to unpack), claimable, or invalid
+  const ownedPacks = [];
+  const claimablePacks = [];
   const skippedPacks = [];
 
-  packs.forEach(pack => {
-    // Skip burned assets (they show in API cache but don't exist on blockchain)
+  // First pass: filter by basic checks (burned, owner)
+  for (const pack of packs) {
+    // Skip burned assets
     if (pack.burned_at_block || pack.burned_at_time || pack.burned_by_account) {
       console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) was BURNED - skipping`);
       skippedPacks.push(pack);
-      return;
+      continue;
     }
 
-    // Skip packs not owned by user (already transferred, in limbo, etc.)
-    if (pack.owner !== currentAccount) {
-      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is owned by ${pack.owner} - skipping`);
-      skippedPacks.push(pack);
-      return;
+    // If owned by user, it's ready to unpack
+    if (pack.owner === currentAccount) {
+      ownedPacks.push(pack);
+      console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is ready to UNPACK`);
+      continue;
     }
 
-    validPacks.push(pack);
-    console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is ready to unpack`);
-  });
+    // If not owned by user, check if it's in unboxassets table (ready to claim)
+    console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) not owned - checking if claimable...`);
+    skippedPacks.push(pack);
+  }
+
+  // Check non-owned packs for claimability
+  if (skippedPacks.length > 0) {
+    const assetIds = skippedPacks.map(p => p.asset_id);
+    try {
+      const claimableResponse = await fetch(`${API_URL}/api/pack/check-claimable`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset_ids: assetIds })
+      });
+      const claimableData = await claimableResponse.json();
+
+      if (claimableData.success) {
+        skippedPacks.forEach(pack => {
+          const status = claimableData.claimable_status[pack.asset_id];
+          if (status && status.is_claimable) {
+            pack.roll_ids = status.roll_ids;
+            pack.is_claimable = true;
+            claimablePacks.push(pack);
+            console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is ready to CLAIM (${status.roll_count} rolls)`);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn('Error checking claimable status:', error);
+    }
+  }
+
+  const validPacks = [...ownedPacks, ...claimablePacks];
 
   if (validPacks.length === 0) {
-    if (skippedPacks.length > 0) {
-      throw new Error(`No packs available. Found ${packs.length} packs but ${skippedPacks.length} were already unpacked or burned. Try refreshing the page.`);
+    if (packs.length > 0) {
+      throw new Error(`No packs available. Found ${packs.length} packs but all were already unpacked or burned. Try refreshing the page.`);
     }
     throw new Error(`No packs available to unpack.`);
   }
 
-  console.log(`Found ${validPacks.length} valid packs, ${skippedPacks.length} skipped`);
+  console.log(`Found ${ownedPacks.length} owned packs, ${claimablePacks.length} claimable packs`);
 
   // Sort by mint number (descending - highest first)
   validPacks.sort((a, b) => {
@@ -677,6 +709,7 @@ function showPackSelectionModal(packs) {
 
   packs.forEach((pack, index) => {
     const isFirstPack = index === 0;
+    const isClaimable = pack.is_claimable === true;
 
     const packOption = document.createElement('div');
     packOption.style.cssText = `
@@ -691,9 +724,16 @@ function showPackSelectionModal(packs) {
     packOption.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <div style="font-weight: bold; font-size: 1.1rem;">Mint #${pack.template_mint || 'Unknown'}</div>
-          <div style="color: var(--text-secondary); font-size: 0.9rem;">Asset ID: ${pack.asset_id}</div>
+          <div style="font-weight: bold; font-size: 1.1rem;">
+            Mint #${pack.template_mint || 'Unknown'}
+            ${isClaimable ? '<span style="background: orange; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 8px;">READY TO CLAIM</span>' : ''}
+          </div>
+          <div style="color: var(--text-secondary); font-size: 0.9rem;">
+            Asset ID: ${pack.asset_id}
+            ${isClaimable ? ` • ${pack.roll_ids.length} rolls` : ''}
+          </div>
           ${isFirstPack ? '<div style="color: white; font-size: 0.85rem; margin-top: 5px;">✨ Highest Mint (Recommended)</div>' : ''}
+          ${isClaimable ? '<div style="color: orange; font-size: 0.85rem; margin-top: 5px;">🎁 Pack already unpacked - will claim contents</div>' : ''}
         </div>
         <input type="radio" name="pack-selection" value="${pack.asset_id}" ${isFirstPack ? 'checked' : ''} style="width: 24px; height: 24px; cursor: pointer;">
       </div>
@@ -805,6 +845,54 @@ async function doUnpack(pack, action) {
   const packTemplateId = pack.template.template_id;
 
   console.log(`📦 Starting unpack for pack ${assetId} (template ${packTemplateId})`);
+
+  // PRE-FLIGHT CHECK: Verify ownership before attempting transfer
+  console.log(`🔍 Verifying ownership of asset ${assetId}...`);
+
+  const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      asset_id: assetId,
+      expected_owner: currentAccount
+    })
+  });
+
+  const verifyData = await verifyResponse.json();
+
+  // If pack is burned or already claimed, it's invalid
+  if (verifyData.is_burned) {
+    throw new Error(`Pack ${assetId} has already been burned/claimed. It no longer exists.`);
+  }
+
+  // If pack is not owned by user, check if it's in unboxassets table (ready to claim)
+  if (!verifyData.is_owned) {
+    console.log(`⚠️ Pack ${assetId} is not owned by ${currentAccount} (current owner: ${verifyData.current_owner})`);
+    console.log(`🔍 Checking if pack is in unboxassets table (already unpacked, ready to claim)...`);
+
+    try {
+      const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${assetId}`);
+      const rollData = await rollResponse.json();
+
+      if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
+        // Pack is already unpacked! Redirect to claim flow
+        console.log(`✅ Pack ${assetId} is ready to claim with ${rollData.roll_ids.length} rolls: [${rollData.roll_ids.join(', ')}]`);
+        showError(`Pack already unpacked! Claiming ${rollData.roll_ids.length} NFTs...`, 'info');
+
+        // Use the doClaim function with the roll IDs we found
+        pack.roll_ids = rollData.roll_ids;
+        await doClaim(pack, action);
+        return;
+      }
+    } catch (error) {
+      console.warn(`Error checking unboxassets:`, error);
+    }
+
+    // Pack not owned and not in unboxassets - it's in limbo or invalid
+    throw new Error(`Pack ${assetId} is currently owned by ${verifyData.current_owner}. It may be in transition or already claimed. Please refresh and try again.`);
+  }
+
+  console.log(`✅ Ownership verified. Pack ${assetId} is owned by ${currentAccount}`);
 
   // Step 1: Transfer pack to atomicpacksx to unbox it
   const transferResult = await transact([{

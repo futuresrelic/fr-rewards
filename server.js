@@ -1382,15 +1382,12 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
 
     // Query the unboxassets table from atomicpacksx contract
     // This table is populated AFTER the pack is transferred for unpacking
+    // The scope is the pack_asset_id itself!
     const result = await rpc.get_table_rows({
       json: true,
       code: 'atomicpacksx',
-      scope: 'atomicpacksx',
+      scope: pack_asset_id,
       table: 'unboxassets',
-      lower_bound: pack_asset_id,
-      upper_bound: pack_asset_id,
-      key_type: 'i64',
-      index_position: 1,
       limit: 1000,
       reverse: false,
       show_payer: false
@@ -1403,9 +1400,8 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
       });
     }
 
-    // Extract all roll IDs for this pack - use string comparison to avoid type issues
+    // Extract all roll IDs - scope is already filtered to this pack
     const rollIds = result.rows
-      .filter(row => row.pack_asset_id.toString() === pack_asset_id.toString())
       .map(row => parseInt(row.origin_roll_id))
       .sort((a, b) => a - b);  // Sort numerically
 
@@ -1447,24 +1443,19 @@ app.post('/api/pack/check-claimable', async (req, res) => {
     // Check each asset_id individually using the same query method as /api/pack/unboxed-rolls
     for (const assetId of asset_ids) {
       try {
-        // Query unboxassets table for this specific pack using index
+        // Query unboxassets table - scope is the pack_asset_id itself
         const result = await rpc.get_table_rows({
           json: true,
           code: 'atomicpacksx',
-          scope: 'atomicpacksx',
+          scope: assetId,
           table: 'unboxassets',
-          lower_bound: assetId,
-          upper_bound: assetId,
-          key_type: 'i64',
-          index_position: 1,
           limit: 1000,
           reverse: false,
           show_payer: false
         });
 
-        // Extract roll IDs for this pack - use string comparison to avoid type issues
+        // Extract roll IDs - scope is already filtered to this pack
         const rolls = result.rows
-          .filter(row => row.pack_asset_id.toString() === assetId.toString())
           .map(row => parseInt(row.origin_roll_id))
           .sort((a, b) => a - b);
 
@@ -1496,6 +1487,67 @@ app.post('/api/pack/check-claimable', async (req, res) => {
     });
   } catch (error) {
     console.error('Error checking claimable packs:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/asset/verify-ownership
+ * Verify current ownership of an asset by querying AtomicAssets API
+ * Body: { asset_id: string, expected_owner: string }
+ */
+app.post('/api/asset/verify-ownership', async (req, res) => {
+  try {
+    const { asset_id, expected_owner } = req.body;
+
+    if (!asset_id || !expected_owner) {
+      return res.status(400).json({ error: 'asset_id and expected_owner are required' });
+    }
+
+    console.log(`Verifying ownership of asset ${asset_id} (expecting: ${expected_owner})...`);
+
+    // Query AtomicAssets API for current asset state
+    const assetResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${asset_id}`);
+
+    if (!assetResponse.ok) {
+      return res.status(404).json({
+        success: false,
+        is_owned: false,
+        error: `Asset ${asset_id} not found`,
+        current_owner: null
+      });
+    }
+
+    const assetData = await assetResponse.json();
+    const asset = assetData.data;
+
+    // Check if asset is burned
+    if (asset.burned_at_block || asset.burned_at_time || asset.burned_by_account) {
+      console.log(`  ❌ Asset ${asset_id} is BURNED`);
+      return res.json({
+        success: true,
+        is_owned: false,
+        is_burned: true,
+        current_owner: asset.burned_by_account || 'unknown',
+        asset_id: asset_id
+      });
+    }
+
+    // Check current owner
+    const currentOwner = asset.owner;
+    const isOwned = currentOwner === expected_owner;
+
+    console.log(`  ${isOwned ? '✅' : '❌'} Asset ${asset_id} owner: ${currentOwner} (expected: ${expected_owner})`);
+
+    res.json({
+      success: true,
+      is_owned: isOwned,
+      is_burned: false,
+      current_owner: currentOwner,
+      asset_id: asset_id
+    });
+  } catch (error) {
+    console.error('Error verifying asset ownership:', error);
     res.status(500).json({ error: error.message, success: false });
   }
 });
