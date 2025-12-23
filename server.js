@@ -1157,6 +1157,47 @@ app.post('/api/admin/workflow/actions', authenticateAdmin, async (req, res) => {
 });
 
 /**
+ * PUT /api/admin/workflow/actions/:id
+ * Update a workflow action (order, type, name, config, etc.)
+ */
+app.put('/api/admin/workflow/actions/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action_order, action_type, name, description, config, enabled } = req.body;
+
+    const existingAction = db.workflowActions.getById(parseInt(id));
+    if (!existingAction) {
+      return res.status(404).json({ error: 'Action not found' });
+    }
+
+    // Validate action_type if provided
+    if (action_type) {
+      const validActionTypes = ['CLAIM', 'UNPACK', 'BLEND', 'DROP', 'MARKET_SCOUT'];
+      if (!validActionTypes.includes(action_type)) {
+        return res.status(400).json({ error: 'Invalid action_type' });
+      }
+    }
+
+    const updateData = {
+      step_id: existingAction.step_id,  // Keep same step
+      action_order: action_order !== undefined ? parseInt(action_order) : existingAction.action_order,
+      action_type: action_type !== undefined ? action_type : existingAction.action_type,
+      name: name !== undefined ? name : existingAction.name,
+      description: description !== undefined ? description : existingAction.description,
+      config: config !== undefined ? JSON.stringify(config) : existingAction.config,
+      enabled: enabled !== undefined ? (enabled ? 1 : 0) : existingAction.enabled
+    };
+
+    db.workflowActions.update(parseInt(id), updateData);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating workflow action:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * DELETE /api/admin/workflow/actions/:id
  * Delete a workflow action
  */

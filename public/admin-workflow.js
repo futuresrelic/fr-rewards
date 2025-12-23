@@ -402,6 +402,9 @@ async function loadActions(stepId) {
             </div>
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-secondary" onclick="moveActionUp(${action.id}, ${action.action_order})" ${action.action_order === 0 ? 'disabled' : ''}>↑ Up</button>
+            <button class="btn btn-sm btn-secondary" onclick="moveActionDown(${action.id}, ${action.action_order}, ${actions.length - 1})">↓ Down</button>
+            <button class="btn btn-sm btn-primary" onclick="editAction(${action.id})">✏️ Edit</button>
             <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="deleteAction(${action.id})">🗑️ Delete</button>
           </div>
         </div>
@@ -480,6 +483,101 @@ async function deleteAction(actionId) {
     }
 
     showActionsMessage('Action deleted successfully!', 'success');
+    await loadActions(currentStepId);
+  } catch (error) {
+    showActionsMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// Edit action
+async function editAction(actionId) {
+  try {
+    // Fetch the action details
+    const response = await fetch(`${API_URL}/api/admin/workflow/actions?step_id=${currentStepId}`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    const data = await response.json();
+    const action = data.actions.find(a => a.id === actionId);
+
+    if (!action) {
+      throw new Error('Action not found');
+    }
+
+    // Prompt for new order
+    const newOrder = prompt(`Enter new order for "${action.name}" (current: ${action.action_order}):`, action.action_order);
+    if (newOrder === null) return; // Cancelled
+
+    const orderNum = parseInt(newOrder);
+    if (isNaN(orderNum) || orderNum < 0) {
+      showActionsMessage('Invalid order number', 'error');
+      return;
+    }
+
+    // Update the action
+    const updateResponse = await fetch(`${API_URL}/api/admin/workflow/actions/${actionId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ action_order: orderNum })
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error('Failed to update action');
+    }
+
+    showActionsMessage('Action order updated!', 'success');
+    await loadActions(currentStepId);
+  } catch (error) {
+    showActionsMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// Move action up
+async function moveActionUp(actionId, currentOrder) {
+  if (currentOrder === 0) return; // Can't move up from position 0
+
+  try {
+    const updateResponse = await fetch(`${API_URL}/api/admin/workflow/actions/${actionId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ action_order: currentOrder - 1 })
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error('Failed to move action');
+    }
+
+    showActionsMessage('Action moved up!', 'success');
+    await loadActions(currentStepId);
+  } catch (error) {
+    showActionsMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// Move action down
+async function moveActionDown(actionId, currentOrder, maxOrder) {
+  if (currentOrder >= maxOrder) return; // Can't move down from last position
+
+  try {
+    const updateResponse = await fetch(`${API_URL}/api/admin/workflow/actions/${actionId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({ action_order: currentOrder + 1 })
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error('Failed to move action');
+    }
+
+    showActionsMessage('Action moved down!', 'success');
     await loadActions(currentStepId);
   } catch (error) {
     showActionsMessage('Error: ' + error.message, 'error');
