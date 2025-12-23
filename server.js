@@ -1660,6 +1660,35 @@ app.post('/api/asset/verify-ownership-rpc', async (req, res) => {
 });
 
 /**
+ * GET /api/assets/:account
+ * Proxy endpoint to fetch user's assets (avoids CORS issues with frontend)
+ * Query params: collection_name (optional), limit (optional, default 1000)
+ */
+app.get('/api/assets/:account', async (req, res) => {
+  try {
+    const { account } = req.params;
+    const { collection_name, limit } = req.query;
+
+    if (!account) {
+      return res.status(400).json({ error: 'account parameter required', success: false });
+    }
+
+    console.log(`📦 Fetching assets for ${account} in collection ${collection_name || 'all'}`);
+
+    // Use wax.getUserAssets which has fallback/retry logic and preferred endpoint
+    const assets = await wax.getUserAssets(account, collection_name || null);
+
+    res.json({
+      success: true,
+      data: assets
+    });
+  } catch (error) {
+    console.error('Error fetching user assets:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * GET /api/admin/atomic-apis
  * Get list of available Atomic API endpoints and current preferred one
  */

@@ -1224,8 +1224,8 @@ async function executeBlend(action, config) {
     throw new Error('BLEND action requires blend_id in config');
   }
 
-  // Get user's assets to find ingredients
-  const assetsResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets?owner=${currentAccount}&collection_name=${config.collection_name || 'futuresrelic'}&limit=1000`);
+  // Get user's assets to find ingredients (via server proxy to avoid CORS)
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
   const assetsData = await assetsResponse.json();
 
   if (!assetsData.success) {
