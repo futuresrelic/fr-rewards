@@ -743,7 +743,17 @@ async function showPackDropdown(action) {
       } catch (error) {
         unpackBtn.disabled = false;
         unpackBtn.textContent = '📦 Unpack This Pack';
-        throw error;
+
+        // If error is about not owning the pack, auto-skip to next
+        const errorMsg = error.message || error.toString();
+        if (errorMsg.includes('not owned') || errorMsg.includes('burned') || errorMsg.includes('does not exist')) {
+          showError(`Pack not owned or burned. Skipping to next...`, 'warning');
+          setTimeout(async () => {
+            await removeCurrentPackAndAdvance();
+          }, 1500);
+        } else {
+          throw error;
+        }
       }
     }
   });
@@ -824,56 +834,12 @@ async function verifyAndUpdatePackStatus() {
       return;
     }
 
-    // Step 2: Not claimable, check if we own it via BLOCKCHAIN RPC (bypasses cache)
-    console.log(`🔍 Checking ownership via blockchain RPC for pack ${selectedAssetId}...`);
-    const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership-rpc`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        asset_id: selectedAssetId,
-        expected_owner: currentAccount
-      })
-    });
-
-    const verifyData = await verifyResponse.json();
-
-    if (verifyData.is_burned) {
-      // Pack is burned - remove and try next
-      statusDiv.innerHTML = `
-        <div style="color: var(--error);">
-          ❌ <strong>Pack Burned</strong><br>
-          <span style="font-size: 0.9rem;">This pack no longer exists. Removing from list...</span>
-        </div>
-      `;
-
-      // Auto-advance after 1 second
-      setTimeout(async () => {
-        await removeCurrentPackAndAdvance();
-      }, 1000);
-      return;
-    }
-
-    if (!verifyData.is_owned) {
-      // Pack not owned - remove and try next
-      statusDiv.innerHTML = `
-        <div style="color: var(--error);">
-          ❌ <strong>Not Owned</strong><br>
-          <span style="font-size: 0.9rem;">Owner: ${verifyData.current_owner || 'unknown'}. Removing from list...</span>
-        </div>
-      `;
-
-      // Auto-advance after 1 second
-      setTimeout(async () => {
-        await removeCurrentPackAndAdvance();
-      }, 1000);
-      return;
-    }
-
-    // Pack is owned and not yet unpacked - ready to unpack!
+    // Step 2: Pack not claimable - assume ready to unpack
+    // Ownership will be verified by smart contract when unpacking
     statusDiv.innerHTML = `
       <div style="color: var(--success);">
-        ✅ <strong>Owned & Ready</strong><br>
-        <span style="font-size: 0.9rem;">You can unpack this pack now.</span>
+        ✅ <strong>Ready to Unpack</strong><br>
+        <span style="font-size: 0.9rem;">Mint #${selectedPack.template_mint} • Click to open this pack</span>
       </div>
     `;
 
@@ -1169,33 +1135,8 @@ async function doUnpack(pack, action) {
 
   console.log(`📦 Starting unpack for pack ${assetId} (template ${packTemplateId})`);
 
-  // PRE-FLIGHT CHECK: Verify ownership via BLOCKCHAIN RPC before attempting transfer
-  console.log(`🔍 Verifying ownership via blockchain RPC for asset ${assetId}...`);
-
-  const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership-rpc`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      asset_id: assetId,
-      expected_owner: currentAccount
-    })
-  });
-
-  const verifyData = await verifyResponse.json();
-
-  // Check if pack is burned
-  if (verifyData.is_burned) {
-    throw new Error(`Pack ${assetId} has already been burned/claimed. It no longer exists.`);
-  }
-
-  // Check if pack is owned by user
-  if (!verifyData.is_owned) {
-    throw new Error(`Pack ${assetId} is not owned by you (current owner: ${verifyData.current_owner || 'unknown'}). It may have already been unpacked. Please use the "Claim" button if it's ready to claim, or refresh the page.`);
-  }
-
-  console.log(`✅ Ownership verified. Pack ${assetId} is owned by ${currentAccount}`);
-
-  // Step 1: Transfer pack to atomicpacksx to unbox it
+  // Transfer pack to atomicpacksx to unbox it
+  // Smart contract will automatically reject if not owned
   const transferResult = await transact([{
     account: 'atomicassets',
     name: 'transfer',
