@@ -1249,19 +1249,52 @@ async function executeBlend(action, config) {
   const assetsForBlend = ingredientAssets.slice(0, config.ingredient_count || 1)
     .map(a => a.asset_id);
 
-  const result = await transact([{
-    account: 'blend.nefty',
-    name: 'claimblndasset',  // Correct NeftyBlocks blend action
-    authorization: [{
-      actor: currentAccount,
-      permission: 'active'
-    }],
-    data: {
-      blend_id: config.blend_id,
-      claimer: currentAccount,
-      transferred_assets: assetsForBlend
+  // NeftyBlocks blend requires 3 actions in sequence:
+  // 1. announcedepo - announce deposit
+  // 2. atomicassets::transfer - transfer assets to blend.nefty with memo "deposit"
+  // 3. nosecfuse - execute the blend
+  const result = await transact([
+    {
+      account: 'blend.nefty',
+      name: 'announcedepo',
+      authorization: [{
+        actor: currentAccount,
+        permission: 'active'
+      }],
+      data: {
+        count: assetsForBlend.length,
+        owner: currentAccount
+      }
+    },
+    {
+      account: 'atomicassets',
+      name: 'transfer',
+      authorization: [{
+        actor: currentAccount,
+        permission: 'active'
+      }],
+      data: {
+        asset_ids: assetsForBlend,
+        from: currentAccount,
+        memo: 'deposit',
+        to: 'blend.nefty'
+      }
+    },
+    {
+      account: 'blend.nefty',
+      name: 'nosecfuse',
+      authorization: [{
+        actor: currentAccount,
+        permission: 'active'
+      }],
+      data: {
+        blend_id: config.blend_id,
+        claimer: currentAccount,
+        own_assets: [],
+        transferred_assets: assetsForBlend
+      }
     }
-  }]);
+  ]);
 
   showError(`Success! Blend completed. TX: ${result.transaction_id}`, 'success');
 
