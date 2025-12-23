@@ -23,6 +23,11 @@ const confirmUnpackBtn = document.getElementById('confirm-unpack-btn');
 const confirmClaimBtn = document.getElementById('confirm-claim-btn');
 const packModalTitle = document.getElementById('pack-modal-title');
 const packModalSubtitle = document.getElementById('pack-modal-subtitle');
+const blendModal = document.getElementById('blend-modal');
+const blendSelectionList = document.getElementById('blend-selection-list');
+const blendSelectedCount = document.getElementById('blend-selected-count');
+const blendRequirementsText = document.getElementById('blend-requirements-text');
+const confirmBlendBtn = document.getElementById('confirm-blend-btn');
 
 // Pack selection state
 let selectedPack = null;  // Store full pack object with template data
@@ -30,6 +35,12 @@ let currentUnpackAction = null;
 
 // Drop action state
 let currentDropAction = null;
+
+// Blend selection state
+let selectedBlendAssets = [];
+let currentBlendAction = null;
+let currentBlendConfig = null;
+let availableBlendAssets = [];
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -73,8 +84,10 @@ function setupEventListeners() {
   document.getElementById('disconnect-btn').addEventListener('click', disconnect);
   document.getElementById('close-drop-modal').addEventListener('click', closeDropModal);
   document.getElementById('close-pack-modal').addEventListener('click', closePackModal);
+  document.getElementById('close-blend-modal').addEventListener('click', closeBlendModal);
   confirmUnpackBtn.addEventListener('click', confirmUnpack);
   confirmClaimBtn.addEventListener('click', confirmClaim);
+  confirmBlendBtn.addEventListener('click', confirmBlend);
   markDropCompleteBtn.addEventListener('click', markDropAsComplete);
 }
 
@@ -1218,36 +1231,152 @@ async function doUnpack(pack, action) {
   }));
 }
 
-// Execute BLEND action
-async function executeBlend(action, config) {
-  if (!config || !config.blend_id) {
-    throw new Error('BLEND action requires blend_id in config');
+// Show blend asset selection modal
+function showBlendAssetSelection(action, config, assets) {
+  currentBlendAction = action;
+  currentBlendConfig = config;
+  availableBlendAssets = assets;
+  selectedBlendAssets = [];
+
+  const requiredCount = config.ingredient_count || 1;
+
+  // Update requirements text
+  blendRequirementsText.innerHTML = `
+    <div>• <strong>Blend ID:</strong> ${config.blend_id}</div>
+    <div>• <strong>Assets Required:</strong> ${requiredCount}</div>
+    ${config.ingredient_templates ? `<div>• <strong>Template IDs:</strong> ${config.ingredient_templates.join(', ')}</div>` : ''}
+  `;
+
+  // Render available assets
+  renderBlendAssets(requiredCount);
+
+  // Update counter
+  updateBlendCounter(requiredCount);
+
+  // Show modal
+  blendModal.style.display = 'block';
+}
+
+// Render blend assets with selection
+function renderBlendAssets(requiredCount) {
+  blendSelectionList.innerHTML = '';
+
+  availableBlendAssets.forEach((asset, index) => {
+    const assetCard = document.createElement('div');
+    assetCard.style.cssText = `
+      background: var(--bg-dark);
+      padding: 10px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    `;
+
+    const imageUrl = asset.data?.img
+      ? `https://ipfs.io/ipfs/${asset.data.img}`
+      : 'https://via.placeholder.com/150?text=NFT';
+
+    assetCard.innerHTML = `
+      <img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">
+      <div style="font-size: 0.85rem; font-weight: bold; margin-bottom: 4px;">${asset.name || 'Unknown'}</div>
+      <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px;">Mint #${asset.template_mint || '?'}</div>
+      <div style="font-size: 0.7rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis;">ID: ${asset.asset_id}</div>
+      <div style="margin-top: 8px;">
+        <input type="checkbox" id="blend-asset-${index}" value="${asset.asset_id}" style="width: 20px; height: 20px; cursor: pointer;">
+      </div>
+    `;
+
+    const checkbox = assetCard.querySelector('input[type="checkbox"]');
+
+    // Handle selection
+    checkbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        if (selectedBlendAssets.length >= requiredCount) {
+          // Max reached, uncheck oldest
+          const oldestAssetId = selectedBlendAssets.shift();
+          const oldestCheckbox = document.querySelector(`input[value="${oldestAssetId}"]`);
+          if (oldestCheckbox) {
+            oldestCheckbox.checked = false;
+            oldestCheckbox.parentElement.parentElement.style.borderColor = 'var(--border)';
+            oldestCheckbox.parentElement.parentElement.style.background = 'var(--bg-dark)';
+          }
+        }
+        selectedBlendAssets.push(asset.asset_id);
+        assetCard.style.borderColor = 'var(--accent)';
+        assetCard.style.background = 'var(--bg-card-hover)';
+      } else {
+        selectedBlendAssets = selectedBlendAssets.filter(id => id !== asset.asset_id);
+        assetCard.style.borderColor = 'var(--border)';
+        assetCard.style.background = 'var(--bg-dark)';
+      }
+      updateBlendCounter(requiredCount);
+    });
+
+    // Allow clicking card to toggle
+    assetCard.addEventListener('click', (e) => {
+      if (e.target !== checkbox) {
+        checkbox.click();
+      }
+    });
+
+    blendSelectionList.appendChild(assetCard);
+  });
+}
+
+// Update blend counter and button state
+function updateBlendCounter(requiredCount) {
+  blendSelectedCount.innerHTML = `Selected: <span style="color: ${selectedBlendAssets.length === requiredCount ? 'var(--success)' : 'var(--accent)'};">${selectedBlendAssets.length}</span> / ${requiredCount}`;
+
+  confirmBlendBtn.disabled = selectedBlendAssets.length !== requiredCount;
+  confirmBlendBtn.style.opacity = selectedBlendAssets.length === requiredCount ? '1' : '0.5';
+}
+
+// Close blend modal
+function closeBlendModal() {
+  blendModal.style.display = 'none';
+  selectedBlendAssets = [];
+  currentBlendAction = null;
+  currentBlendConfig = null;
+  availableBlendAssets = [];
+
+  // Re-enable blend button
+  if (currentBlendAction) {
+    const btn = document.getElementById(`action-btn-${currentBlendAction.action_id}`);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔮 Blend Now';
+    }
+  }
+}
+
+// Confirm blend with selected assets
+async function confirmBlend() {
+  if (!currentBlendAction || !currentBlendConfig || selectedBlendAssets.length === 0) {
+    return;
   }
 
-  // Get user's assets to find ingredients (via server proxy to avoid CORS)
-  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
-  const assetsData = await assetsResponse.json();
+  try {
+    confirmBlendBtn.disabled = true;
+    confirmBlendBtn.textContent = '⏳ Blending...';
 
-  if (!assetsData.success) {
-    throw new Error('Failed to fetch assets');
+    await doBlend(currentBlendAction, currentBlendConfig, selectedBlendAssets);
+
+    // Close modal
+    blendModal.style.display = 'none';
+    selectedBlendAssets = [];
+    currentBlendAction = null;
+    currentBlendConfig = null;
+  } catch (error) {
+    confirmBlendBtn.disabled = false;
+    confirmBlendBtn.textContent = '🔮 Execute Blend';
+    throw error;
   }
+}
 
-  // Filter assets by template IDs if specified
-  let ingredientAssets = assetsData.data;
-  if (config.ingredient_templates) {
-    const templateIds = config.ingredient_templates.map(t => t.toString());
-    ingredientAssets = ingredientAssets.filter(asset =>
-      templateIds.includes(asset.template.template_id)
-    );
-  }
-
-  if (ingredientAssets.length < (config.ingredient_count || 1)) {
-    throw new Error('Not enough ingredients to complete blend');
-  }
-
-  // Take required number of assets
-  const assetsForBlend = ingredientAssets.slice(0, config.ingredient_count || 1)
-    .map(a => a.asset_id);
+// Perform the actual blend with selected assets
+async function doBlend(action, config, assetsForBlend) {
+  console.log(`🔮 Starting blend ${config.blend_id} with assets:`, assetsForBlend);
 
   // NeftyBlocks blend requires 3 actions in sequence:
   // 1. announcedepo - announce deposit
@@ -1298,8 +1427,43 @@ async function executeBlend(action, config) {
 
   showError(`Success! Blend completed. TX: ${result.transaction_id}`, 'success');
 
-  // Reload progress
-  setTimeout(() => loadStoryProgress(), 2000);
+  // Mark action as complete
+  await markActionComplete(action, result.transaction_id, JSON.stringify({
+    blend_id: config.blend_id,
+    asset_ids: assetsForBlend,
+    tx: result.transaction_id
+  }));
+}
+
+// Execute BLEND action
+async function executeBlend(action, config) {
+  if (!config || !config.blend_id) {
+    throw new Error('BLEND action requires blend_id in config');
+  }
+
+  // Get user's assets to find ingredients (via server proxy to avoid CORS)
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
+  const assetsData = await assetsResponse.json();
+
+  if (!assetsData.success) {
+    throw new Error('Failed to fetch assets');
+  }
+
+  // Filter assets by template IDs if specified
+  let ingredientAssets = assetsData.data;
+  if (config.ingredient_templates) {
+    const templateIds = config.ingredient_templates.map(t => t.toString());
+    ingredientAssets = ingredientAssets.filter(asset =>
+      templateIds.includes(asset.template.template_id)
+    );
+  }
+
+  if (ingredientAssets.length < (config.ingredient_count || 1)) {
+    throw new Error(`Not enough ingredients to complete blend. You have ${ingredientAssets.length} but need ${config.ingredient_count || 1}`);
+  }
+
+  // Show asset selection modal
+  showBlendAssetSelection(action, config, ingredientAssets);
 }
 
 // Execute DROP action

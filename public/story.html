@@ -123,11 +123,32 @@
       </div>
     </div>
 
+    <!-- Blend Asset Selection Modal -->
+    <div id="blend-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; overflow-y: auto; padding: 20px;">
+      <div class="card" style="max-width: 800px; margin: 40px auto; position: relative;">
+        <button id="close-blend-modal" style="position: absolute; top: 20px; right: 20px; background: var(--bg-card-hover); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">×</button>
+
+        <h2 id="blend-modal-title">🔮 Select Assets for Blend</h2>
+        <p id="blend-modal-subtitle" style="color: var(--text-secondary); margin-bottom: 20px;">Select which assets you want to use for this blend:</p>
+
+        <div id="blend-requirements-info" style="margin-bottom: 20px; padding: 15px; background: var(--bg-card-hover); border-radius: 8px; border-left: 4px solid var(--accent);">
+          <div style="font-weight: bold; margin-bottom: 8px;">Blend Requirements:</div>
+          <div id="blend-requirements-text"></div>
+        </div>
+
+        <div id="blend-selection-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; max-height: 500px; overflow-y: auto; padding: 10px;"></div>
+
+        <div id="blend-selected-count" style="text-align: center; margin-bottom: 15px; padding: 10px; background: var(--bg-card-hover); border-radius: 8px; font-weight: bold;"></div>
+
+        <button id="confirm-blend-btn" class="btn btn-primary" style="width: 100%;">🔮 Execute Blend</button>
+      </div>
+    </div>
+
     <footer>
       <p>Powered by WAX Blockchain | <a href="admin.html">Admin Panel</a> | <a href="index.html">Claims</a></p>
     </footer>
   </div>
 
-  <script src="story.js?v=20251223-nosecfuse"></script>
+  <script src="story.js?v=20251223-blend-selector"></script>
 </body>
 </html>
