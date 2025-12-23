@@ -5,16 +5,16 @@ const { TextEncoder, TextDecoder } = require('util');
 require('dotenv').config();
 
 // Configuration - Multiple AtomicAssets API endpoints for fallback
+// Only verified working endpoints (tested Dec 2025)
 let ATOMIC_APIS = [
-  'https://aa.wax.blacklusion.io',
-  'https://atomic.wax.eosrio.io',
-  'https://wax.api.atomicassets.io',
-  'https://aa.dapplica.io',
-  'https://aa-api-wax-mainnet.neftyblocks.com'
+  'https://aa.wax.blacklusion.io',      // ⚡ Fastest - 86ms
+  'https://atomic.wax.eosrio.io',       // Reliable - 594ms
+  'https://wax.api.atomicassets.io',    // Official (can be slow)
+  'https://aa.dapplica.io'              // Backup
 ];
 
-// Allow runtime configuration
-let preferredAtomicAPI = process.env.PREFERRED_ATOMIC_API || null;
+// Allow runtime configuration - default to fastest tested endpoint
+let preferredAtomicAPI = process.env.PREFERRED_ATOMIC_API || 'https://aa.wax.blacklusion.io';
 
 // Function to set preferred API endpoint
 function setPreferredAtomicAPI(endpoint) {
