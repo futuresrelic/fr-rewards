@@ -623,11 +623,11 @@ async function executeUnpack(action, config) {
   }
 
   let packs = packsData.data;
-  console.log(`Found ${packs.length} total packs from API`);
+  console.log(`Found ${packs.length} total packs from API (may include stale cache)`);
 
-  // First: Check ALL packs for claimability (some may be burned but AA API cache is stale)
-  console.log(`🔍 Checking all ${packs.length} packs for claimability...`);
-  const claimablePacks = [];
+  // STEP 1: Check ALL packs for claimability (query unboxassets table)
+  console.log(`🔍 Step 1: Checking ${packs.length} packs for claimability...`);
+  const claimableMap = {};
   const allAssetIds = packs.map(p => p.asset_id);
 
   try {
@@ -639,84 +639,124 @@ async function executeUnpack(action, config) {
     const claimableData = await claimableResponse.json();
 
     if (claimableData.success) {
-      packs.forEach(pack => {
-        const status = claimableData.claimable_status[pack.asset_id];
-        if (status && status.is_claimable) {
-          pack.roll_ids = status.roll_ids;
-          pack.is_claimable = true;
-          claimablePacks.push(pack);
-          console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is ready to CLAIM (${status.roll_count} rolls)`);
+      Object.keys(claimableData.claimable_status).forEach(assetId => {
+        const status = claimableData.claimable_status[assetId];
+        if (status.is_claimable) {
+          claimableMap[assetId] = status;
         }
       });
+      console.log(`Found ${Object.keys(claimableMap).length} packs in unboxassets table`);
     }
   } catch (error) {
     console.warn('Error checking claimable status:', error);
   }
 
-  // Second: Categorize remaining packs as owned (ready to unpack)
-  const ownedPacks = [];
-  const skippedPacks = [];
+  // STEP 2: Verify ACTUAL ownership of each pack (eliminate stale API cache)
+  console.log(`🔍 Step 2: Verifying actual ownership for ${packs.length} packs...`);
+  const verifiedPacks = [];
+  let checkedCount = 0;
 
   for (const pack of packs) {
-    // Skip if already marked as claimable
-    if (pack.is_claimable) {
+    checkedCount++;
+    const assetId = pack.asset_id;
+
+    // If in unboxassets table, it's claimable
+    if (claimableMap[assetId]) {
+      pack.roll_ids = claimableMap[assetId].roll_ids;
+      pack.is_claimable = true;
+      verifiedPacks.push(pack);
+      console.log(`✅ [${checkedCount}/${packs.length}] Pack ${assetId} (mint #${pack.template_mint}) is CLAIMABLE (${claimableMap[assetId].roll_count} rolls)`);
       continue;
     }
 
-    // Skip burned assets
-    if (pack.burned_at_block || pack.burned_at_time || pack.burned_by_account) {
-      console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) was BURNED - skipping`);
-      skippedPacks.push(pack);
-      continue;
-    }
+    // Verify if actually owned (not stale cache)
+    try {
+      const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          asset_id: assetId,
+          expected_owner: currentAccount
+        })
+      });
 
-    // If owned by user, it's ready to unpack
-    if (pack.owner === currentAccount) {
-      ownedPacks.push(pack);
-      console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is ready to UNPACK`);
-      continue;
-    }
+      if (!verifyResponse.ok) {
+        console.warn(`⚠️ [${checkedCount}/${packs.length}] Pack ${assetId} verification failed (${verifyResponse.status})`);
+        continue;
+      }
 
-    // Not owned and not claimable - skip
-    console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) not owned - skipping`);
-    skippedPacks.push(pack);
+      const verifyData = await verifyResponse.json();
+
+      if (verifyData.success && verifyData.is_owned && !verifyData.is_burned) {
+        verifiedPacks.push(pack);
+        console.log(`✅ [${checkedCount}/${packs.length}] Pack ${assetId} (mint #${pack.template_mint}) is OWNED - ready to unpack`);
+      } else {
+        console.log(`❌ [${checkedCount}/${packs.length}] Pack ${assetId} (mint #${pack.template_mint}) NOT VALID (owned: ${verifyData.is_owned}, burned: ${verifyData.is_burned}, owner: ${verifyData.current_owner || 'none'})`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ [${checkedCount}/${packs.length}] Could not verify pack ${assetId}:`, error.message);
+    }
   }
 
-  const validPacks = [...ownedPacks, ...claimablePacks];
-
-  if (validPacks.length === 0) {
-    if (packs.length > 0) {
-      throw new Error(`No packs available. Found ${packs.length} packs but all were already unpacked or burned. Try refreshing the page.`);
-    }
-    throw new Error(`No packs available to unpack.`);
+  if (verifiedPacks.length === 0) {
+    throw new Error(`No packs available. All packs have been unpacked, claimed, or are no longer in your wallet.`);
   }
 
-  console.log(`Found ${ownedPacks.length} owned packs, ${claimablePacks.length} claimable packs`);
+  const claimableCount = verifiedPacks.filter(p => p.is_claimable).length;
+  const ownedCount = verifiedPacks.filter(p => !p.is_claimable).length;
+  console.log(`✅ Verified ${verifiedPacks.length} valid packs (${claimableCount} claimable, ${ownedCount} owned)`);
 
-  // Sort by mint number (descending - highest first)
-  validPacks.sort((a, b) => {
+  // Sort by mint number (lowest first for easier browsing)
+  verifiedPacks.sort((a, b) => {
     const mintA = parseInt(a.template_mint) || 0;
     const mintB = parseInt(b.template_mint) || 0;
-    return mintB - mintA;
+    return mintA - mintB;  // Ascending order
   });
 
-  // If only one pack, unpack it immediately
-  if (validPacks.length === 1) {
-    await doUnpack(validPacks[0], action);
-    return;
-  }
-
-  // Multiple packs - show selection modal
+  // Always show modal (even for 1 pack - user can review before action)
   currentUnpackAction = action;
-  showPackSelectionModal(validPacks);
+  showPackSelectionModal(verifiedPacks);
 }
 
-// Show pack selection modal
+// Pack pagination
+let allPacksForModal = [];
+let currentPackPage = 0;
+const PACKS_PER_PAGE = 15;
+
+// Show pack selection modal with pagination
 function showPackSelectionModal(packs) {
+  allPacksForModal = packs;
+  currentPackPage = 0;
+  renderPackPage();
+  packModal.style.display = 'block';
+}
+
+// Render current page of packs
+function renderPackPage() {
+  const startIdx = currentPackPage * PACKS_PER_PAGE;
+  const endIdx = Math.min(startIdx + PACKS_PER_PAGE, allPacksForModal.length);
+  const packsToShow = allPacksForModal.slice(startIdx, endIdx);
+  const totalPages = Math.ceil(allPacksForModal.length / PACKS_PER_PAGE);
+
   packSelectionList.innerHTML = '';
 
-  packs.forEach((pack, index) => {
-    const isFirstPack = index === 0;
+  // Show pagination info
+  const paginationInfo = document.createElement('div');
+  paginationInfo.style.cssText = 'margin-bottom: 15px; padding: 10px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;';
+  paginationInfo.innerHTML = `
+    <div style="font-weight: bold; margin-bottom: 5px;">
+      Showing ${startIdx + 1}-${endIdx} of ${allPacksForModal.length} packs (Page ${currentPackPage + 1}/${totalPages})
+    </div>
+    <div style="display: flex; justify-content: center; gap: 10px; margin-top: 10px;">
+      <button id="pack-prev-btn" ${currentPackPage === 0 ? 'disabled' : ''} class="btn btn-secondary" style="padding: 5px 15px;">← Prev</button>
+      <button id="pack-next-btn" ${endIdx >= allPacksForModal.length ? 'disabled' : ''} class="btn btn-secondary" style="padding: 5px 15px;">Next →</button>
+    </div>
+  `;
+  packSelectionList.appendChild(paginationInfo);
+
+  // Render packs
+  packsToShow.forEach((pack, index) => {
+    const isFirstPack = index === 0 && currentPackPage === 0;
     const isClaimable = pack.is_claimable === true;
 
     const packOption = document.createElement('div');
@@ -740,7 +780,6 @@ function showPackSelectionModal(packs) {
             Asset ID: ${pack.asset_id}
             ${isClaimable ? ` • ${pack.roll_ids.length} rolls` : ''}
           </div>
-          ${isFirstPack ? '<div style="color: white; font-size: 0.85rem; margin-top: 5px;">✨ Highest Mint (Recommended)</div>' : ''}
           ${isClaimable ? '<div style="color: orange; font-size: 0.85rem; margin-top: 5px;">🎁 Pack already unpacked - will claim contents</div>' : ''}
         </div>
         <input type="radio" name="pack-selection" value="${pack.asset_id}" ${isFirstPack ? 'checked' : ''} style="width: 24px; height: 24px; cursor: pointer;">
@@ -760,7 +799,7 @@ function showPackSelectionModal(packs) {
       radio.checked = true;
       packOption.style.background = 'var(--accent)';
       packOption.style.borderColor = 'var(--accent)';
-      selectedPack = pack;  // Store full pack object
+      selectedPack = pack;
 
       // Update button visibility based on pack type
       updateModalButtons(pack);
@@ -769,13 +808,26 @@ function showPackSelectionModal(packs) {
     packSelectionList.appendChild(packOption);
   });
 
-  // Auto-select first pack
-  selectedPack = packs[0];
+  // Setup pagination button listeners
+  document.getElementById('pack-prev-btn')?.addEventListener('click', () => {
+    if (currentPackPage > 0) {
+      currentPackPage--;
+      renderPackPage();
+    }
+  });
 
-  // Update button visibility for initial selection
-  updateModalButtons(packs[0]);
+  document.getElementById('pack-next-btn')?.addEventListener('click', () => {
+    if ((currentPackPage + 1) * PACKS_PER_PAGE < allPacksForModal.length) {
+      currentPackPage++;
+      renderPackPage();
+    }
+  });
 
-  packModal.style.display = 'block';
+  // Auto-select first pack on page
+  if (packsToShow.length > 0) {
+    selectedPack = packsToShow[0];
+    updateModalButtons(packsToShow[0]);
+  }
 }
 
 // Update modal buttons based on pack type
