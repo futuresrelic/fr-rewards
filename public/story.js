@@ -650,7 +650,6 @@ async function executeUnpack(action, config) {
 
 // Global pack list for auto-advancing
 let remainingPacks = [];
-let currentUnpackAction = null;
 let currentPackDropdown = null;
 
 // Show pack dropdown selector with auto-verification
