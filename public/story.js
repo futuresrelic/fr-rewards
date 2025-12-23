@@ -1251,7 +1251,7 @@ async function executeBlend(action, config) {
 
   const result = await transact([{
     account: 'blend.nefty',
-    name: 'claimblend',
+    name: 'claimblndasset',  // Correct NeftyBlocks blend action
     authorization: [{
       actor: currentAccount,
       permission: 'active'
