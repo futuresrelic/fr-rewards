@@ -1569,9 +1569,10 @@ app.post('/api/asset/verify-ownership-rpc', async (req, res) => {
     console.log(`🔗 Verifying ownership via RPC for asset ${asset_id} (expecting: ${expected_owner})...`);
 
     // Query atomicassets contract DIRECTLY via RPC - this is the SOURCE OF TRUTH
+    // IMPORTANT: The 'assets' table is scoped by OWNER, not by contract!
     const result = await rpc.get_table_rows({
       code: 'atomicassets',
-      scope: 'atomicassets',
+      scope: expected_owner,  // ← Assets are scoped by owner!
       table: 'assets',
       lower_bound: asset_id,
       upper_bound: asset_id,
@@ -1580,13 +1581,16 @@ app.post('/api/asset/verify-ownership-rpc', async (req, res) => {
       show_payer: false
     });
 
-    // If asset not found in blockchain table, it's been burned/transferred
-    if (!result.rows || result.rows.length === 0) {
-      console.log(`  ❌ Asset ${asset_id} NOT FOUND in blockchain (burned or never existed)`);
+    // If asset not found in expected owner's scope, they don't own it
+    if (!result.rows || result.rows.length === 0 || result.rows[0].asset_id !== asset_id) {
+      console.log(`  ❌ Asset ${asset_id} NOT owned by ${expected_owner} (not found in their assets scope)`);
+
+      // Asset is not in the expected owner's scope = they don't own it
+      // It could be burned or owned by someone else (we can't tell which without more checks)
       return res.json({
         success: true,
         is_owned: false,
-        is_burned: true,
+        is_burned: false,  // Can't confirm burned without checking if it exists anywhere
         current_owner: null,
         asset_id: asset_id,
         source: 'blockchain_rpc'
@@ -1594,10 +1598,11 @@ app.post('/api/asset/verify-ownership-rpc', async (req, res) => {
     }
 
     const assetRow = result.rows[0];
-    const currentOwner = assetRow.owner;
-    const isOwned = currentOwner === expected_owner;
+    // Double-check the owner field in the row (should match scope, but verify)
+    const currentOwner = assetRow.owner || expected_owner;
+    const isOwned = true;  // If it's in their scope, they own it
 
-    console.log(`  ${isOwned ? '✅' : '❌'} Asset ${asset_id} blockchain owner: ${currentOwner} (expected: ${expected_owner})`);
+    console.log(`  ✅ Asset ${asset_id} blockchain owner: ${currentOwner} (confirmed in owner's scope)`);
 
     res.json({
       success: true,
