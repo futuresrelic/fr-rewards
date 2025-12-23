@@ -625,13 +625,44 @@ async function executeUnpack(action, config) {
   let packs = packsData.data;
   console.log(`Found ${packs.length} total packs from API`);
 
-  // Categorize packs as: owned (ready to unpack), claimable, or invalid
-  const ownedPacks = [];
+  // First: Check ALL packs for claimability (some may be burned but AA API cache is stale)
+  console.log(`🔍 Checking all ${packs.length} packs for claimability...`);
   const claimablePacks = [];
+  const allAssetIds = packs.map(p => p.asset_id);
+
+  try {
+    const claimableResponse = await fetch(`${API_URL}/api/pack/check-claimable`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asset_ids: allAssetIds })
+    });
+    const claimableData = await claimableResponse.json();
+
+    if (claimableData.success) {
+      packs.forEach(pack => {
+        const status = claimableData.claimable_status[pack.asset_id];
+        if (status && status.is_claimable) {
+          pack.roll_ids = status.roll_ids;
+          pack.is_claimable = true;
+          claimablePacks.push(pack);
+          console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is ready to CLAIM (${status.roll_count} rolls)`);
+        }
+      });
+    }
+  } catch (error) {
+    console.warn('Error checking claimable status:', error);
+  }
+
+  // Second: Categorize remaining packs as owned (ready to unpack)
+  const ownedPacks = [];
   const skippedPacks = [];
 
-  // First pass: filter by basic checks (burned, owner)
   for (const pack of packs) {
+    // Skip if already marked as claimable
+    if (pack.is_claimable) {
+      continue;
+    }
+
     // Skip burned assets
     if (pack.burned_at_block || pack.burned_at_time || pack.burned_by_account) {
       console.warn(`Pack ${pack.asset_id} (mint #${pack.template_mint}) was BURNED - skipping`);
@@ -646,36 +677,9 @@ async function executeUnpack(action, config) {
       continue;
     }
 
-    // If not owned by user, check if it's in unboxassets table (ready to claim)
-    console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) not owned - checking if claimable...`);
+    // Not owned and not claimable - skip
+    console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) not owned - skipping`);
     skippedPacks.push(pack);
-  }
-
-  // Check non-owned packs for claimability
-  if (skippedPacks.length > 0) {
-    const assetIds = skippedPacks.map(p => p.asset_id);
-    try {
-      const claimableResponse = await fetch(`${API_URL}/api/pack/check-claimable`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asset_ids: assetIds })
-      });
-      const claimableData = await claimableResponse.json();
-
-      if (claimableData.success) {
-        skippedPacks.forEach(pack => {
-          const status = claimableData.claimable_status[pack.asset_id];
-          if (status && status.is_claimable) {
-            pack.roll_ids = status.roll_ids;
-            pack.is_claimable = true;
-            claimablePacks.push(pack);
-            console.log(`Pack ${pack.asset_id} (mint #${pack.template_mint}) is ready to CLAIM (${status.roll_count} rolls)`);
-          }
-        });
-      }
-    } catch (error) {
-      console.warn('Error checking claimable status:', error);
-    }
   }
 
   const validPacks = [...ownedPacks, ...claimablePacks];
