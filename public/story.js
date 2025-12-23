@@ -625,76 +625,316 @@ async function executeUnpack(action, config) {
   let packs = packsData.data;
   console.log(`📦 Found ${packs.length} total packs from API`);
 
-  // Check claimability ONLY (fast - single batch query)
-  console.log(`🔍 Checking ${packs.length} packs for claimability...`);
-  const claimableMap = {};
-
-  try {
-    const claimableResponse = await fetch(`${API_URL}/api/pack/check-claimable`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ asset_ids: packs.map(p => p.asset_id) })
-    });
-    const claimableData = await claimableResponse.json();
-
-    if (claimableData.success) {
-      Object.keys(claimableData.claimable_status).forEach(assetId => {
-        const status = claimableData.claimable_status[assetId];
-        if (status.is_claimable) {
-          claimableMap[assetId] = status;
-        }
-      });
-      console.log(`✅ Found ${Object.keys(claimableMap).length} claimable packs`);
+  // Quick filter: remove obviously burned packs
+  const candidatePacks = packs.filter(pack => {
+    if (pack.burned_at_block || pack.burned_at_time || pack.burned_by_account) {
+      console.log(`❌ Pack ${pack.asset_id} (mint #${pack.template_mint}) is burned - skipping`);
+      return false;
     }
-  } catch (error) {
-    console.warn('⚠️ Error checking claimable status:', error);
+    return true;
+  });
+
+  if (candidatePacks.length === 0) {
+    throw new Error(`No packs available - all are burned.`);
   }
 
-  // Filter and mark packs
-  const validPacks = [];
+  // Sort by HIGHEST mint first (user preference)
+  candidatePacks.sort((a, b) => parseInt(b.template_mint || 0) - parseInt(a.template_mint || 0));
 
-  packs.forEach(pack => {
-    // Skip obviously burned packs
-    if (pack.burned_at_block || pack.burned_at_time || pack.burned_by_account) {
-      console.log(`❌ Pack ${pack.asset_id} (mint #${pack.template_mint}) is burned`);
+  console.log(`✅ ${candidatePacks.length} candidate packs (sorted highest mint first)`);
+
+  currentUnpackAction = action;
+  remainingPacks = [...candidatePacks]; // Clone array for auto-advancing
+  showPackDropdown(action);
+}
+
+// Global pack list for auto-advancing
+let remainingPacks = [];
+let currentUnpackAction = null;
+let currentPackDropdown = null;
+
+// Show pack dropdown selector with auto-verification
+async function showPackDropdown(action) {
+  if (remainingPacks.length === 0) {
+    showError('No packs available to unpack', 'error');
+    return;
+  }
+
+  // Find the action card button and replace it with dropdown UI
+  const actionCard = document.querySelector(`[data-action-id="${action.id}"]`);
+  if (!actionCard) {
+    console.error('Could not find action card for action:', action.id);
+    return;
+  }
+
+  const buttonContainer = actionCard.querySelector('.action-buttons');
+  if (!buttonContainer) {
+    console.error('Could not find button container');
+    return;
+  }
+
+  // Create dropdown UI
+  buttonContainer.innerHTML = `
+    <div class="pack-dropdown-container" style="margin-top: 15px;">
+      <div style="margin-bottom: 10px;">
+        <label for="pack-selector" style="display: block; margin-bottom: 5px; font-weight: bold;">
+          📦 Select Pack to Unpack:
+        </label>
+        <select id="pack-selector" class="form-control" style="width: 100%; padding: 10px; font-size: 1rem; background: var(--bg-dark); color: white; border: 2px solid var(--border); border-radius: 8px;">
+          ${remainingPacks.map((pack, idx) => `
+            <option value="${pack.asset_id}" data-pack-index="${idx}">
+              Mint #${pack.template_mint || 'Unknown'} - Asset ID: ${pack.asset_id}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+
+      <div id="pack-status" style="padding: 12px; background: var(--bg-card-hover); border-radius: 8px; margin-bottom: 10px; min-height: 60px;">
+        <div class="loader" style="width: 20px; height: 20px; border-width: 2px;"></div>
+        <span style="margin-left: 10px;">Checking pack status...</span>
+      </div>
+
+      <div id="pack-actions" style="display: flex; gap: 10px;">
+        <button id="action-unpack-btn" class="btn btn-primary" style="flex: 1; display: none;">
+          📦 Unpack This Pack
+        </button>
+        <button id="action-claim-btn" class="btn btn-primary" style="flex: 1; display: none; background: orange;">
+          🎁 Claim This Pack
+        </button>
+        <button id="action-skip-btn" class="btn btn-secondary" style="display: none;">
+          ⏭️ Skip & Try Next
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Get references to elements
+  currentPackDropdown = document.getElementById('pack-selector');
+  const statusDiv = document.getElementById('pack-status');
+  const unpackBtn = document.getElementById('action-unpack-btn');
+  const claimBtn = document.getElementById('action-claim-btn');
+  const skipBtn = document.getElementById('action-skip-btn');
+
+  // Auto-verify first pack
+  await verifyAndUpdatePackStatus();
+
+  // Add event listener for dropdown changes
+  currentPackDropdown.addEventListener('change', async () => {
+    await verifyAndUpdatePackStatus();
+  });
+
+  // Add button event listeners
+  unpackBtn.addEventListener('click', async () => {
+    const selectedAssetId = currentPackDropdown.value;
+    const selectedPack = remainingPacks.find(p => p.asset_id == selectedAssetId);
+    if (selectedPack) {
+      try {
+        unpackBtn.disabled = true;
+        unpackBtn.textContent = '⏳ Unpacking...';
+        await doUnpack(selectedPack, action);
+        // Success - remove from list and show next
+        await removeCurrentPackAndAdvance();
+      } catch (error) {
+        unpackBtn.disabled = false;
+        unpackBtn.textContent = '📦 Unpack This Pack';
+        throw error;
+      }
+    }
+  });
+
+  claimBtn.addEventListener('click', async () => {
+    const selectedAssetId = currentPackDropdown.value;
+    const selectedPack = remainingPacks.find(p => p.asset_id == selectedAssetId);
+    if (selectedPack) {
+      try {
+        claimBtn.disabled = true;
+        claimBtn.textContent = '⏳ Claiming...';
+        await doClaim(selectedPack, action);
+        // Success - remove from list and show next
+        await removeCurrentPackAndAdvance();
+      } catch (error) {
+        claimBtn.disabled = false;
+        claimBtn.textContent = '🎁 Claim This Pack';
+        throw error;
+      }
+    }
+  });
+
+  skipBtn.addEventListener('click', async () => {
+    await removeCurrentPackAndAdvance();
+  });
+}
+
+// Verify ownership and update pack status display
+async function verifyAndUpdatePackStatus() {
+  const statusDiv = document.getElementById('pack-status');
+  const unpackBtn = document.getElementById('action-unpack-btn');
+  const claimBtn = document.getElementById('action-claim-btn');
+  const skipBtn = document.getElementById('action-skip-btn');
+
+  if (!currentPackDropdown || !statusDiv) return;
+
+  const selectedAssetId = currentPackDropdown.value;
+  const selectedPack = remainingPacks.find(p => p.asset_id == selectedAssetId);
+
+  if (!selectedPack) {
+    statusDiv.innerHTML = '<span style="color: var(--error);">❌ Pack not found</span>';
+    return;
+  }
+
+  // Hide all buttons while checking
+  unpackBtn.style.display = 'none';
+  claimBtn.style.display = 'none';
+  skipBtn.style.display = 'none';
+
+  // Show loading
+  statusDiv.innerHTML = `
+    <div style="display: flex; align-items: center;">
+      <div class="loader" style="width: 20px; height: 20px; border-width: 2px;"></div>
+      <span style="margin-left: 10px;">Verifying pack status...</span>
+    </div>
+  `;
+
+  try {
+    // Step 1: Check if pack is in unboxassets table (already unpacked, ready to claim)
+    console.log(`🔍 Checking if pack ${selectedAssetId} is claimable...`);
+    const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${selectedAssetId}`);
+    const rollData = await rollResponse.json();
+
+    if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
+      // Pack is ready to claim!
+      selectedPack.roll_ids = rollData.roll_ids;
+      selectedPack.is_claimable = true;
+
+      statusDiv.innerHTML = `
+        <div style="color: orange;">
+          ✅ <strong>Ready to Claim!</strong><br>
+          <span style="font-size: 0.9rem;">This pack has been unpacked and contains ${rollData.roll_ids.length} rolls.</span>
+        </div>
+      `;
+
+      claimBtn.style.display = 'block';
+      skipBtn.style.display = 'block';
       return;
     }
 
-    // Mark claimable packs
-    if (claimableMap[pack.asset_id]) {
-      pack.roll_ids = claimableMap[pack.asset_id].roll_ids;
-      pack.is_claimable = true;
-      console.log(`🎁 Pack ${pack.asset_id} (mint #${pack.template_mint}) CLAIMABLE (${pack.roll_ids.length} rolls)`);
+    // Step 2: Not claimable, check if we own it
+    console.log(`🔍 Checking ownership of pack ${selectedAssetId}...`);
+    const verifyResponse = await fetch(`${API_URL}/api/asset/verify-ownership`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        asset_id: selectedAssetId,
+        expected_owner: currentAccount
+      })
+    });
+
+    const verifyData = await verifyResponse.json();
+
+    if (verifyData.is_burned) {
+      // Pack is burned - remove and try next
+      statusDiv.innerHTML = `
+        <div style="color: var(--error);">
+          ❌ <strong>Pack Burned</strong><br>
+          <span style="font-size: 0.9rem;">This pack no longer exists. Removing from list...</span>
+        </div>
+      `;
+
+      // Auto-advance after 1 second
+      setTimeout(async () => {
+        await removeCurrentPackAndAdvance();
+      }, 1000);
+      return;
     }
 
-    validPacks.push(pack);
-  });
+    if (!verifyData.is_owned) {
+      // Pack not owned - remove and try next
+      statusDiv.innerHTML = `
+        <div style="color: var(--error);">
+          ❌ <strong>Not Owned</strong><br>
+          <span style="font-size: 0.9rem;">Owner: ${verifyData.current_owner || 'unknown'}. Removing from list...</span>
+        </div>
+      `;
 
-  if (validPacks.length === 0) {
-    throw new Error(`No packs available.`);
+      // Auto-advance after 1 second
+      setTimeout(async () => {
+        await removeCurrentPackAndAdvance();
+      }, 1000);
+      return;
+    }
+
+    // Pack is owned and not yet unpacked - ready to unpack!
+    statusDiv.innerHTML = `
+      <div style="color: var(--success);">
+        ✅ <strong>Owned & Ready</strong><br>
+        <span style="font-size: 0.9rem;">You can unpack this pack now.</span>
+      </div>
+    `;
+
+    unpackBtn.style.display = 'block';
+    skipBtn.style.display = 'block';
+
+  } catch (error) {
+    console.error('Error verifying pack:', error);
+    statusDiv.innerHTML = `
+      <div style="color: var(--error);">
+        ❌ <strong>Verification Error</strong><br>
+        <span style="font-size: 0.9rem;">${error.message}</span>
+      </div>
+    `;
+    skipBtn.style.display = 'block';
   }
-
-  const claimableCount = validPacks.filter(p => p.is_claimable).length;
-  console.log(`✅ ${validPacks.length} packs (${claimableCount} claimable, ${validPacks.length - claimableCount} to unpack)`);
-
-  // Sort by lowest mint first
-  validPacks.sort((a, b) => parseInt(a.template_mint || 0) - parseInt(b.template_mint || 0));
-
-  currentUnpackAction = action;
-  showPackSelectionModal(validPacks);
 }
 
-// Pack pagination
+// Remove current pack from list and advance to next
+async function removeCurrentPackAndAdvance() {
+  if (!currentPackDropdown) return;
+
+  const selectedAssetId = currentPackDropdown.value;
+  const selectedIndex = remainingPacks.findIndex(p => p.asset_id == selectedAssetId);
+
+  if (selectedIndex !== -1) {
+    remainingPacks.splice(selectedIndex, 1);
+  }
+
+  if (remainingPacks.length === 0) {
+    // No more packs
+    const actionCard = document.querySelector(`[data-action-id="${currentUnpackAction.id}"]`);
+    if (actionCard) {
+      const buttonContainer = actionCard.querySelector('.action-buttons');
+      if (buttonContainer) {
+        buttonContainer.innerHTML = `
+          <div style="padding: 15px; background: var(--bg-card-hover); border-radius: 8px; text-align: center;">
+            <div style="font-size: 1.5rem; margin-bottom: 10px;">🎉</div>
+            <div style="font-weight: bold; margin-bottom: 5px;">All packs processed!</div>
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">No more packs available to unpack.</div>
+          </div>
+        `;
+      }
+    }
+    return;
+  }
+
+  // Rebuild dropdown with remaining packs
+  currentPackDropdown.innerHTML = remainingPacks.map((pack, idx) => `
+    <option value="${pack.asset_id}" data-pack-index="${idx}">
+      Mint #${pack.template_mint || 'Unknown'} - Asset ID: ${pack.asset_id}
+    </option>
+  `).join('');
+
+  // Auto-verify the new selection
+  await verifyAndUpdatePackStatus();
+}
+
+// Pack pagination (OLD - keeping for reference but not used)
 let allPacksForModal = [];
 let currentPackPage = 0;
 const PACKS_PER_PAGE = 15;
 
-// Show pack selection modal with pagination
+// Show pack selection modal with pagination (OLD - not used anymore)
 function showPackSelectionModal(packs) {
-  allPacksForModal = packs;
-  currentPackPage = 0;
-  renderPackPage();
-  packModal.style.display = 'block';
+  // This function is deprecated - using dropdown instead
+  console.warn('showPackSelectionModal is deprecated - use showPackDropdown instead');
 }
 
 // Render current page of packs
