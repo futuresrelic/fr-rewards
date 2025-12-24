@@ -225,6 +225,18 @@ async function loadStoryProgress() {
     storySection.style.display = 'none';
     noStorySection.style.display = 'none';
 
+    // Load story tabs
+    try {
+      const tabsResponse = await fetch(`${API_URL}/api/story/tabs`);
+      const tabsData = await tabsResponse.json();
+      if (tabsData.success && tabsData.tabs.length > 0) {
+        storyTabs = tabsData.tabs;
+      }
+    } catch (error) {
+      console.error('Error loading story tabs:', error);
+      // Continue even if tabs fail to load
+    }
+
     const response = await fetch(`${API_URL}/api/workflow/progress/${currentAccount}`);
 
     if (!response.ok) {
@@ -242,11 +254,64 @@ async function loadStoryProgress() {
     }
 
     displayStoryProgress(progress);
+    renderStoryTabs();
   } catch (error) {
     loadingSection.style.display = 'none';
     showError('Error loading story progress: ' + error.message);
     console.error('Error:', error);
   }
+}
+
+// Render story tabs
+function renderStoryTabs() {
+  const tabsBar = document.getElementById('story-tabs-bar');
+  const tabsContainer = document.getElementById('story-tabs-container');
+
+  if (!tabsBar || !tabsContainer) {
+    console.warn('Story tabs elements not found');
+    return;
+  }
+
+  if (storyTabs.length === 0) {
+    tabsBar.style.display = 'none';
+    return;
+  }
+
+  tabsBar.style.display = 'block';
+
+  // Add "All" tab
+  tabsContainer.innerHTML = `
+    <button onclick="filterByTab(null)" class="btn ${selectedTabId === null ? 'btn-primary' : 'btn-secondary'}" style="padding: 10px 20px;">
+      📖 All Actions
+    </button>
+  `;
+
+  // Add custom tabs
+  storyTabs.forEach(tab => {
+    tabsContainer.innerHTML += `
+      <button onclick="filterByTab(${tab.id})" class="btn ${selectedTabId === tab.id ? 'btn-primary' : 'btn-secondary'}" style="padding: 10px 20px;">
+        ${tab.tab_icon} ${tab.tab_name}
+      </button>
+    `;
+  });
+}
+
+// Filter actions by tab
+function filterByTab(tabId) {
+  selectedTabId = tabId;
+  renderStoryTabs(); // Re-render to update active state
+
+  // Filter actions
+  const allActions = document.querySelectorAll('[data-action-id]');
+  allActions.forEach(actionEl => {
+    const actionTabId = actionEl.getAttribute('data-tab-id');
+    // Show if: no tab selected (null) OR action has no tab (empty string) OR tab matches
+    if (selectedTabId === null || actionTabId === '' || actionTabId === String(selectedTabId)) {
+      actionEl.style.display = '';
+    } else {
+      actionEl.style.display = 'none';
+    }
+  });
 }
 
 // Display story progress
@@ -274,6 +339,7 @@ function displayStoryProgress(progress) {
       action_name: item.action_name,
       action_description: item.action_description,
       action_config: item.action_config,
+      tab_id: item.tab_id,
       completed_at: item.completed_at,
       transaction_id: item.transaction_id,
       result_data: item.result_data
@@ -431,6 +497,10 @@ function createActionCard(action, actionTypeEmoji) {
   const actionCard = document.createElement('div');
   actionCard.id = `action-${action.action_id}`;
   actionCard.style.cssText = `background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 2px solid ${isCompleted ? 'var(--success)' : 'var(--border)'};`;
+
+  // Add data attributes for tab filtering
+  actionCard.setAttribute('data-action-id', action.action_id);
+  actionCard.setAttribute('data-tab-id', action.tab_id || '');
 
   actionCard.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: start; gap: 15px;">

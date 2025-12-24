@@ -4,9 +4,10 @@
   "description": "WAX NFT Holder Rewards System",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node scripts/migrate-all.js && node server.js",
     "dev": "nodemon server.js",
-    "init-db": "node scripts/init-db.js"
+    "init-db": "node scripts/init-db.js",
+    "migrate": "node scripts/migrate-all.js"
   },
   "keywords": [
     "wax",
