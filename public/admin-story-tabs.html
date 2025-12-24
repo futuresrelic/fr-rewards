@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Story Tabs Manager - Admin</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📑 Story Tabs & Navigation Manager</h1>
+      <p class="subtitle">Organize your story into tabs and configure navigation</p>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <a href="admin.html" class="nav-tab">⚙️ Main Admin</a>
+      <a href="admin-workflow.html" class="nav-tab">📖 Story Workflow</a>
+      <a href="admin-story-tabs.html" class="nav-tab active">📑 Story Tabs</a>
+    </nav>
+
+    <!-- Login Section -->
+    <div id="admin-login" class="card">
+      <h2>Admin Authentication</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="admin-password">Admin Password:</label>
+          <input type="password" id="admin-password" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+      <div id="login-error" class="alert alert-error" style="display: none;"></div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="admin-dashboard" style="display: none;">
+      <div class="user-header">
+        <div class="user-info">
+          <span class="label">Story Tabs Admin Session</span>
+        </div>
+        <button id="admin-logout" class="btn btn-secondary btn-sm">Logout</button>
+      </div>
+
+      <!-- Navigation Settings -->
+      <div class="card">
+        <h2>🧭 Main Navigation Settings</h2>
+        <p>Control which main navigation tabs are visible to users</p>
+
+        <div style="background: var(--bg-dark); padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="nav-show-claims" style="width: 20px; height: 20px;">
+              <span style="font-weight: bold;">🎁 Show "Claim Rewards" Tab</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="nav-show-unpack" style="width: 20px; height: 20px;">
+              <span style="font-weight: bold;">📦 Show "Unpack" Tab</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="nav-show-story" style="width: 20px; height: 20px;">
+              <span style="font-weight: bold;">📖 Show "Story" Tab</span>
+            </label>
+          </div>
+
+          <button id="save-nav-config" class="btn btn-primary" style="margin-top: 15px;">💾 Save Navigation Settings</button>
+        </div>
+        <div id="nav-message" class="alert" style="display: none;"></div>
+      </div>
+
+      <!-- Story Tabs Management -->
+      <div class="card">
+        <h2>📑 Story Tabs</h2>
+        <p>Create tabs to organize your story actions. Users will see these tabs within the Story page.</p>
+
+        <!-- Add New Tab Form -->
+        <div class="card" style="background: var(--bg-dark); margin: 20px 0; padding: 20px;">
+          <h3>Add New Tab</h3>
+          <form id="add-tab-form">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+              <div class="form-group">
+                <label for="new-tab-order">Tab Order:</label>
+                <input type="number" id="new-tab-order" class="form-control" required min="1">
+                <small>Display order (1, 2, 3...)</small>
+              </div>
+              <div class="form-group">
+                <label for="new-tab-name">Tab Name:</label>
+                <input type="text" id="new-tab-name" class="form-control" required placeholder="Daily Quests">
+                <small>Tab display name</small>
+              </div>
+              <div class="form-group">
+                <label for="new-tab-icon">Icon:</label>
+                <input type="text" id="new-tab-icon" class="form-control" placeholder="📖" maxlength="2">
+                <small>Emoji icon</small>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">➕ Add Tab</button>
+          </form>
+        </div>
+
+        <!-- Tabs List -->
+        <div id="tabs-list" style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
+          <p style="color: var(--text-secondary);">Loading...</p>
+        </div>
+        <div id="tab-message" class="alert" style="display: none;"></div>
+      </div>
+
+      <!-- Instructions -->
+      <div class="card">
+        <h2>💡 How to Use Story Tabs</h2>
+        <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px;">
+          <ol style="margin: 0; padding-left: 20px;">
+            <li><strong>Create Tabs:</strong> Create tabs for different segments (e.g., "Daily", "Weekly", "Main Story")</li>
+            <li><strong>Assign Actions to Tabs:</strong> Go to "Story Workflow" and edit actions to assign them to specific tabs</li>
+            <li><strong>Users See Tabs:</strong> Players will see tabs in the Story page and can click to filter actions</li>
+            <li><strong>Hide Main Tabs:</strong> Use Navigation Settings to hide "Claim Rewards" or "Unpack" if not needed</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p>Powered by WAX Blockchain</p>
+    </footer>
+  </div>
+
+  <script src="admin-story-tabs.js"></script>
+</body>
+</html>

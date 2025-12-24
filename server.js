@@ -1267,6 +1267,159 @@ app.post('/api/workflow/complete', async (req, res) => {
   }
 });
 
+// ==================== STORY TABS ADMIN ENDPOINTS ====================
+
+/**
+ * GET /api/admin/story/tabs
+ * Get all story tabs
+ */
+app.get('/api/admin/story/tabs', authenticateAdmin, async (req, res) => {
+  try {
+    const tabs = db.storyTabs.getAll();
+    res.json({ success: true, tabs });
+  } catch (error) {
+    console.error('Error fetching story tabs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/story/tabs
+ * Add a new story tab
+ */
+app.post('/api/admin/story/tabs', authenticateAdmin, async (req, res) => {
+  try {
+    const { tab_order, tab_name, tab_icon } = req.body;
+
+    if (!tab_order || !tab_name) {
+      return res.status(400).json({ error: 'tab_order and tab_name are required' });
+    }
+
+    const result = db.storyTabs.add(
+      parseInt(tab_order),
+      tab_name,
+      tab_icon || '📖'
+    );
+
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    console.error('Error adding story tab:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/story/tabs/:id
+ * Update a story tab
+ */
+app.put('/api/admin/story/tabs/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tab_order, tab_name, tab_icon, enabled } = req.body;
+
+    const existingTab = db.storyTabs.getById(parseInt(id));
+    if (!existingTab) {
+      return res.status(404).json({ error: 'Story tab not found' });
+    }
+
+    const updateData = {
+      tab_order: tab_order !== undefined ? parseInt(tab_order) : existingTab.tab_order,
+      tab_name: tab_name !== undefined ? tab_name : existingTab.tab_name,
+      tab_icon: tab_icon !== undefined ? tab_icon : existingTab.tab_icon,
+      enabled: enabled !== undefined ? enabled : existingTab.enabled
+    };
+
+    db.storyTabs.update(parseInt(id), updateData);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating story tab:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/story/tabs/:id
+ * Delete a story tab
+ */
+app.delete('/api/admin/story/tabs/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    db.storyTabs.delete(parseInt(id));
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting story tab:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/story/tabs
+ * Get enabled story tabs (public endpoint)
+ */
+app.get('/api/story/tabs', async (req, res) => {
+  try {
+    const tabs = db.storyTabs.getEnabled();
+    res.json({ success: true, tabs });
+  } catch (error) {
+    console.error('Error fetching story tabs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== NAVIGATION CONFIG ENDPOINTS ====================
+
+/**
+ * GET /api/admin/config/navigation
+ * Get navigation configuration
+ */
+app.get('/api/admin/config/navigation', authenticateAdmin, async (req, res) => {
+  try {
+    const navConfig = db.config.getNavConfig();
+    res.json({ success: true, config: navConfig });
+  } catch (error) {
+    console.error('Error fetching navigation config:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/config/navigation
+ * Update navigation configuration
+ */
+app.put('/api/admin/config/navigation', authenticateAdmin, async (req, res) => {
+  try {
+    const { show_claims, show_unpack, show_story } = req.body;
+
+    const navConfig = {
+      show_claims: show_claims !== undefined ? show_claims : true,
+      show_unpack: show_unpack !== undefined ? show_unpack : true,
+      show_story: show_story !== undefined ? show_story : true
+    };
+
+    db.config.updateNavConfig(navConfig);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating navigation config:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/config/navigation
+ * Get navigation configuration (public endpoint)
+ */
+app.get('/api/config/navigation', async (req, res) => {
+  try {
+    const navConfig = db.config.getNavConfig();
+    res.json({ success: true, config: navConfig });
+  } catch (error) {
+    console.error('Error fetching navigation config:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /**
  * GET /api/user/assets/:account/:template_id
  * Proxy endpoint to fetch user's assets from AtomicAssets API (avoids CORS)

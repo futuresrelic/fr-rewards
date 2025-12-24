@@ -404,6 +404,28 @@ const config = {
     fields.push('updated_at = CURRENT_TIMESTAMP');
     const sql = `UPDATE config SET ${fields.join(', ')} WHERE id = 1`;
     return db.prepare(sql).run(...values);
+  },
+
+  getNavConfig: () => {
+    const cfg = db.prepare('SELECT nav_config FROM config WHERE id = 1').get();
+    if (!cfg || !cfg.nav_config) {
+      return { show_claims: true, show_unpack: true, show_story: true };
+    }
+    try {
+      return JSON.parse(cfg.nav_config);
+    } catch {
+      return { show_claims: true, show_unpack: true, show_story: true };
+    }
+  },
+
+  updateNavConfig: (navConfig) => {
+    const stmt = db.prepare(`
+      UPDATE config
+      SET nav_config = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1
+    `);
+    return stmt.run(JSON.stringify(navConfig));
   }
 };
 
@@ -814,6 +836,54 @@ const userWorkflowProgress = {
   }
 };
 
+// Story Tabs methods
+const storyTabs = {
+  getAll: () => {
+    return db.prepare('SELECT * FROM story_tabs ORDER BY tab_order ASC').all();
+  },
+
+  getEnabled: () => {
+    return db.prepare('SELECT * FROM story_tabs WHERE enabled = 1 ORDER BY tab_order ASC').all();
+  },
+
+  getById: (id) => {
+    return db.prepare('SELECT * FROM story_tabs WHERE id = ?').get(id);
+  },
+
+  add: (tab_order, tab_name, tab_icon) => {
+    const stmt = db.prepare(`
+      INSERT INTO story_tabs (tab_order, tab_name, tab_icon, enabled)
+      VALUES (?, ?, ?, 1)
+    `);
+    return stmt.run(tab_order, tab_name, tab_icon);
+  },
+
+  update: (id, data) => {
+    const stmt = db.prepare(`
+      UPDATE story_tabs
+      SET tab_order = ?,
+          tab_name = ?,
+          tab_icon = ?,
+          enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(data.tab_order, data.tab_name, data.tab_icon, data.enabled, id);
+  },
+
+  delete: (id) => {
+    return db.prepare('DELETE FROM story_tabs WHERE id = ?').run(id);
+  },
+
+  enable: (id) => {
+    return db.prepare('UPDATE story_tabs SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  },
+
+  disable: (id) => {
+    return db.prepare('UPDATE story_tabs SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  }
+};
+
 module.exports = {
   db,
   config,
@@ -824,5 +894,6 @@ module.exports = {
   workflowSteps,
   workflowActions,
   workflowConditions,
-  userWorkflowProgress
+  userWorkflowProgress,
+  storyTabs
 };
