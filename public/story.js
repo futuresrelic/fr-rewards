@@ -42,6 +42,10 @@ let currentBlendAction = null;
 let currentBlendConfig = null;
 let availableBlendAssets = [];
 
+// Story tabs state
+let storyTabs = [];
+let selectedTabId = null;  // null = show all
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   await loadPageBranding();
