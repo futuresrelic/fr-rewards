@@ -1615,6 +1615,101 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
 });
 
 /**
+ * GET /api/user/claimable-packs/:account
+ * Query atomicpacksx unboxpacks table to find all packs ready to claim for a user
+ * Returns packs that have been unpacked but not yet claimed
+ */
+app.get('/api/user/claimable-packs/:account', async (req, res) => {
+  try {
+    const { account } = req.params;
+
+    if (!account) {
+      return res.status(400).json({ error: 'account is required' });
+    }
+
+    console.log(`Querying claimable packs for ${account}...`);
+
+    const { JsonRpc } = require('eosjs');
+    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+
+    // Query the unboxpacks table - scope is the user's account
+    // This table contains all packs that have been unpacked but not claimed
+    const result = await rpc.get_table_rows({
+      json: true,
+      code: 'atomicpacksx',
+      scope: 'atomicpacksx',  // Global scope for unboxpacks
+      table: 'unboxpacks',
+      lower_bound: account,
+      upper_bound: account,
+      key_type: 'name',
+      index_position: 2,  // Secondary index by unlock_account (claimer)
+      limit: 100,
+      reverse: false,
+      show_payer: false
+    });
+
+    console.log(`Found ${result.rows.length} entries in unboxpacks table`);
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.json({
+        success: true,
+        claimable_packs: [],
+        count: 0
+      });
+    }
+
+    // For each pack, fetch the roll details from unboxassets table
+    const claimablePacks = [];
+
+    for (const row of result.rows) {
+      try {
+        const packAssetId = row.pack_asset_id;
+
+        // Query unboxassets table for this pack's rolls
+        const rollsResult = await rpc.get_table_rows({
+          json: true,
+          code: 'atomicpacksx',
+          scope: packAssetId,
+          table: 'unboxassets',
+          limit: 1000,
+          reverse: false,
+          show_payer: false
+        });
+
+        const rollIds = rollsResult.rows
+          .map(r => parseInt(r.origin_roll_id))
+          .sort((a, b) => a - b);
+
+        if (rollIds.length > 0) {
+          claimablePacks.push({
+            pack_asset_id: packAssetId,
+            pack_template_id: row.pack_template_id || null,
+            roll_ids: rollIds,
+            roll_count: rollIds.length,
+            unlock_time: row.unlock_time || null
+          });
+
+          console.log(`  ✅ Pack ${packAssetId}: ${rollIds.length} rolls ready to claim`);
+        }
+      } catch (error) {
+        console.warn(`  ⚠️ Error fetching rolls for pack ${row.pack_asset_id}:`, error.message);
+      }
+    }
+
+    console.log(`✅ Found ${claimablePacks.length} claimable packs for ${account}`);
+
+    res.json({
+      success: true,
+      claimable_packs: claimablePacks,
+      count: claimablePacks.length
+    });
+  } catch (error) {
+    console.error('Error fetching claimable packs:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * POST /api/pack/check-claimable
  * Check which pack asset IDs are in the unboxassets table (ready to claim)
  * Body: { asset_ids: [id1, id2, ...] }

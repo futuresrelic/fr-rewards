@@ -246,7 +246,7 @@ async function loadUserPacks(bustCache = false) {
     packsSection.style.display = 'none';
     noPacksSection.style.display = 'none';
 
-    // Fetch packs from backend API (avoids CORS issues)
+    // Fetch owned packs from AtomicAssets API
     const url = bustCache
       ? `${API_URL}/api/user/packs/${currentAccount}?t=${Date.now()}`
       : `${API_URL}/api/user/packs/${currentAccount}`;
@@ -257,48 +257,50 @@ async function loadUserPacks(bustCache = false) {
     }
 
     const data = await response.json();
-    let packs = data.packs || [];
+    let ownedPacks = data.packs || [];
 
     // Filter out recently unpacked assets (API cache workaround)
-    packs = filterRecentlyUnpacked(packs);
+    ownedPacks = filterRecentlyUnpacked(ownedPacks);
 
-    // Check which packs are claimable (already unpacked, waiting to be claimed)
-    if (packs.length > 0) {
-      console.log(`🔍 Checking claimable status for ${packs.length} packs...`);
-      const assetIds = packs.map(p => p.asset_id);
+    console.log(`📦 Found ${ownedPacks.length} owned packs`);
 
-      try {
-        const claimResponse = await fetch(`${API_URL}/api/pack/check-claimable`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ asset_ids: assetIds })
-        });
+    // Fetch claimable packs (unpacked but not claimed) from atomicpacksx
+    let claimablePacks = [];
+    try {
+      const claimUrl = bustCache
+        ? `${API_URL}/api/user/claimable-packs/${currentAccount}?t=${Date.now()}`
+        : `${API_URL}/api/user/claimable-packs/${currentAccount}`;
+      const claimResponse = await fetch(claimUrl);
 
-        if (claimResponse.ok) {
-          const claimData = await claimResponse.json();
-          if (claimData.success && claimData.claimable_status) {
-            // Add claimable status to each pack
-            packs.forEach(pack => {
-              const status = claimData.claimable_status[pack.asset_id];
-              if (status && status.is_claimable) {
-                pack.is_claimable = true;
-                pack.roll_ids = status.roll_ids;
-                pack.roll_count = status.roll_count;
-                console.log(`  ✅ Pack ${pack.asset_id} is CLAIMABLE (${status.roll_count} rolls)`);
-              }
-            });
-          }
+      if (claimResponse.ok) {
+        const claimData = await claimResponse.json();
+        if (claimData.success && claimData.claimable_packs) {
+          claimablePacks = claimData.claimable_packs;
+          console.log(`🎁 Found ${claimablePacks.length} claimable packs in atomicpacksx`);
+
+          // Mark each as claimable and add required fields
+          claimablePacks.forEach(pack => {
+            pack.is_claimable = true;
+            pack.asset_id = pack.pack_asset_id;
+            pack.template = {
+              template_id: pack.pack_template_id || 'Unknown'
+            };
+            console.log(`  ✅ Pack ${pack.asset_id} ready to claim (${pack.roll_count} rolls)`);
+          });
         }
-      } catch (error) {
-        console.warn('Could not check claimable status:', error.message);
-        // Continue without claimable info
       }
+    } catch (error) {
+      console.warn('Could not fetch claimable packs:', error.message);
+      // Continue without claimable packs
     }
+
+    // Combine owned packs and claimable packs
+    const allPacks = [...ownedPacks, ...claimablePacks];
 
     loadingSection.style.display = 'none';
 
-    if (packs.length > 0) {
-      displayPacks(packs);
+    if (allPacks.length > 0) {
+      displayPacks(allPacks);
     } else {
       noPacksSection.style.display = 'block';
     }
