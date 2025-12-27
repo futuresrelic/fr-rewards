@@ -1421,6 +1421,73 @@ app.get('/api/config/navigation', async (req, res) => {
 });
 
 /**
+ * GET /api/user/assets-rpc/:account/:template_id
+ * Query atomicassets contract DIRECTLY via blockchain RPC (no API cache!)
+ * Uses EOSNation/blockchain nodes to get real-time ownership data
+ */
+app.get('/api/user/assets-rpc/:account/:template_id', async (req, res) => {
+  try {
+    const { account, template_id } = req.params;
+
+    if (!account || !template_id) {
+      return res.status(400).json({ error: 'account and template_id are required' });
+    }
+
+    console.log(`Querying blockchain for ${account}'s assets, template ${template_id}...`);
+
+    const { JsonRpc } = require('eosjs');
+    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+
+    // Query atomicassets contract's assets table
+    // Scope = owner account, this gives us all assets owned by this account
+    const result = await rpc.get_table_rows({
+      json: true,
+      code: 'atomicassets',
+      scope: account, // Scope is the owner's account
+      table: 'assets',
+      lower_bound: '',
+      upper_bound: '',
+      limit: 1000,
+      reverse: false,
+      show_payer: false
+    });
+
+    console.log(`Found ${result.rows.length} total assets on blockchain for ${account}`);
+
+    // Filter by template ID
+    const matchingAssets = result.rows.filter(row =>
+      row.template_id == template_id
+    );
+
+    console.log(`Filtered to ${matchingAssets.length} assets with template ${template_id}`);
+
+    // Convert blockchain format to AtomicAssets API format for compatibility
+    const formattedAssets = matchingAssets.map(row => ({
+      asset_id: row.asset_id,
+      template: {
+        template_id: row.template_id.toString()
+      },
+      template_mint: row.template_mint || null,
+      owner: account,
+      collection_name: row.collection_name,
+      schema_name: row.schema_name,
+      backed_tokens: row.backed_tokens || [],
+      immutable_data: row.immutable_data || {},
+      mutable_data: row.mutable_data || {}
+    }));
+
+    res.json({
+      success: true,
+      source: 'blockchain_rpc',
+      data: formattedAssets
+    });
+  } catch (error) {
+    console.error('Error querying blockchain assets:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * GET /api/user/assets/:account/:template_id
  * Proxy endpoint to fetch user's assets from AtomicAssets API (avoids CORS)
  * Uses wax.getUserAssets with timeout and fallback endpoints

@@ -701,14 +701,14 @@ async function executeUnpack(action, config) {
     throw new Error('UNPACK action requires pack_template_id in config');
   }
 
-  // Fetch user's owned packs of this template via backend proxy (avoids CORS)
-  const packsResponse = await fetch(`${API_URL}/api/user/assets/${currentAccount}/${config.pack_template_id}`);
+  // Fetch user's owned packs of this template via blockchain RPC (no cache!)
+  const packsResponse = await fetch(`${API_URL}/api/user/assets-rpc/${currentAccount}/${config.pack_template_id}`);
   const packsData = await packsResponse.json();
 
   let ownedPacks = [];
   if (packsData.success && packsData.data && packsData.data.length > 0) {
     ownedPacks = packsData.data;
-    console.log(`📦 Found ${ownedPacks.length} owned packs from API`);
+    console.log(`📦 Found ${ownedPacks.length} owned packs from blockchain (real-time, no cache)`);
   }
 
   // Fetch claimable packs (unpacked but not claimed) from atomicpacksx
