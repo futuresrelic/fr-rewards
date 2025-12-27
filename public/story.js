@@ -701,19 +701,59 @@ async function executeUnpack(action, config) {
     throw new Error('UNPACK action requires pack_template_id in config');
   }
 
-  // Fetch user's packs of this template via backend proxy (avoids CORS)
+  // Fetch user's owned packs of this template via backend proxy (avoids CORS)
   const packsResponse = await fetch(`${API_URL}/api/user/assets/${currentAccount}/${config.pack_template_id}`);
   const packsData = await packsResponse.json();
 
-  if (!packsData.success || !packsData.data || packsData.data.length === 0) {
-    throw new Error(`You don't own any packs of template #${config.pack_template_id}`);
+  let ownedPacks = [];
+  if (packsData.success && packsData.data && packsData.data.length > 0) {
+    ownedPacks = packsData.data;
+    console.log(`📦 Found ${ownedPacks.length} owned packs from API`);
   }
 
-  let packs = packsData.data;
-  console.log(`📦 Found ${packs.length} total packs from API`);
+  // Fetch claimable packs (unpacked but not claimed) from atomicpacksx
+  let claimablePacks = [];
+  try {
+    const claimResponse = await fetch(`${API_URL}/api/user/claimable-packs/${currentAccount}`);
+    if (claimResponse.ok) {
+      const claimData = await claimResponse.json();
+      if (claimData.success && claimData.claimable_packs) {
+        // Filter claimable packs to only include the requested template
+        claimablePacks = claimData.claimable_packs.filter(pack =>
+          pack.pack_template_id == config.pack_template_id
+        );
 
-  // Quick filter: remove obviously burned packs
-  const candidatePacks = packs.filter(pack => {
+        if (claimablePacks.length > 0) {
+          console.log(`🎁 Found ${claimablePacks.length} claimable packs in atomicpacksx for template ${config.pack_template_id}`);
+
+          // Add required fields for display
+          claimablePacks.forEach(pack => {
+            pack.asset_id = pack.pack_asset_id;
+            pack.template = { template_id: pack.pack_template_id };
+            pack.template_mint = 'Claimable'; // No mint number for claimable packs
+            pack.is_claimable = true;
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Could not fetch claimable packs:', error.message);
+  }
+
+  // Combine owned packs and claimable packs
+  let allPacks = [...ownedPacks, ...claimablePacks];
+
+  if (allPacks.length === 0) {
+    throw new Error(`You don't have any packs of template #${config.pack_template_id} (owned or claimable)`);
+  }
+
+  console.log(`📦 Total packs available: ${allPacks.length} (${ownedPacks.length} owned + ${claimablePacks.length} claimable)`);
+
+  // Quick filter: remove obviously burned packs (only for owned packs)
+  const candidatePacks = allPacks.filter(pack => {
+    // Skip burn check for claimable packs (they're in atomicpacksx, not burned)
+    if (pack.is_claimable) return true;
+
     if (pack.burned_at_block || pack.burned_at_time || pack.burned_by_account) {
       console.log(`❌ Pack ${pack.asset_id} (mint #${pack.template_mint}) is burned - skipping`);
       return false;
@@ -725,10 +765,17 @@ async function executeUnpack(action, config) {
     throw new Error(`No packs available - all are burned.`);
   }
 
-  // Sort by HIGHEST mint first (user preference)
-  candidatePacks.sort((a, b) => parseInt(b.template_mint || 0) - parseInt(a.template_mint || 0));
+  // Sort: claimable packs first, then by HIGHEST mint
+  candidatePacks.sort((a, b) => {
+    // Claimable packs first
+    if (a.is_claimable && !b.is_claimable) return -1;
+    if (!a.is_claimable && b.is_claimable) return 1;
 
-  console.log(`✅ ${candidatePacks.length} candidate packs (sorted highest mint first)`);
+    // Otherwise sort by mint (highest first)
+    return parseInt(b.template_mint || 0) - parseInt(a.template_mint || 0);
+  });
+
+  console.log(`✅ ${candidatePacks.length} candidate packs (claimable packs shown first)`);
 
   currentUnpackAction = action;
   remainingPacks = [...candidatePacks]; // Clone array for auto-advancing
@@ -771,12 +818,12 @@ async function showPackDropdown(action) {
     <div class="pack-dropdown-container" style="margin-top: 15px;">
       <div style="margin-bottom: 10px;">
         <label for="pack-selector" style="display: block; margin-bottom: 5px; font-weight: bold;">
-          📦 Select Pack to Unpack:
+          📦 Select Pack:
         </label>
         <select id="pack-selector" class="form-control" style="width: 100%; padding: 10px; font-size: 1rem; background: var(--bg-dark); color: white; border: 2px solid var(--border); border-radius: 8px;">
           ${remainingPacks.map((pack, idx) => `
             <option value="${pack.asset_id}" data-pack-index="${idx}">
-              Mint #${pack.template_mint || 'Unknown'} - Asset ID: ${pack.asset_id}
+              ${pack.is_claimable ? '🎁 [CLAIMABLE]' : '📦'} Mint #${pack.template_mint || 'Unknown'} - Asset ID: ${pack.asset_id}
             </option>
           `).join('')}
         </select>
@@ -980,7 +1027,7 @@ async function removeCurrentPackAndAdvance() {
   // Rebuild dropdown with remaining packs
   currentPackDropdown.innerHTML = remainingPacks.map((pack, idx) => `
     <option value="${pack.asset_id}" data-pack-index="${idx}">
-      Mint #${pack.template_mint || 'Unknown'} - Asset ID: ${pack.asset_id}
+      ${pack.is_claimable ? '🎁 [CLAIMABLE]' : '📦'} Mint #${pack.template_mint || 'Unknown'} - Asset ID: ${pack.asset_id}
     </option>
   `).join('');
 
