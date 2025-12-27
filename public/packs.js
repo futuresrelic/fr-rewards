@@ -262,6 +262,39 @@ async function loadUserPacks(bustCache = false) {
     // Filter out recently unpacked assets (API cache workaround)
     packs = filterRecentlyUnpacked(packs);
 
+    // Check which packs are claimable (already unpacked, waiting to be claimed)
+    if (packs.length > 0) {
+      console.log(`🔍 Checking claimable status for ${packs.length} packs...`);
+      const assetIds = packs.map(p => p.asset_id);
+
+      try {
+        const claimResponse = await fetch(`${API_URL}/api/pack/check-claimable`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ asset_ids: assetIds })
+        });
+
+        if (claimResponse.ok) {
+          const claimData = await claimResponse.json();
+          if (claimData.success && claimData.claimable_status) {
+            // Add claimable status to each pack
+            packs.forEach(pack => {
+              const status = claimData.claimable_status[pack.asset_id];
+              if (status && status.is_claimable) {
+                pack.is_claimable = true;
+                pack.roll_ids = status.roll_ids;
+                pack.roll_count = status.roll_count;
+                console.log(`  ✅ Pack ${pack.asset_id} is CLAIMABLE (${status.roll_count} rolls)`);
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('Could not check claimable status:', error.message);
+        // Continue without claimable info
+      }
+    }
+
     loadingSection.style.display = 'none';
 
     if (packs.length > 0) {
@@ -343,24 +376,127 @@ function displayPacks(packs) {
     assets.forEach((asset, index) => {
       const packInstance = document.createElement('div');
       packInstance.style.marginBottom = '10px';
+
+      const isClaimable = asset.is_claimable === true;
+      const rollCount = asset.roll_count || 0;
+
       packInstance.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
           <div>
-            <div style="font-size: 0.9rem; color: var(--text-secondary);">Pack #${index + 1}</div>
+            <div style="font-size: 0.9rem; color: var(--text-secondary);">
+              Pack #${index + 1}
+              ${isClaimable ? `<span style="color: orange; margin-left: 8px;">● ${rollCount} rolls ready</span>` : ''}
+            </div>
             <div style="font-size: 0.8rem; color: var(--text-muted);">Asset ID: ${asset.asset_id}</div>
+            ${isClaimable ? '<div style="font-size: 0.75rem; color: orange; margin-top: 3px;">Already unpacked - click to claim contents</div>' : ''}
           </div>
-          <button class="btn btn-sm btn-success unpack-btn" data-asset-id="${asset.asset_id}" data-asset-name="${packData.name || 'Pack'}">
-            🎁 Unpack
+          <button class="btn btn-sm ${isClaimable ? 'btn-warning' : 'btn-success'} action-btn"
+                  data-asset-id="${asset.asset_id}"
+                  data-asset-name="${packData.name || 'Pack'}"
+                  data-is-claimable="${isClaimable}"
+                  data-roll-ids="${isClaimable ? JSON.stringify(asset.roll_ids) : '[]'}">
+            ${isClaimable ? '🎁 Claim Contents' : '📦 Unpack'}
           </button>
         </div>
       `;
       instancesContainer.appendChild(packInstance);
 
       // Add event listener
-      const unpackBtn = packInstance.querySelector('.unpack-btn');
-      unpackBtn.addEventListener('click', () => unpackPack(asset.asset_id, packData.name || 'Pack', unpackBtn));
+      const actionBtn = packInstance.querySelector('.action-btn');
+      if (isClaimable) {
+        actionBtn.addEventListener('click', () => claimPack(asset.asset_id, packData.name || 'Pack', asset.roll_ids, actionBtn));
+      } else {
+        actionBtn.addEventListener('click', () => unpackPack(asset.asset_id, packData.name || 'Pack', actionBtn));
+      }
     });
   });
+}
+
+// Claim pack contents that have already been unpacked
+async function claimPack(assetId, packName, rollIds, button) {
+  try {
+    button.disabled = true;
+    button.textContent = 'Claiming...';
+
+    console.log(`🎁 Claiming ${packName} (Asset ID: ${assetId}, ${rollIds.length} rolls)`);
+
+    let transactionId;
+
+    if (currentWalletType === 'anchor' && anchor) {
+      const result = await anchor.transact({
+        actions: [{
+          account: 'atomicpacksx',
+          name: 'claimunboxed',
+          authorization: [{
+            actor: currentAccount,
+            permission: 'active'
+          }],
+          data: {
+            pack_asset_id: assetId.toString(),
+            origin_roll_ids: rollIds
+          }
+        }]
+      }, {
+        blocksBehind: 3,
+        expireSeconds: 90
+      });
+      transactionId = result.transaction_id || result.transactionId || result.processed?.id;
+    } else if (currentWalletType === 'wcw') {
+      const result = await wax.api.transact({
+        actions: [{
+          account: 'atomicpacksx',
+          name: 'claimunboxed',
+          authorization: [{
+            actor: wax.userAccount,
+            permission: 'active'
+          }],
+          data: {
+            pack_asset_id: assetId.toString(),
+            origin_roll_ids: rollIds
+          }
+        }]
+      }, {
+        blocksBehind: 3,
+        expireSeconds: 1200
+      });
+      transactionId = result.transaction_id || 'completed';
+    } else {
+      throw new Error('No wallet connected');
+    }
+
+    showError(`Success! Claimed ${rollIds.length} NFTs from pack. TX: ${transactionId}`, 'success');
+
+    // Track this asset as unpacked (prevent showing in cached API results)
+    trackUnpackedAsset(assetId);
+
+    // Immediately hide the claimed pack from UI
+    button.textContent = '✅ Claimed!';
+    const packInstance = button.closest('div[style*="margin-bottom"]');
+    if (packInstance) {
+      packInstance.style.transition = 'opacity 0.5s';
+      packInstance.style.opacity = '0';
+      setTimeout(() => packInstance.remove(), 500);
+    }
+
+    // Reload packs with multiple attempts (API needs time to update)
+    let attempts = 0;
+    const maxAttempts = 3;
+    const reloadInterval = setInterval(async () => {
+      attempts++;
+      console.log(`🔄 Refreshing pack list (attempt ${attempts}/${maxAttempts})...`);
+      await loadUserPacks(true); // Force fresh data with cache busting
+
+      if (attempts >= maxAttempts) {
+        clearInterval(reloadInterval);
+      }
+    }, 4000); // Check every 4 seconds, 3 times = 12 seconds total
+
+  } catch (error) {
+    console.error('Claim error:', error);
+    showError('Claim failed: ' + (error.message || error));
+    button.disabled = false;
+    button.textContent = '🎁 Claim Contents';
+  }
 }
 
 // Unpack a pack by transferring to atomicpacksx
