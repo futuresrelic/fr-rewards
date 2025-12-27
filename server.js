@@ -1438,31 +1438,50 @@ app.get('/api/user/assets-rpc/:account/:template_id', async (req, res) => {
     const { JsonRpc } = require('eosjs');
     const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
 
-    // Query atomicassets contract's assets table
-    // Scope = owner account, this gives us all assets owned by this account
-    const result = await rpc.get_table_rows({
-      json: true,
-      code: 'atomicassets',
-      scope: account, // Scope is the owner's account
-      table: 'assets',
-      lower_bound: '',
-      upper_bound: '',
-      limit: 1000,
-      reverse: false,
-      show_payer: false
-    });
+    let allMatchingAssets = [];
+    let hasMore = true;
+    let lowerBound = '';
+    let totalChecked = 0;
 
-    console.log(`Found ${result.rows.length} total assets on blockchain for ${account}`);
+    // Paginate through all assets until we find all matching templates
+    while (hasMore && totalChecked < 10000) { // Safety limit: max 10k assets to check
+      const result = await rpc.get_table_rows({
+        json: true,
+        code: 'atomicassets',
+        scope: account,
+        table: 'assets',
+        lower_bound: lowerBound,
+        upper_bound: '',
+        limit: 1000,
+        reverse: false,
+        show_payer: false
+      });
 
-    // Filter by template ID
-    const matchingAssets = result.rows.filter(row =>
-      row.template_id == template_id
-    );
+      totalChecked += result.rows.length;
 
-    console.log(`Filtered to ${matchingAssets.length} assets with template ${template_id}`);
+      // Filter this batch for matching template
+      const matchingInBatch = result.rows.filter(row =>
+        row.template_id == template_id
+      );
+
+      allMatchingAssets = allMatchingAssets.concat(matchingInBatch);
+
+      console.log(`  Page ${Math.ceil(totalChecked / 1000)}: checked ${result.rows.length} assets, found ${matchingInBatch.length} matching (total: ${allMatchingAssets.length})`);
+
+      // Check if there are more results
+      if (result.more) {
+        // Set lower_bound to the next asset_id
+        const lastAsset = result.rows[result.rows.length - 1];
+        lowerBound = (BigInt(lastAsset.asset_id) + BigInt(1)).toString();
+      } else {
+        hasMore = false;
+      }
+    }
+
+    console.log(`✅ Blockchain query complete: checked ${totalChecked} assets, found ${allMatchingAssets.length} with template ${template_id}`);
 
     // Convert blockchain format to AtomicAssets API format for compatibility
-    const formattedAssets = matchingAssets.map(row => ({
+    const formattedAssets = allMatchingAssets.map(row => ({
       asset_id: row.asset_id,
       template: {
         template_id: row.template_id.toString()
@@ -1479,6 +1498,7 @@ app.get('/api/user/assets-rpc/:account/:template_id', async (req, res) => {
     res.json({
       success: true,
       source: 'blockchain_rpc',
+      total_checked: totalChecked,
       data: formattedAssets
     });
   } catch (error) {
