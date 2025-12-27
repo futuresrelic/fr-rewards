@@ -712,28 +712,24 @@ async function executeUnpack(action, config) {
   }
 
   // Fetch claimable packs (unpacked but not claimed) from atomicpacksx
+  // Show ALL claimable packs regardless of template (same as packs page)
   let claimablePacks = [];
   try {
     const claimResponse = await fetch(`${API_URL}/api/user/claimable-packs/${currentAccount}`);
     if (claimResponse.ok) {
       const claimData = await claimResponse.json();
       if (claimData.success && claimData.claimable_packs) {
-        // Filter claimable packs to only include the requested template
-        claimablePacks = claimData.claimable_packs.filter(pack =>
-          pack.pack_template_id == config.pack_template_id
-        );
+        claimablePacks = claimData.claimable_packs;
+        console.log(`🎁 Found ${claimablePacks.length} claimable packs in atomicpacksx`);
 
-        if (claimablePacks.length > 0) {
-          console.log(`🎁 Found ${claimablePacks.length} claimable packs in atomicpacksx for template ${config.pack_template_id}`);
-
-          // Add required fields for display
-          claimablePacks.forEach(pack => {
-            pack.asset_id = pack.pack_asset_id;
-            pack.template = { template_id: pack.pack_template_id };
-            pack.template_mint = 'Claimable'; // No mint number for claimable packs
-            pack.is_claimable = true;
-          });
-        }
+        // Add required fields for display
+        claimablePacks.forEach(pack => {
+          pack.asset_id = pack.pack_asset_id;
+          pack.template = { template_id: pack.pack_template_id };
+          pack.template_mint = 'Claimable'; // No mint number for claimable packs
+          pack.is_claimable = true;
+          console.log(`  ✅ Pack ${pack.asset_id} ready to claim (${pack.roll_count} rolls)`);
+        });
       }
     }
   } catch (error) {
