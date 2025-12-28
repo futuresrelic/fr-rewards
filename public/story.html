@@ -156,6 +156,22 @@
       </div>
     </div>
 
+    <!-- Unpacked Assets Modal -->
+    <div id="unpacked-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; overflow-y: auto; padding: 20px;">
+      <div class="card" style="max-width: 900px; margin: 40px auto; position: relative;">
+        <button id="close-unpacked-modal" style="position: absolute; top: 20px; right: 20px; background: var(--bg-card-hover); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">×</button>
+
+        <h2 style="text-align: center; margin-bottom: 10px;">🎉 Pack Unpacked!</h2>
+        <p style="color: var(--text-secondary); text-align: center; margin-bottom: 30px;">You received the following NFTs:</p>
+
+        <div id="unpacked-assets-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;"></div>
+
+        <div style="text-align: center;">
+          <button id="close-unpacked-btn" class="btn btn-primary" style="padding: 12px 40px;">✅ Continue</button>
+        </div>
+      </div>
+    </div>
+
     <footer>
       <p>Powered by WAX Blockchain | <a href="admin.html">Admin Panel</a> | <a href="index.html">Claims</a></p>
     </footer>

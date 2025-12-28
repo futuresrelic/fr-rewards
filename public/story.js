@@ -28,6 +28,10 @@ const blendSelectionList = document.getElementById('blend-selection-list');
 const blendSelectedCount = document.getElementById('blend-selected-count');
 const blendRequirementsText = document.getElementById('blend-requirements-text');
 const confirmBlendBtn = document.getElementById('confirm-blend-btn');
+const unpackedModal = document.getElementById('unpacked-modal');
+const unpackedAssetsGrid = document.getElementById('unpacked-assets-grid');
+const closeUnpackedBtn = document.getElementById('close-unpacked-btn');
+const closeUnpackedModalX = document.getElementById('close-unpacked-modal');
 
 // Pack selection state
 let selectedPack = null;  // Store full pack object with template data
@@ -100,6 +104,8 @@ function setupEventListeners() {
   document.getElementById('close-drop-modal').addEventListener('click', closeDropModal);
   document.getElementById('close-pack-modal').addEventListener('click', closePackModal);
   document.getElementById('close-blend-modal').addEventListener('click', closeBlendModal);
+  closeUnpackedBtn.addEventListener('click', closeUnpackedModal);
+  closeUnpackedModalX.addEventListener('click', closeUnpackedModal);
   confirmUnpackBtn.addEventListener('click', confirmUnpack);
   confirmClaimBtn.addEventListener('click', confirmClaim);
   confirmBlendBtn.addEventListener('click', confirmBlend);
@@ -112,7 +118,7 @@ function showError(message, type = 'error') {
   errorMessageEl.className = `alert alert-${type}`;
   errorMessageEl.style.display = 'block';
 
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Don't scroll to top - it's annoying when working through a story
 
   setTimeout(() => {
     errorMessageEl.style.display = 'none';
@@ -1219,6 +1225,64 @@ function closePackModal() {
   }
 }
 
+// Close unpacked assets modal
+function closeUnpackedModal() {
+  unpackedModal.style.display = 'none';
+  unpackedAssetsGrid.innerHTML = '';
+}
+
+// Show unpacked assets modal
+async function showUnpackedAssetsModal(claimedAssets) {
+  console.log(`🎨 Showing unpacked assets modal for ${claimedAssets.length} assets...`);
+
+  unpackedAssetsGrid.innerHTML = '';
+
+  for (const asset of claimedAssets) {
+    // Create asset card
+    const assetCard = document.createElement('div');
+    assetCard.style.cssText = `
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 15px;
+      text-align: center;
+      border: 2px solid var(--accent);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    `;
+
+    let mediaHtml = '<div style="font-size: 4rem;">🎁</div>';
+
+    if (asset.data) {
+      const immutableData = asset.data.data || {};
+      const templateData = asset.data.template?.immutable_data || {};
+      const combinedData = { ...templateData, ...immutableData };
+
+      // Check for video first, then image
+      if (combinedData.video) {
+        const videoUrl = combinedData.video.startsWith('Qm')
+          ? `https://ipfs.io/ipfs/${combinedData.video}`
+          : combinedData.video;
+        mediaHtml = `<video src="${videoUrl}" autoplay loop muted playsinline style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;"></video>`;
+      } else if (combinedData.img) {
+        const imgUrl = combinedData.img.startsWith('Qm')
+          ? `https://ipfs.io/ipfs/${combinedData.img}`
+          : combinedData.img;
+        mediaHtml = `<img src="${imgUrl}" alt="${asset.name}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">`;
+      }
+    }
+
+    assetCard.innerHTML = `
+      ${mediaHtml}
+      <div style="font-weight: bold; margin-bottom: 5px; color: var(--text-primary);">${asset.name}</div>
+      <div style="font-size: 0.85rem; color: var(--accent);">Mint #${asset.mint}</div>
+    `;
+
+    unpackedAssetsGrid.appendChild(assetCard);
+  }
+
+  // Show modal
+  unpackedModal.style.display = 'block';
+}
+
 // Confirm unpack
 async function confirmUnpack() {
   if (!selectedPack || !currentUnpackAction) {
@@ -1289,6 +1353,11 @@ async function doClaim(pack, action) {
   }]);
 
   showError(`Success! Pack contents claimed (${rollIds.length} rolls). TX: ${claimResult.transaction_id}`, 'success');
+
+  // Fetch asset details for the claimed assets and show modal
+  console.log('🎨 Fetching details for claimed assets...');
+  const claimedAssets = await fetchUnpackedAssetDetails(rollIds);
+  await showUnpackedAssetsModal(claimedAssets);
 
   // Mark action as complete
   await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
@@ -1381,6 +1450,11 @@ async function doUnpack(pack, action) {
 
   showError(`Success! Claimed ${rollIds.length} NFTs from pack. TX: ${claimResult.transaction_id}`, 'success');
 
+  // Fetch asset details for the unpacked assets and show modal
+  console.log('🎨 Fetching details for unpacked assets...');
+  const claimedAssets = await fetchUnpackedAssetDetails(rollIds);
+  await showUnpackedAssetsModal(claimedAssets);
+
   // Mark action as complete
   await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
     asset_id: assetId,
@@ -1389,6 +1463,57 @@ async function doUnpack(pack, action) {
     claim_tx: claimResult.transaction_id,
     rolls_claimed: rollIds.length
   }));
+}
+
+// Fetch details for unpacked assets
+async function fetchUnpackedAssetDetails(assetIds) {
+  const atomicEndpoints = [
+    'https://aa-wax-public1.neftyblocks.com',
+    'https://wax-aa.eosdac.io',
+    'https://atomic-wax-mainnet.wecan.dev',
+    'https://wax-atomic-api.eosphere.io'
+  ];
+
+  const assets = [];
+
+  for (const assetId of assetIds) {
+    let assetData = null;
+
+    // Try each endpoint
+    for (const endpoint of atomicEndpoints) {
+      try {
+        const response = await fetch(`${endpoint}/atomicassets/v1/assets/${assetId}`, {
+          timeout: 3000
+        });
+        if (response.ok) {
+          const data = await response.json();
+          assetData = data.data;
+          break;
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+
+    if (assetData) {
+      assets.push({
+        asset_id: assetId,
+        name: assetData.name || assetData.data?.name || 'Unknown NFT',
+        mint: assetData.template_mint || 'Unknown',
+        data: assetData
+      });
+    } else {
+      // Fallback if API fails
+      assets.push({
+        asset_id: assetId,
+        name: 'Unknown NFT',
+        mint: 'Unknown',
+        data: null
+      });
+    }
+  }
+
+  return assets;
 }
 
 // Show blend asset selection modal
