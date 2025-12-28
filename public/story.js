@@ -723,26 +723,24 @@ async function executeUnpack(action, config) {
   }
 
   // Fetch claimable packs (unpacked but not claimed) from atomicpacksx
-  // Filter by template to match this specific action's pack requirement
+  // EXACTLY LIKE PACKS.JS - Don't filter yet, just fetch all
   let claimablePacks = [];
   try {
     const claimResponse = await fetch(`${API_URL}/api/user/claimable-packs/${currentAccount}`);
     if (claimResponse.ok) {
       const claimData = await claimResponse.json();
       if (claimData.success && claimData.claimable_packs) {
-        // IMPORTANT: Filter claimable packs to match this action's template ID
-        claimablePacks = claimData.claimable_packs.filter(pack =>
-          pack.pack_template_id === parseInt(config.pack_template_id)
-        );
-        console.log(`🎁 Found ${claimablePacks.length} claimable packs for template ${config.pack_template_id} in atomicpacksx`);
+        claimablePacks = claimData.claimable_packs;
+        console.log(`🎁 Found ${claimablePacks.length} claimable packs in atomicpacksx`);
 
-        // Add required fields for display
+        // Mark each as claimable and add required fields - EXACTLY LIKE PACKS.JS
         claimablePacks.forEach(pack => {
-          pack.asset_id = pack.pack_asset_id;
-          pack.template = { template_id: pack.pack_template_id };
-          // template_mint now comes from backend (fetched from blockchain)
           pack.is_claimable = true;
-          console.log(`  ✅ Pack ${pack.asset_id} ready to claim (${pack.roll_count} rolls) - Mint #${pack.template_mint || 'Unknown'}`);
+          pack.asset_id = pack.pack_asset_id;
+          pack.template = {
+            template_id: pack.pack_template_id || 'Unknown'
+          };
+          console.log(`  ✅ Pack ${pack.asset_id} ready to claim (${pack.roll_count} rolls) - Template ${pack.pack_template_id}, Mint #${pack.template_mint || 'Unknown'}`);
         });
       }
     }
@@ -750,14 +748,20 @@ async function executeUnpack(action, config) {
     console.warn('Could not fetch claimable packs:', error.message);
   }
 
-  // Combine owned packs and claimable packs
+  // Combine owned packs and claimable packs - EXACTLY LIKE PACKS.JS
   let allPacks = [...ownedPacks, ...claimablePacks];
+
+  // NOW filter by template (works for both owned and claimable)
+  allPacks = allPacks.filter(pack => {
+    const templateId = pack.template?.template_id;
+    return templateId && parseInt(templateId) === parseInt(config.pack_template_id);
+  });
+
+  console.log(`📦 Total packs for template ${config.pack_template_id}: ${allPacks.length} (${ownedPacks.length} owned total + ${claimablePacks.length} claimable total = ${allPacks.length} matching template)`);
 
   if (allPacks.length === 0) {
     throw new Error(`You don't have any packs of template #${config.pack_template_id} (owned or claimable)`);
   }
-
-  console.log(`📦 Total packs available: ${allPacks.length} (${ownedPacks.length} owned + ${claimablePacks.length} claimable)`);
 
   // Quick filter: remove obviously burned packs (only for owned packs)
   const candidatePacks = allPacks.filter(pack => {
