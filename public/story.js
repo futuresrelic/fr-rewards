@@ -32,6 +32,9 @@ const unpackedModal = document.getElementById('unpacked-modal');
 const unpackedAssetsGrid = document.getElementById('unpacked-assets-grid');
 const closeUnpackedBtn = document.getElementById('close-unpacked-btn');
 const closeUnpackedModalX = document.getElementById('close-unpacked-modal');
+const blendArrayModal = document.getElementById('blend-array-modal');
+const blendArrayOptionsList = document.getElementById('blend-array-options-list');
+const closeBlendArrayModal = document.getElementById('close-blend-array-modal');
 
 // Pack selection state
 let selectedPack = null;  // Store full pack object with template data
@@ -45,6 +48,10 @@ let selectedBlendAssets = [];
 let currentBlendAction = null;
 let currentBlendConfig = null;
 let availableBlendAssets = [];
+
+// Blend array state
+let currentBlendArrayAction = null;
+let currentBlendArrayConfig = null;
 
 // Story tabs state
 let storyTabs = [];
@@ -106,6 +113,7 @@ function setupEventListeners() {
   document.getElementById('close-blend-modal').addEventListener('click', closeBlendModal);
   closeUnpackedBtn.addEventListener('click', closeUnpackedModal);
   closeUnpackedModalX.addEventListener('click', closeUnpackedModal);
+  closeBlendArrayModal.addEventListener('click', () => { blendArrayModal.style.display = 'none'; });
   confirmUnpackBtn.addEventListener('click', confirmUnpack);
   confirmClaimBtn.addEventListener('click', confirmClaim);
   confirmBlendBtn.addEventListener('click', confirmBlend);
@@ -602,6 +610,7 @@ function getActionButtonText(actionType) {
     'CLAIM': '🎁 Claim Reward',
     'UNPACK': '📦 Unpack Now',
     'BLEND': '🔮 Execute Blend',
+    'BLEND_ARRAY': '⚡ Execute Action',
     'DROP': '💧 View Drop',
     'MARKET_SCOUT': '🔍 Find on Market'
   };
@@ -674,6 +683,9 @@ async function executeAction(action) {
         break;
       case 'BLEND':
         await executeBlend(action, config);
+        break;
+      case 'BLEND_ARRAY':
+        await executeBlendArray(action, config);
         break;
       case 'DROP':
         await executeDrop(action, config);
@@ -1820,6 +1832,126 @@ async function executeBlend(action, config) {
 
   // Show asset selection modal
   showBlendAssetSelection(action, config, ingredientAssets);
+}
+
+// Execute BLEND_ARRAY action - allows choosing from multiple blend options
+async function executeBlendArray(action, config) {
+  if (!config || !config.blend_options || !Array.isArray(config.blend_options)) {
+    throw new Error('BLEND_ARRAY action requires blend_options array in config');
+  }
+
+  console.log(`⚡ BLEND_ARRAY with ${config.blend_options.length} options`);
+
+  // Get user's assets
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
+  const assetsData = await assetsResponse.json();
+
+  if (!assetsData.success) {
+    throw new Error('Failed to fetch assets');
+  }
+
+  const userAssets = assetsData.data;
+
+  // Check which blends are possible
+  const blendOptions = config.blend_options.map(option => {
+    // Filter assets by template IDs for this blend option
+    let ingredientAssets = userAssets;
+    if (option.ingredient_templates) {
+      const templateIds = option.ingredient_templates.map(t => t.toString());
+      ingredientAssets = userAssets.filter(asset =>
+        templateIds.includes(asset.template.template_id)
+      );
+    }
+
+    const canExecute = ingredientAssets.length >= (option.ingredient_count || 1);
+
+    return {
+      ...option,
+      available_assets: ingredientAssets,
+      can_execute: canExecute,
+      missing_count: canExecute ? 0 : (option.ingredient_count || 1) - ingredientAssets.length
+    };
+  });
+
+  // Sort: executable blends first
+  blendOptions.sort((a, b) => {
+    if (a.can_execute && !b.can_execute) return -1;
+    if (!a.can_execute && b.can_execute) return 1;
+    return 0;
+  });
+
+  // Show blend options modal
+  showBlendArrayOptions(action, config, blendOptions);
+}
+
+// Show blend array options modal
+function showBlendArrayOptions(action, baseConfig, blendOptions) {
+  currentBlendArrayAction = action;
+  currentBlendArrayConfig = baseConfig;
+
+  blendArrayOptionsList.innerHTML = '';
+
+  blendOptions.forEach((option, index) => {
+    const optionCard = document.createElement('div');
+    optionCard.style.cssText = `
+      background: ${option.can_execute ? 'var(--bg-card)' : 'var(--bg-card-hover)'};
+      border: 2px solid ${option.can_execute ? 'var(--accent)' : 'var(--border)'};
+      border-radius: 12px;
+      padding: 20px;
+      cursor: ${option.can_execute ? 'pointer' : 'not-allowed'};
+      opacity: ${option.can_execute ? '1' : '0.6'};
+      transition: all 0.2s;
+    `;
+
+    if (option.can_execute) {
+      optionCard.addEventListener('mouseenter', () => {
+        optionCard.style.transform = 'translateY(-2px)';
+        optionCard.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
+      });
+      optionCard.addEventListener('mouseleave', () => {
+        optionCard.style.transform = 'translateY(0)';
+        optionCard.style.boxShadow = 'none';
+      });
+      optionCard.addEventListener('click', () => executeBlendArrayOption(option));
+    }
+
+    optionCard.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <h3 style="margin: 0; color: var(--text-primary);">${option.name || `Blend Option ${index + 1}`}</h3>
+        <span style="padding: 4px 12px; background: ${option.can_execute ? 'var(--success)' : 'var(--error)'}; border-radius: 15px; font-size: 0.85rem; color: white;">
+          ${option.can_execute ? '✅ Available' : `❌ Need ${option.missing_count} more`}
+        </span>
+      </div>
+      ${option.description ? `<p style="margin: 10px 0; color: var(--text-secondary); font-size: 0.9rem;">${option.description}</p>` : ''}
+      <div style="margin-top: 10px; padding: 10px; background: var(--bg-dark); border-radius: 6px;">
+        <div style="font-size: 0.85rem; color: var(--text-secondary);">
+          <strong>Blend ID:</strong> ${option.blend_id}<br>
+          <strong>Required Assets:</strong> ${option.ingredient_count || 1}<br>
+          <strong>You Have:</strong> ${option.available_assets.length}
+        </div>
+      </div>
+    `;
+
+    blendArrayOptionsList.appendChild(optionCard);
+  });
+
+  // Show modal
+  blendArrayModal.style.display = 'block';
+}
+
+// Execute selected blend array option
+async function executeBlendArrayOption(option) {
+  if (!option.can_execute) {
+    return;
+  }
+
+  // Close blend options modal
+  blendArrayModal.style.display = 'none';
+
+  console.log(`🔮 Selected blend option: ${option.name} (ID: ${option.blend_id})`);
+
+  // Show asset selection modal for this specific blend
+  showBlendAssetSelection(currentBlendArrayAction, option, option.available_assets);
 }
 
 // Execute DROP action
