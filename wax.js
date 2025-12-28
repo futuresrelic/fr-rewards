@@ -455,12 +455,13 @@ async function verifyTransaction(transactionId) {
  * @returns {Promise<Array>} Array of assets with template data
  */
 async function getUserAssetsLive(account, collection = null, templateFilter = null) {
-  // Live RPC endpoints from EOSNation validator and other reliable sources
+  // Live RPC endpoints - prioritize alohaeos per user request
+  // These query blockchain DIRECTLY for real-time wallet ownership
   const rpcEndpoints = [
+    'https://api.wax.alohaeos.com',      // 🔴 PRIMARY - User requested
     'https://wax.greymass.com',
     'https://api.waxsweden.org',
     'https://wax.eosphere.io',
-    'https://api.wax.alohaeos.com',
     'https://wax.eu.eosamsterdam.net',
     'https://wax.cryptolions.io'
   ];

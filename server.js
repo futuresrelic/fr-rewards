@@ -1482,49 +1482,77 @@ app.get('/api/user/assets-rpc/:account/:template_id', async (req, res) => {
     console.log(`Querying blockchain for ${account}'s assets, template ${template_id}...`);
 
     const { JsonRpc } = require('eosjs');
-    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+
+    // LIVE RPC endpoints - wallet ownership check
+    const rpcEndpoints = [
+      'https://api.wax.alohaeos.com',    // PRIMARY per user request
+      'https://wax.greymass.com',
+      'https://api.waxsweden.org',
+      'https://wax.eosphere.io',
+      'https://wax.eu.eosamsterdam.net',
+      'https://wax.cryptolions.io'
+    ];
 
     let allMatchingAssets = [];
-    let hasMore = true;
-    let lowerBound = '';
-    let totalChecked = 0;
+    let querySuccess = false;
 
-    // Paginate through all assets until we find all matching templates
-    while (hasMore && totalChecked < 10000) { // Safety limit: max 10k assets to check
-      const result = await rpc.get_table_rows({
-        json: true,
-        code: 'atomicassets',
-        scope: account,
-        table: 'assets',
-        lower_bound: lowerBound,
-        upper_bound: '',
-        limit: 1000,
-        reverse: false,
-        show_payer: false
-      });
+    // Try each RPC endpoint until one succeeds
+    for (const endpoint of rpcEndpoints) {
+      try {
+        console.log(`  Trying RPC endpoint: ${endpoint}`);
+        const rpc = new JsonRpc(endpoint, { fetch });
 
-      totalChecked += result.rows.length;
+        let hasMore = true;
+        let lowerBound = '';
+        let totalChecked = 0;
 
-      // Filter this batch for matching template
-      const matchingInBatch = result.rows.filter(row =>
-        row.template_id == template_id
-      );
+        // Paginate through all assets until we find all matching templates
+        while (hasMore && totalChecked < 10000) { // Safety limit: max 10k assets to check
+          const result = await rpc.get_table_rows({
+            json: true,
+            code: 'atomicassets',
+            scope: account,
+            table: 'assets',
+            lower_bound: lowerBound,
+            upper_bound: '',
+            limit: 1000,
+            reverse: false,
+            show_payer: false
+          });
 
-      allMatchingAssets = allMatchingAssets.concat(matchingInBatch);
+          totalChecked += result.rows.length;
 
-      console.log(`  Page ${Math.ceil(totalChecked / 1000)}: checked ${result.rows.length} assets, found ${matchingInBatch.length} matching (total: ${allMatchingAssets.length})`);
+          // Filter this batch for matching template
+          const matchingInBatch = result.rows.filter(row =>
+            row.template_id == template_id
+          );
 
-      // Check if there are more results
-      if (result.more) {
-        // Set lower_bound to the next asset_id
-        const lastAsset = result.rows[result.rows.length - 1];
-        lowerBound = (BigInt(lastAsset.asset_id) + BigInt(1)).toString();
-      } else {
-        hasMore = false;
+          allMatchingAssets = allMatchingAssets.concat(matchingInBatch);
+
+          console.log(`  Page ${Math.ceil(totalChecked / 1000)}: checked ${result.rows.length} assets, found ${matchingInBatch.length} matching (total: ${allMatchingAssets.length})`);
+
+          // Check if there are more results
+          if (result.more) {
+            // Set lower_bound to the next asset_id
+            const lastAsset = result.rows[result.rows.length - 1];
+            lowerBound = (BigInt(lastAsset.asset_id) + BigInt(1)).toString();
+          } else {
+            hasMore = false;
+          }
+        }
+
+        console.log(`✅ Blockchain query complete via ${endpoint}: checked ${totalChecked} assets, found ${allMatchingAssets.length} with template ${template_id}`);
+        querySuccess = true;
+        break; // Success, exit endpoint loop
+      } catch (error) {
+        console.warn(`  ❌ RPC endpoint ${endpoint} failed:`, error.message);
+        continue; // Try next endpoint
       }
     }
 
-    console.log(`✅ Blockchain query complete: checked ${totalChecked} assets, found ${allMatchingAssets.length} with template ${template_id}`);
+    if (!querySuccess) {
+      throw new Error('All RPC endpoints failed for wallet ownership check');
+    }
 
     // Fetch template_mint for all assets from AtomicAssets API (blockchain doesn't always have it)
     // Use bulk endpoint for efficiency
@@ -1661,10 +1689,14 @@ app.get('/api/user/check-ownership/:account', async (req, res) => {
 
     // Use blockchain RPC to check ownership (real-time, no cache)
     const { JsonRpc } = require('eosjs');
+    // LIVE RPC endpoints - same as getUserAssetsLive() for consistency
     const rpcEndpoints = [
-      'https://wax.api.eosnation.io',
+      'https://api.wax.alohaeos.com',    // PRIMARY per user request
+      'https://wax.greymass.com',
+      'https://api.waxsweden.org',
       'https://wax.eosphere.io',
-      'https://api-wax-mainnet.wecan.dev'
+      'https://wax.eu.eosamsterdam.net',
+      'https://wax.cryptolions.io'
     ];
 
     let allAssets = [];
