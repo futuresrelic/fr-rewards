@@ -1817,15 +1817,33 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
 
         if (rollIds.length > 0) {
           // Fetch asset details from AtomicAssets API to get template_mint
+          // Use reliable endpoints with fallback
+          const atomicEndpoints = [
+            'https://aa-wax-public1.neftyblocks.com',
+            'https://wax-aa.eosdac.io',
+            'https://atomic-wax-mainnet.wecan.dev',
+            'https://wax-atomic-api.eosphere.io'
+          ];
+
           let templateMint = null;
-          try {
-            const apiResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${packAssetId}`);
-            if (apiResponse.ok) {
-              const apiData = await apiResponse.json();
-              templateMint = apiData.data.template_mint;
+          for (const endpoint of atomicEndpoints) {
+            try {
+              const apiResponse = await fetch(`${endpoint}/atomicassets/v1/assets/${packAssetId}`, {
+                timeout: 3000
+              });
+              if (apiResponse.ok) {
+                const apiData = await apiResponse.json();
+                templateMint = apiData.data.template_mint;
+                break; // Success, exit loop
+              }
+            } catch (err) {
+              // Try next endpoint
+              continue;
             }
-          } catch (err) {
-            console.warn(`Could not fetch template_mint for pack ${packAssetId}:`, err.message);
+          }
+
+          if (!templateMint) {
+            console.warn(`Could not fetch template_mint for pack ${packAssetId} from any API endpoint`);
           }
 
           claimablePacks.push({
@@ -1943,19 +1961,39 @@ app.post('/api/asset/verify-ownership', async (req, res) => {
 
     console.log(`Verifying ownership of asset ${asset_id} (expecting: ${expected_owner})...`);
 
-    // Query AtomicAssets API for current asset state
-    const assetResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${asset_id}`);
+    // Query AtomicAssets API for current asset state (with fallback)
+    const atomicEndpoints = [
+      'https://aa-wax-public1.neftyblocks.com',
+      'https://wax-aa.eosdac.io',
+      'https://atomic-wax-mainnet.wecan.dev',
+      'https://wax-atomic-api.eosphere.io'
+    ];
 
-    if (!assetResponse.ok) {
+    let assetData = null;
+    for (const endpoint of atomicEndpoints) {
+      try {
+        const assetResponse = await fetch(`${endpoint}/atomicassets/v1/assets/${asset_id}`, {
+          timeout: 3000
+        });
+
+        if (assetResponse.ok) {
+          assetData = await assetResponse.json();
+          break;
+        }
+      } catch (err) {
+        continue; // Try next endpoint
+      }
+    }
+
+    if (!assetData) {
       return res.status(404).json({
         success: false,
         is_owned: false,
-        error: `Asset ${asset_id} not found`,
+        error: `Asset ${asset_id} not found on any API endpoint`,
         current_owner: null
       });
     }
 
-    const assetData = await assetResponse.json();
     const asset = assetData.data;
 
     // Check if asset is burned
@@ -2095,18 +2133,45 @@ app.get('/api/debug/inspect-asset/:assetId', async (req, res) => {
     const { assetId } = req.params;
     console.log(`🔍 Inspecting asset ${assetId}...`);
 
-    // Fetch from AtomicAssets API
-    const response = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${assetId}`);
+    // Use reliable AtomicAssets API endpoints (with fallback)
+    const atomicEndpoints = [
+      'https://aa-wax-public1.neftyblocks.com',
+      'https://wax-aa.eosdac.io',
+      'https://atomic-wax-mainnet.wecan.dev',
+      'https://wax-atomic-api.eosphere.io'
+    ];
 
-    if (!response.ok) {
+    let apiData = null;
+    let lastError = null;
+
+    // Try each endpoint until one works
+    for (const endpoint of atomicEndpoints) {
+      try {
+        console.log(`  Trying ${endpoint}...`);
+        const response = await fetch(`${endpoint}/atomicassets/v1/assets/${assetId}`, {
+          timeout: 5000
+        });
+
+        if (response.ok) {
+          apiData = await response.json();
+          console.log(`  ✅ Success with ${endpoint}`);
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+        console.log(`  ❌ Failed with ${endpoint}: ${err.message}`);
+      }
+    }
+
+    if (!apiData) {
       return res.status(404).json({
         success: false,
-        error: `Asset ${assetId} not found on AtomicAssets API`
+        error: `Asset ${assetId} not found on any AtomicAssets API`,
+        last_error: lastError?.message
       });
     }
 
-    const data = await response.json();
-    const asset = data.data;
+    const asset = apiData.data;
 
     res.json({
       success: true,
@@ -2136,51 +2201,80 @@ app.get('/api/debug/inspect-claimable-pack/:assetId', async (req, res) => {
     const { assetId } = req.params;
     console.log(`🔍 Inspecting claimable pack ${assetId}...`);
 
+    // Create RPC client for blockchain queries
+    const { JsonRpc } = require('eosjs');
+    const rpcEndpoints = [
+      'https://wax.api.eosnation.io',
+      'https://wax.eosphere.io',
+      'https://api-wax-mainnet.wecan.dev',
+      'https://wax.eosdac.io'
+    ];
+
     const results = {};
 
     // 1. Try to fetch from atomicassets table (blockchain RPC)
-    try {
-      console.log('  Querying atomicassets::assets table (scope: atomicpacksx)...');
-      const tableResult = await rpc.get_table_rows({
-        json: true,
-        code: 'atomicassets',
-        scope: 'atomicpacksx',
-        table: 'assets',
-        lower_bound: assetId,
-        limit: 5
-      });
+    let rpcSuccess = false;
+    for (const endpoint of rpcEndpoints) {
+      try {
+        console.log(`  Trying RPC endpoint ${endpoint}...`);
+        const rpc = new JsonRpc(endpoint, { fetch });
 
-      const matchingAsset = tableResult.rows.find(r => r.asset_id === assetId);
-      results.asset_table_result = matchingAsset || null;
-      results.asset_table_all_rows = tableResult.rows;
-      console.log(`  Found in table: ${matchingAsset ? 'YES' : 'NO'}`);
-      if (matchingAsset) {
-        console.log(`  template_mint from table: ${matchingAsset.template_mint}`);
+        const tableResult = await rpc.get_table_rows({
+          json: true,
+          code: 'atomicassets',
+          scope: 'atomicpacksx',
+          table: 'assets',
+          lower_bound: assetId,
+          limit: 5
+        });
+
+        const matchingAsset = tableResult.rows.find(r => r.asset_id === assetId);
+        results.asset_table_result = matchingAsset || null;
+        results.asset_table_all_rows = tableResult.rows;
+        results.rpc_endpoint_used = endpoint;
+        console.log(`  ✅ RPC Success - Found in table: ${matchingAsset ? 'YES' : 'NO'}`);
+        if (matchingAsset) {
+          console.log(`  template_mint from table: ${matchingAsset.template_mint}`);
+        }
+        rpcSuccess = true;
+        break;
+      } catch (err) {
+        console.log(`  ❌ RPC Failed with ${endpoint}: ${err.message}`);
+        results.asset_table_error = err.message;
       }
-    } catch (err) {
-      results.asset_table_error = err.message;
     }
 
     // 2. Fetch from AtomicAssets API
-    try {
-      console.log('  Querying AtomicAssets API...');
-      const apiResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${assetId}`);
+    const atomicEndpoints = [
+      'https://aa-wax-public1.neftyblocks.com',
+      'https://wax-aa.eosdac.io',
+      'https://atomic-wax-mainnet.wecan.dev',
+      'https://wax-atomic-api.eosphere.io'
+    ];
 
-      if (apiResponse.ok) {
-        const apiData = await apiResponse.json();
-        results.atomic_api_result = {
-          success: true,
-          data: apiData.data
-        };
-        console.log(`  template_mint from API: ${apiData.data.template_mint}`);
-      } else {
-        results.atomic_api_result = {
-          success: false,
-          status: apiResponse.status
-        };
+    for (const endpoint of atomicEndpoints) {
+      try {
+        console.log(`  Trying AtomicAssets API ${endpoint}...`);
+        const apiResponse = await fetch(`${endpoint}/atomicassets/v1/assets/${assetId}`, {
+          timeout: 5000
+        });
+
+        if (apiResponse.ok) {
+          const apiData = await apiResponse.json();
+          results.atomic_api_result = {
+            success: true,
+            data: apiData.data,
+            endpoint_used: endpoint
+          };
+          console.log(`  ✅ API Success - template_mint: ${apiData.data.template_mint}`);
+          break;
+        } else {
+          console.log(`  ❌ API returned status ${apiResponse.status}`);
+        }
+      } catch (err) {
+        console.log(`  ❌ API Failed with ${endpoint}: ${err.message}`);
+        results.atomic_api_error = err.message;
       }
-    } catch (err) {
-      results.atomic_api_error = err.message;
     }
 
     res.json({
