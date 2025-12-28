@@ -1528,6 +1528,57 @@ app.get('/api/user/assets-rpc/:account/:template_id', async (req, res) => {
 
     console.log(`✅ Blockchain query complete: checked ${totalChecked} assets, found ${allMatchingAssets.length} with template ${template_id}`);
 
+    // Fetch template_mint for all assets from AtomicAssets API (blockchain doesn't always have it)
+    // Use bulk endpoint for efficiency
+    if (allMatchingAssets.length > 0) {
+      const atomicEndpoints = [
+        'https://aa-wax-public1.neftyblocks.com',
+        'https://wax-aa.eosdac.io',
+        'https://atomic-wax-mainnet.wecan.dev',
+        'https://wax-atomic-api.eosphere.io'
+      ];
+
+      const assetIds = allMatchingAssets.map(a => a.asset_id).join(',');
+
+      // Try each endpoint until one works
+      let mintsFetched = false;
+      for (const endpoint of atomicEndpoints) {
+        try {
+          const response = await fetch(`${endpoint}/atomicassets/v1/assets?ids=${assetIds}&limit=1000`, {
+            timeout: 5000
+          });
+
+          if (response.ok) {
+            const apiData = await response.json();
+            const apiAssets = apiData.data;
+
+            // Map mint numbers to blockchain assets
+            const mintMap = {};
+            apiAssets.forEach(apiAsset => {
+              mintMap[apiAsset.asset_id] = apiAsset.template_mint;
+            });
+
+            // Add mint numbers to blockchain assets
+            allMatchingAssets.forEach(asset => {
+              asset.template_mint = mintMap[asset.asset_id] || null;
+            });
+
+            const mintsFound = allMatchingAssets.filter(a => a.template_mint).length;
+            console.log(`✅ Fetched mint numbers for ${mintsFound}/${allMatchingAssets.length} assets from ${endpoint}`);
+            mintsFetched = true;
+            break; // Success, exit loop
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch mints from ${endpoint}:`, err.message);
+          continue; // Try next endpoint
+        }
+      }
+
+      if (!mintsFetched) {
+        console.warn(`Could not fetch mint numbers from any AtomicAssets API endpoint`);
+      }
+    }
+
     // Convert blockchain format to AtomicAssets API format for compatibility
     const formattedAssets = allMatchingAssets.map(row => ({
       asset_id: row.asset_id,
