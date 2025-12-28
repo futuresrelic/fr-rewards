@@ -1251,29 +1251,25 @@ async function showUnpackedAssetsModal(claimedAssets) {
 
     let mediaHtml = '<div style="font-size: 4rem;">🎁</div>';
 
-    if (asset.data) {
-      const immutableData = asset.data.data || {};
-      const templateData = asset.data.template?.immutable_data || {};
-      const combinedData = { ...templateData, ...immutableData };
+    // Combine template data and asset data (asset data overrides template)
+    const combinedData = { ...(asset.template_data || {}), ...(asset.immutable_data || {}) };
 
-      // Check for video first, then image
-      if (combinedData.video) {
-        const videoUrl = combinedData.video.startsWith('Qm')
-          ? `https://ipfs.io/ipfs/${combinedData.video}`
-          : combinedData.video;
-        mediaHtml = `<video src="${videoUrl}" autoplay loop muted playsinline style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;"></video>`;
-      } else if (combinedData.img) {
-        const imgUrl = combinedData.img.startsWith('Qm')
-          ? `https://ipfs.io/ipfs/${combinedData.img}`
-          : combinedData.img;
-        mediaHtml = `<img src="${imgUrl}" alt="${asset.name}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">`;
-      }
+    // Check for video first, then image from IPFS
+    if (combinedData.video) {
+      const videoUrl = combinedData.video.startsWith('Qm')
+        ? `https://ipfs.io/ipfs/${combinedData.video}`
+        : combinedData.video;
+      mediaHtml = `<video src="${videoUrl}" autoplay loop muted playsinline style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;"></video>`;
+    } else if (combinedData.img) {
+      const imgUrl = combinedData.img.startsWith('Qm')
+        ? `https://ipfs.io/ipfs/${combinedData.img}`
+        : combinedData.img;
+      mediaHtml = `<img src="${imgUrl}" alt="${asset.name}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">`;
     }
 
     assetCard.innerHTML = `
       ${mediaHtml}
-      <div style="font-weight: bold; margin-bottom: 5px; color: var(--text-primary);">${asset.name}</div>
-      <div style="font-size: 0.85rem; color: var(--accent);">Mint #${asset.mint}</div>
+      <div style="font-weight: bold; color: var(--text-primary);">${asset.name}</div>
     `;
 
     unpackedAssetsGrid.appendChild(assetCard);
@@ -1354,10 +1350,17 @@ async function doClaim(pack, action) {
 
   showError(`Success! Pack contents claimed (${rollIds.length} rolls). TX: ${claimResult.transaction_id}`, 'success');
 
-  // Fetch asset details for the claimed assets and show modal
-  console.log('🎨 Fetching details for claimed assets...');
-  const claimedAssets = await fetchUnpackedAssetDetails(rollIds);
-  await showUnpackedAssetsModal(claimedAssets);
+  // Extract created asset IDs from transaction result
+  console.log('🎨 Extracting created asset IDs from transaction...');
+  const createdAssetIds = extractAssetIdsFromTransaction(claimResult);
+
+  if (createdAssetIds.length > 0) {
+    console.log(`✅ Found ${createdAssetIds.length} created assets: ${createdAssetIds.join(', ')}`);
+    const claimedAssets = await fetchUnpackedAssetDetails(createdAssetIds);
+    await showUnpackedAssetsModal(claimedAssets);
+  } else {
+    console.warn('⚠️ Could not extract asset IDs from transaction');
+  }
 
   // Mark action as complete
   await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
@@ -1450,10 +1453,17 @@ async function doUnpack(pack, action) {
 
   showError(`Success! Claimed ${rollIds.length} NFTs from pack. TX: ${claimResult.transaction_id}`, 'success');
 
-  // Fetch asset details for the unpacked assets and show modal
-  console.log('🎨 Fetching details for unpacked assets...');
-  const claimedAssets = await fetchUnpackedAssetDetails(rollIds);
-  await showUnpackedAssetsModal(claimedAssets);
+  // Extract created asset IDs from transaction result
+  console.log('🎨 Extracting created asset IDs from transaction...');
+  const createdAssetIds = extractAssetIdsFromTransaction(claimResult);
+
+  if (createdAssetIds.length > 0) {
+    console.log(`✅ Found ${createdAssetIds.length} created assets: ${createdAssetIds.join(', ')}`);
+    const claimedAssets = await fetchUnpackedAssetDetails(createdAssetIds);
+    await showUnpackedAssetsModal(claimedAssets);
+  } else {
+    console.warn('⚠️ Could not extract asset IDs from transaction');
+  }
 
   // Mark action as complete
   await markActionComplete(action, claimResult.transaction_id, JSON.stringify({
@@ -1463,6 +1473,44 @@ async function doUnpack(pack, action) {
     claim_tx: claimResult.transaction_id,
     rolls_claimed: rollIds.length
   }));
+}
+
+// Extract asset IDs from transaction traces
+function extractAssetIdsFromTransaction(transactionResult) {
+  try {
+    const processed = transactionResult.processed || transactionResult;
+    const actionTraces = processed.action_traces || [];
+
+    const assetIds = [];
+
+    // Look through all inline actions for logtransfer or logmint
+    function searchTraces(traces) {
+      for (const trace of traces) {
+        if (trace.act && trace.act.account === 'atomicassets') {
+          // logtransfer action contains asset_ids that were transferred
+          if (trace.act.name === 'logtransfer' && trace.act.data && trace.act.data.asset_ids) {
+            assetIds.push(...trace.act.data.asset_ids.map(id => id.toString()));
+          }
+          // logmint action contains the newly minted asset_id
+          if (trace.act.name === 'logmint' && trace.act.data && trace.act.data.asset_id) {
+            assetIds.push(trace.act.data.asset_id.toString());
+          }
+        }
+
+        // Recursively search inline traces
+        if (trace.inline_traces && trace.inline_traces.length > 0) {
+          searchTraces(trace.inline_traces);
+        }
+      }
+    }
+
+    searchTraces(actionTraces);
+
+    return [...new Set(assetIds)]; // Remove duplicates
+  } catch (error) {
+    console.error('Error extracting asset IDs:', error);
+    return [];
+  }
 }
 
 // Fetch details for unpacked assets
@@ -1479,7 +1527,7 @@ async function fetchUnpackedAssetDetails(assetIds) {
   for (const assetId of assetIds) {
     let assetData = null;
 
-    // Try each endpoint
+    // Try each endpoint to get asset details
     for (const endpoint of atomicEndpoints) {
       try {
         const response = await fetch(`${endpoint}/atomicassets/v1/assets/${assetId}`, {
@@ -1496,19 +1544,23 @@ async function fetchUnpackedAssetDetails(assetIds) {
     }
 
     if (assetData) {
+      // Get template data for image/video
+      const templateData = assetData.template?.immutable_data || {};
+      const assetMutableData = assetData.data || {};
+
       assets.push({
         asset_id: assetId,
-        name: assetData.name || assetData.data?.name || 'Unknown NFT',
-        mint: assetData.template_mint || 'Unknown',
-        data: assetData
+        name: assetData.name || assetMutableData.name || templateData.name || 'Unknown NFT',
+        template_data: templateData,
+        immutable_data: assetMutableData
       });
     } else {
       // Fallback if API fails
       assets.push({
         asset_id: assetId,
         name: 'Unknown NFT',
-        mint: 'Unknown',
-        data: null
+        template_data: null,
+        immutable_data: null
       });
     }
   }
