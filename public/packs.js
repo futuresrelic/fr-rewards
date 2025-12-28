@@ -82,20 +82,31 @@ async function waitForLibraries() {
 async function loadPublicConfig() {
   try {
     const response = await fetch(`${API_URL}/api/config/public`);
-    const config = await response.json();
+    const data = await response.json();
 
-    // Apply branding
-    if (config.branding) {
-      if (config.branding.title) {
-        document.getElementById('page-title').textContent = `📦 ${config.branding.title} - Unpack`;
+    // Apply branding - use new API structure
+    if (data.success && data.config) {
+      if (data.config.page_title) {
+        document.getElementById('page-title').textContent = `📦 ${data.config.page_title} - Unpack`;
+        document.title = `${data.config.page_title} - Unpack`;
       }
-      if (config.branding.subtitle) {
-        document.getElementById('page-subtitle').textContent = config.branding.subtitle;
+      if (data.config.page_subtitle) {
+        document.getElementById('page-subtitle').textContent = data.config.page_subtitle;
       }
-      if (config.branding.logo_url) {
+      if (data.config.logo_url) {
         const logo = document.getElementById('page-logo');
-        logo.src = config.branding.logo_url;
+        logo.src = data.config.logo_url;
         logo.style.display = 'block';
+      }
+      // Update favicon if configured
+      if (data.config.favicon_url) {
+        let favicon = document.querySelector('link[rel="icon"]');
+        if (!favicon) {
+          favicon = document.createElement('link');
+          favicon.rel = 'icon';
+          document.head.appendChild(favicon);
+        }
+        favicon.href = data.config.favicon_url;
       }
     }
   } catch (error) {

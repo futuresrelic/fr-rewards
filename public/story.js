@@ -67,6 +67,7 @@ async function loadPageBranding() {
       // Keep the story-specific defaults if not overridden
       if (data.config.page_title) {
         titleEl.textContent = '📖 ' + data.config.page_title + ' Story';
+        document.title = data.config.page_title + ' Story';
       }
       if (data.config.page_subtitle) {
         subtitleEl.textContent = data.config.page_subtitle;
@@ -74,6 +75,16 @@ async function loadPageBranding() {
       if (data.config.logo_url) {
         logoEl.src = data.config.logo_url;
         logoEl.style.display = 'block';
+      }
+      // Update favicon if configured
+      if (data.config.favicon_url) {
+        let favicon = document.querySelector('link[rel="icon"]');
+        if (!favicon) {
+          favicon = document.createElement('link');
+          favicon.rel = 'icon';
+          document.head.appendChild(favicon);
+        }
+        favicon.href = data.config.favicon_url;
       }
     }
   } catch (error) {
@@ -726,9 +737,9 @@ async function executeUnpack(action, config) {
         claimablePacks.forEach(pack => {
           pack.asset_id = pack.pack_asset_id;
           pack.template = { template_id: pack.pack_template_id };
-          pack.template_mint = 'Claimable'; // No mint number for claimable packs
+          // template_mint now comes from backend (fetched from blockchain)
           pack.is_claimable = true;
-          console.log(`  ✅ Pack ${pack.asset_id} ready to claim (${pack.roll_count} rolls)`);
+          console.log(`  ✅ Pack ${pack.asset_id} ready to claim (${pack.roll_count} rolls) - Mint #${pack.template_mint || 'Unknown'}`);
         });
       }
     }

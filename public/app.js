@@ -76,6 +76,16 @@ async function loadPublicConfig() {
         logoImg.alt = config.page_title || 'Logo';
         logoImg.style.display = 'block';
       }
+      // Update favicon if configured
+      if (config.favicon_url) {
+        let favicon = document.querySelector('link[rel="icon"]');
+        if (!favicon) {
+          favicon = document.createElement('link');
+          favicon.rel = 'icon';
+          document.head.appendChild(favicon);
+        }
+        favicon.href = config.favicon_url;
+      }
     }
   } catch (error) {
     console.error('Error loading config:', error);

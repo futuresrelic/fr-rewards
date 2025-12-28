@@ -966,11 +966,12 @@ app.post('/api/admin/upload-logo', authenticateAdmin, upload.single('logo'), asy
  */
 app.put('/api/admin/branding', authenticateAdmin, async (req, res) => {
   try {
-    const { page_title, page_subtitle } = req.body;
+    const { page_title, page_subtitle, favicon_url } = req.body;
 
     const updates = {};
     if (page_title !== undefined) updates.page_title = page_title;
     if (page_subtitle !== undefined) updates.page_subtitle = page_subtitle;
+    if (favicon_url !== undefined) updates.favicon_url = favicon_url;
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No branding fields provided' });
@@ -1003,7 +1004,8 @@ app.get('/api/config/public', async (req, res) => {
         templates: enabledTemplates,
         page_title: config.page_title || 'NFT Holder Rewards',
         page_subtitle: config.page_subtitle || 'Connect your wallet to claim rewards!',
-        logo_url: config.logo_url || null
+        logo_url: config.logo_url || null,
+        favicon_url: config.favicon_url || null
       }
     });
   } catch (error) {
@@ -1768,15 +1770,36 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
           .sort((a, b) => a - b);
 
         if (rollIds.length > 0) {
+          // Also fetch the asset details to get template_mint
+          let templateMint = null;
+          try {
+            const assetResult = await rpc.get_table_rows({
+              json: true,
+              code: 'atomicassets',
+              scope: 'atomicpacksx', // Pack is now owned by atomicpacksx
+              table: 'assets',
+              lower_bound: packAssetId,
+              upper_bound: packAssetId,
+              limit: 1
+            });
+
+            if (assetResult.rows && assetResult.rows.length > 0) {
+              templateMint = assetResult.rows[0].template_mint;
+            }
+          } catch (err) {
+            console.warn(`Could not fetch template_mint for pack ${packAssetId}:`, err.message);
+          }
+
           claimablePacks.push({
             pack_asset_id: packAssetId,
             pack_template_id: row.pack_template_id || null,
+            template_mint: templateMint,
             roll_ids: rollIds,
             roll_count: rollIds.length,
             unlock_time: row.unlock_time || null
           });
 
-          console.log(`  ✅ Pack ${packAssetId}: ${rollIds.length} rolls ready to claim`);
+          console.log(`  ✅ Pack ${packAssetId}: ${rollIds.length} rolls ready to claim (Mint #${templateMint || 'Unknown'})`);
         }
       } catch (error) {
         console.warn(`  ⚠️ Error fetching rolls for pack ${row.pack_asset_id}:`, error.message);

@@ -148,6 +148,12 @@ function initializeTables() {
       db.exec(`ALTER TABLE config ADD COLUMN logo_url TEXT`);
       console.log('✅ Branding columns added');
     }
+    // Migration: Add favicon_url if it doesn't exist
+    if (configRow && !configRow.hasOwnProperty('favicon_url')) {
+      console.log('🔄 Migrating database: Adding favicon_url column...');
+      db.exec(`ALTER TABLE config ADD COLUMN favicon_url TEXT`);
+      console.log('✅ favicon_url column added');
+    }
   } catch (error) {
     // Columns might already exist, ignore error
   }
@@ -397,6 +403,10 @@ const config = {
     if (data.logo_url !== undefined) {
       fields.push('logo_url = ?');
       values.push(data.logo_url);
+    }
+    if (data.favicon_url !== undefined) {
+      fields.push('favicon_url = ?');
+      values.push(data.favicon_url);
     }
 
     if (fields.length === 0) return;

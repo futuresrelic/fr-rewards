@@ -605,8 +605,9 @@ async function handleBrandingUpdate(e) {
 
   const pageTitle = document.getElementById('page-title-input').value.trim();
   const pageSubtitle = document.getElementById('page-subtitle-input').value.trim();
+  const faviconUrl = document.getElementById('favicon-url-input').value.trim();
 
-  if (!pageTitle && !pageSubtitle) {
+  if (!pageTitle && !pageSubtitle && !faviconUrl) {
     showBrandingMessage('Please enter at least one field', 'error');
     return;
   }
@@ -620,7 +621,8 @@ async function handleBrandingUpdate(e) {
       },
       body: JSON.stringify({
         page_title: pageTitle || undefined,
-        page_subtitle: pageSubtitle || undefined
+        page_subtitle: pageSubtitle || undefined,
+        favicon_url: faviconUrl || undefined
       })
     });
 
@@ -657,6 +659,7 @@ async function loadBranding() {
     if (data.success && data.config) {
       document.getElementById('page-title-input').value = data.config.page_title || '';
       document.getElementById('page-subtitle-input').value = data.config.page_subtitle || '';
+      document.getElementById('favicon-url-input').value = data.config.favicon_url || '';
 
       if (data.config.logo_url) {
         const logoPreview = document.getElementById('logo-preview');
