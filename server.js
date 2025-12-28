@@ -449,10 +449,9 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Reward not found or not enabled for this template' });
     }
 
-    // Check eligibility
-    const enabledTemplates = db.templates.getEnabled();
-    const whitelistTemplates = enabledTemplates.map(t => t.template_id);
-    const eligibleAssets = await wax.checkEligibility(account, config.collection_name, whitelistTemplates);
+    // Check eligibility using LIVE blockchain query (not cached)
+    // CRITICAL: Must use same method as eligibility page to avoid mismatches
+    const eligibleAssets = await wax.getUserAssetsLive(account, config.collection_name, whitelistTemplates);
     const userAssets = eligibleAssets.filter(asset => parseInt(asset.template.template_id) === parseInt(template_id));
 
     if (userAssets.length === 0) {
