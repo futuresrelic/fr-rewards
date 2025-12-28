@@ -1608,15 +1608,23 @@ function showBlendAssetSelection(action, config, assets) {
 
   const requiredCount = config.ingredient_count || 1;
 
+  // Check if we need grouped selection (multiple template IDs)
+  const hasMultipleTemplates = config.ingredient_templates && Array.isArray(config.ingredient_templates) && config.ingredient_templates.length > 1;
+
   // Update requirements text
   blendRequirementsText.innerHTML = `
     <div>• <strong>Blend ID:</strong> ${config.blend_id}</div>
     <div>• <strong>Assets Required:</strong> ${requiredCount}</div>
     ${config.ingredient_templates ? `<div>• <strong>Template IDs:</strong> ${config.ingredient_templates.join(', ')}</div>` : ''}
+    ${hasMultipleTemplates ? `<div style="color: var(--accent); margin-top: 8px;">Select one asset from each ingredient group below</div>` : ''}
   `;
 
-  // Render available assets
-  renderBlendAssets(requiredCount);
+  // Render available assets (grouped or ungrouped)
+  if (hasMultipleTemplates) {
+    renderBlendAssetsGrouped(config.ingredient_templates, assets);
+  } else {
+    renderBlendAssets(requiredCount);
+  }
 
   // Update counter
   updateBlendCounter(requiredCount);
@@ -1625,7 +1633,117 @@ function showBlendAssetSelection(action, config, assets) {
   blendModal.style.display = 'block';
 }
 
-// Render blend assets with selection
+// Render blend assets grouped by template ID
+function renderBlendAssetsGrouped(templateIds, allAssets) {
+  blendSelectionList.innerHTML = '';
+  blendSelectionList.style.gridTemplateColumns = '1fr'; // Single column for groups
+
+  templateIds.forEach((templateId, groupIndex) => {
+    // Filter assets for this template
+    const groupAssets = allAssets.filter(asset => asset.template.template_id === templateId.toString());
+
+    if (groupAssets.length === 0) {
+      return; // Skip empty groups
+    }
+
+    // Create group container
+    const groupContainer = document.createElement('div');
+    groupContainer.style.cssText = `
+      margin-bottom: 20px;
+      padding: 15px;
+      background: var(--bg-card);
+      border-radius: 10px;
+      border: 2px solid var(--border);
+    `;
+
+    // Group header
+    const groupHeader = document.createElement('div');
+    groupHeader.style.cssText = `
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    `;
+    groupHeader.innerHTML = `
+      Ingredient ${groupIndex + 1}: ${groupAssets[0].name || `Template ${templateId}`}
+      <span style="color: var(--text-secondary); font-weight: normal; font-size: 0.85rem;">(${groupAssets.length} available)</span>
+    `;
+    groupContainer.appendChild(groupHeader);
+
+    // Assets grid for this group
+    const assetsGrid = document.createElement('div');
+    assetsGrid.style.cssText = `
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    `;
+
+    groupAssets.forEach((asset, assetIndex) => {
+      const assetCard = document.createElement('div');
+      assetCard.style.cssText = `
+        background: var(--bg-dark);
+        padding: 10px;
+        border-radius: 8px;
+        border: 2px solid var(--border);
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: center;
+      `;
+
+      const imageUrl = asset.data?.img
+        ? `https://ipfs.io/ipfs/${asset.data.img}`
+        : 'https://via.placeholder.com/150?text=NFT';
+
+      assetCard.innerHTML = `
+        <img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; margin-bottom: 6px;">
+        <div style="font-size: 0.8rem; font-weight: bold; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${asset.name || 'Unknown'}</div>
+        <div style="font-size: 0.7rem; color: var(--text-secondary);">Mint #${asset.template_mint || '?'}</div>
+        <input type="radio" name="ingredient-group-${groupIndex}" value="${asset.asset_id}" data-group="${groupIndex}" style="margin-top: 6px; width: 18px; height: 18px; cursor: pointer;">
+      `;
+
+      const radio = assetCard.querySelector('input[type="radio"]');
+
+      // Handle selection
+      radio.addEventListener('change', () => {
+        // Update selectedBlendAssets array (maintain order by group)
+        // Remove any previous selection from this group
+        selectedBlendAssets = selectedBlendAssets.filter(id => {
+          const previousAsset = allAssets.find(a => a.asset_id === id);
+          return previousAsset && previousAsset.template.template_id !== templateId.toString();
+        });
+
+        // Add new selection
+        selectedBlendAssets.splice(groupIndex, 0, asset.asset_id);
+
+        // Update visual state for all cards in this group
+        const allGroupCards = assetsGrid.querySelectorAll('div[style*="background"]');
+        allGroupCards.forEach(card => {
+          card.style.borderColor = 'var(--border)';
+          card.style.background = 'var(--bg-dark)';
+        });
+
+        assetCard.style.borderColor = 'var(--accent)';
+        assetCard.style.background = 'var(--bg-card-hover)';
+
+        updateBlendCounter(templateIds.length);
+      });
+
+      // Allow clicking card to select
+      assetCard.addEventListener('click', (e) => {
+        if (e.target !== radio) {
+          radio.click();
+        }
+      });
+
+      assetsGrid.appendChild(assetCard);
+    });
+
+    groupContainer.appendChild(assetsGrid);
+    blendSelectionList.appendChild(groupContainer);
+  });
+}
+
+// Render blend assets with selection (ungrouped - original behavior)
 function renderBlendAssets(requiredCount) {
   blendSelectionList.innerHTML = '';
 
@@ -1836,8 +1954,11 @@ async function executeBlend(action, config) {
 
 // Execute BLEND_ARRAY action - allows choosing from multiple blend options
 async function executeBlendArray(action, config) {
+  console.log('🔍 BLEND_ARRAY config:', config);
+
   if (!config || !config.blend_options || !Array.isArray(config.blend_options)) {
-    throw new Error('BLEND_ARRAY action requires blend_options array in config');
+    console.error('❌ Invalid BLEND_ARRAY config. Expected blend_options array, got:', config);
+    throw new Error('BLEND_ARRAY action requires blend_options array in config. Please configure this action in the admin panel.');
   }
 
   console.log(`⚡ BLEND_ARRAY with ${config.blend_options.length} options`);
