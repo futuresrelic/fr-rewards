@@ -1801,30 +1801,43 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
     const { pack_asset_id } = req.params;
 
     if (!pack_asset_id) {
+      console.log('❌ STEP 1 FAILED: No pack_asset_id provided');
       return res.status(400).json({ error: 'pack_asset_id is required' });
     }
 
-    console.log(`Querying unboxed rolls for pack asset ${pack_asset_id}...`);
+    console.log(`\n🔍 ========== CHECKING PACK ${pack_asset_id} ==========`);
+    console.log(`STEP 1: ✅ Pack asset ID received: ${pack_asset_id}`);
 
     const { JsonRpc } = require('eosjs');
+
+    // Use greymass and neftyblocks as requested
     const rpcEndpoints = [
+      'https://wax.greymass.com',
+      'https://wax-aa.neftyblocks.com',
       'https://wax.api.eosnation.io',
-      'https://wax.eosphere.io',
-      'https://api-wax-mainnet.wecan.dev',
-      'https://wax.eosdac.io'
+      'https://wax.eosphere.io'
     ];
+
+    console.log(`STEP 2: Will try ${rpcEndpoints.length} RPC endpoints...`);
 
     let result = null;
     let success = false;
+    let successEndpoint = null;
 
     // Try each RPC endpoint until one works
-    for (const endpoint of rpcEndpoints) {
+    for (let i = 0; i < rpcEndpoints.length; i++) {
+      const endpoint = rpcEndpoints[i];
+      console.log(`\n  STEP 2.${i+1}: Trying RPC endpoint: ${endpoint}`);
+
       try {
         const rpc = new JsonRpc(endpoint, { fetch });
+        console.log(`    - JsonRpc instance created`);
 
         // Query the unboxassets table from atomicpacksx contract
         // This table is populated AFTER the pack is transferred for unpacking
         // The scope is the pack_asset_id itself!
+        console.log(`    - Querying table: atomicpacksx::unboxassets with scope=${pack_asset_id}`);
+
         result = await rpc.get_table_rows({
           json: true,
           code: 'atomicpacksx',
@@ -1835,36 +1848,50 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
           show_payer: false
         });
 
+        console.log(`    - ✅ Query successful! Got ${result.rows ? result.rows.length : 0} rows`);
         success = true;
-        console.log(`  ✅ Success using ${endpoint}`);
+        successEndpoint = endpoint;
         break;
       } catch (err) {
-        console.warn(`  ❌ RPC endpoint ${endpoint} failed:`, err.message);
+        console.log(`    - ❌ Failed: ${err.message}`);
         continue;
       }
     }
 
     if (!success) {
+      console.log(`\n❌ STEP 2 FAILED: All ${rpcEndpoints.length} RPC endpoints failed!`);
       return res.status(503).json({
         error: 'All RPC endpoints failed',
         success: false
       });
     }
 
+    console.log(`\nSTEP 3: ✅ Successfully queried using ${successEndpoint}`);
+    console.log(`STEP 4: Checking if pack has been unpacked...`);
+
     if (!result.rows || result.rows.length === 0) {
+      console.log(`  ℹ️  Pack ${pack_asset_id} has NOT been unpacked yet (no rows in unboxassets)`);
+      console.log(`  This is NORMAL for packs still in wallet - ready to unpack!`);
+      console.log(`========== END CHECK (Pack Not Unpacked) ==========\n`);
+
       return res.status(404).json({
-        error: `No unboxed rolls found for pack asset ${pack_asset_id}. Pack may not have been unpacked yet, or blockchain may need more time to process.`,
-        success: false
+        error: `Pack not unpacked yet`,
+        success: false,
+        is_ready_to_unpack: true
       });
     }
 
     // Extract all roll IDs - scope is already filtered to this pack
+    console.log(`STEP 5: Extracting roll IDs from ${result.rows.length} rows...`);
+
     const rollIds = result.rows
       .map(row => parseInt(row.origin_roll_id))
       .sort((a, b) => a - b);  // Sort numerically
 
-    console.log(`✅ Found ${rollIds.length} rolls for pack ${pack_asset_id}: [${rollIds.join(', ')}]`);
-    console.log(`Raw table data: ${JSON.stringify(result.rows.slice(0, 3))}`);
+    console.log(`STEP 6: ✅ Found ${rollIds.length} rolls for pack ${pack_asset_id}`);
+    console.log(`  Roll IDs: [${rollIds.join(', ')}]`);
+    console.log(`  Sample row data:`, JSON.stringify(result.rows[0]));
+    console.log(`========== END CHECK (Pack Ready to Claim) ==========\n`);
 
     res.json({
       success: true,
@@ -1873,7 +1900,9 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
       roll_count: rollIds.length
     });
   } catch (error) {
-    console.error('Error fetching unboxed rolls:', error);
+    console.log(`\n❌ UNEXPECTED ERROR in /api/pack/unboxed-rolls:`, error.message);
+    console.log(`Full error:`, error);
+    console.log(`========== END CHECK (Error) ==========\n`);
     res.status(500).json({ error: error.message, success: false });
   }
 });
@@ -1891,27 +1920,35 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
       return res.status(400).json({ error: 'account is required' });
     }
 
-    console.log(`Querying claimable packs for ${account}...`);
+    console.log(`\n🎁 ========== QUERYING CLAIMABLE PACKS FOR ${account} ==========`);
 
     const { JsonRpc } = require('eosjs');
+
+    // Use greymass and neftyblocks as requested
     const rpcEndpoints = [
+      'https://wax.greymass.com',
+      'https://wax-aa.neftyblocks.com',
       'https://wax.api.eosnation.io',
-      'https://wax.eosphere.io',
-      'https://api-wax-mainnet.wecan.dev',
-      'https://wax.eosdac.io'
+      'https://wax.eosphere.io'
     ];
+
+    console.log(`STEP 1: Will try ${rpcEndpoints.length} RPC endpoints for unboxpacks table...`);
 
     let result = null;
     let rpc = null;
+    let successEndpoint = null;
 
     // Try each RPC endpoint until one works
-    for (const endpoint of rpcEndpoints) {
+    for (let i = 0; i < rpcEndpoints.length; i++) {
+      const endpoint = rpcEndpoints[i];
       try {
-        console.log(`  Trying RPC endpoint: ${endpoint}`);
+        console.log(`\n  STEP 1.${i+1}: Trying RPC endpoint: ${endpoint}`);
         rpc = new JsonRpc(endpoint, { fetch });
 
         // Query the unboxpacks table - scope is the user's account
         // This table contains all packs that have been unpacked but not claimed
+        console.log(`    - Querying atomicpacksx::unboxpacks with account=${account}`);
+
         result = await rpc.get_table_rows({
           json: true,
           code: 'atomicpacksx',
@@ -1926,10 +1963,11 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
           show_payer: false
         });
 
-        console.log(`  ✅ Success - Found ${result.rows.length} entries in unboxpacks table`);
+        console.log(`    - ✅ Success! Found ${result.rows.length} entries in unboxpacks table`);
+        successEndpoint = endpoint;
         break; // Success, exit loop
       } catch (err) {
-        console.warn(`  ❌ RPC endpoint ${endpoint} failed:`, err.message);
+        console.log(`    - ❌ Failed: ${err.message}`);
         continue; // Try next endpoint
       }
     }
@@ -1939,6 +1977,8 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
     }
 
     if (!result.rows || result.rows.length === 0) {
+      console.log(`STEP 2: No claimable packs found in unboxpacks table`);
+      console.log(`========== END CLAIMABLE PACKS QUERY ==========\n`);
       return res.json({
         success: true,
         claimable_packs: [],
@@ -1946,14 +1986,18 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
       });
     }
 
+    console.log(`\nSTEP 2: Processing ${result.rows.length} claimable packs from unboxpacks table...`);
     // For each pack, fetch the roll details from unboxassets table
     const claimablePacks = [];
 
-    for (const row of result.rows) {
+    for (let i = 0; i < result.rows.length; i++) {
+      const row = result.rows[i];
       try {
         const packAssetId = row.pack_asset_id;
+        console.log(`\n  STEP 2.${i+1}: Processing pack ${packAssetId}...`);
 
         // Query unboxassets table for this pack's rolls
+        console.log(`    - Querying unboxassets table for pack ${packAssetId}...`);
         const rollsResult = await rpc.get_table_rows({
           json: true,
           code: 'atomicpacksx',
@@ -1968,9 +2012,11 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
           .map(r => parseInt(r.origin_roll_id))
           .sort((a, b) => a - b);
 
+        console.log(`    - Found ${rollIds.length} rolls for pack ${packAssetId}`);
+
         if (rollIds.length > 0) {
-          // Fetch asset details from AtomicAssets API to get template_mint
-          // Use reliable endpoints with fallback
+          // Fetch asset details from AtomicAssets API to get template_mint, template_id, name
+          console.log(`    - Fetching pack metadata from AtomicAssets API...`);
           const atomicEndpoints = [
             'https://aa-wax-public1.neftyblocks.com',
             'https://wax-aa.eosdac.io',
@@ -1994,6 +2040,7 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
                   template_id: asset.template?.template_id || null,
                   name: asset.name || asset.data?.name || 'Unknown Pack'
                 };
+                console.log(`    - ✅ Got metadata: Template ${packData.template_id}, Mint #${packData.template_mint}, Name: ${packData.name}`);
                 break; // Success, exit loop
               }
             } catch (err) {
@@ -2029,7 +2076,8 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
       }
     }
 
-    console.log(`✅ Found ${claimablePacks.length} claimable packs for ${account}`);
+    console.log(`\nSTEP 3: ✅ FINAL RESULT - Found ${claimablePacks.length} claimable packs for ${account}`);
+    console.log(`========== END CLAIMABLE PACKS QUERY ==========\n`);
 
     res.json({
       success: true,
@@ -2037,7 +2085,9 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
       count: claimablePacks.length
     });
   } catch (error) {
-    console.error('Error fetching claimable packs:', error);
+    console.error('\n❌ UNEXPECTED ERROR in /api/user/claimable-packs:', error.message);
+    console.error('Full error:', error);
+    console.log(`========== END CLAIMABLE PACKS QUERY (Error) ==========\n`);
     res.status(500).json({ error: error.message, success: false });
   }
 });
