@@ -1807,20 +1807,49 @@ app.get('/api/pack/unboxed-rolls/:pack_asset_id', async (req, res) => {
     console.log(`Querying unboxed rolls for pack asset ${pack_asset_id}...`);
 
     const { JsonRpc } = require('eosjs');
-    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+    const rpcEndpoints = [
+      'https://wax.api.eosnation.io',
+      'https://wax.eosphere.io',
+      'https://api-wax-mainnet.wecan.dev',
+      'https://wax.eosdac.io'
+    ];
 
-    // Query the unboxassets table from atomicpacksx contract
-    // This table is populated AFTER the pack is transferred for unpacking
-    // The scope is the pack_asset_id itself!
-    const result = await rpc.get_table_rows({
-      json: true,
-      code: 'atomicpacksx',
-      scope: pack_asset_id,
-      table: 'unboxassets',
-      limit: 1000,
-      reverse: false,
-      show_payer: false
-    });
+    let result = null;
+    let success = false;
+
+    // Try each RPC endpoint until one works
+    for (const endpoint of rpcEndpoints) {
+      try {
+        const rpc = new JsonRpc(endpoint, { fetch });
+
+        // Query the unboxassets table from atomicpacksx contract
+        // This table is populated AFTER the pack is transferred for unpacking
+        // The scope is the pack_asset_id itself!
+        result = await rpc.get_table_rows({
+          json: true,
+          code: 'atomicpacksx',
+          scope: pack_asset_id,
+          table: 'unboxassets',
+          limit: 1000,
+          reverse: false,
+          show_payer: false
+        });
+
+        success = true;
+        console.log(`  ✅ Success using ${endpoint}`);
+        break;
+      } catch (err) {
+        console.warn(`  ❌ RPC endpoint ${endpoint} failed:`, err.message);
+        continue;
+      }
+    }
+
+    if (!success) {
+      return res.status(503).json({
+        error: 'All RPC endpoints failed',
+        success: false
+      });
+    }
 
     if (!result.rows || result.rows.length === 0) {
       return res.status(404).json({
