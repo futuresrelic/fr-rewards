@@ -1949,7 +1949,7 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
             'https://wax-atomic-api.eosphere.io'
           ];
 
-          let templateMint = null;
+          let packData = null;
           for (const endpoint of atomicEndpoints) {
             try {
               const apiResponse = await fetch(`${endpoint}/atomicassets/v1/assets/${packAssetId}`, {
@@ -1957,7 +1957,14 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
               });
               if (apiResponse.ok) {
                 const apiData = await apiResponse.json();
-                templateMint = apiData.data.template_mint;
+                const asset = apiData.data;
+
+                // Extract ALL the data we need from the API response
+                packData = {
+                  template_mint: asset.template_mint,
+                  template_id: asset.template?.template_id || null,
+                  name: asset.name || asset.data?.name || 'Unknown Pack'
+                };
                 break; // Success, exit loop
               }
             } catch (err) {
@@ -1966,20 +1973,27 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
             }
           }
 
-          if (!templateMint) {
-            console.warn(`Could not fetch template_mint for pack ${packAssetId} from any API endpoint`);
+          if (!packData) {
+            console.warn(`Could not fetch pack data for ${packAssetId} from any API endpoint`);
+            // Use fallback values
+            packData = {
+              template_mint: null,
+              template_id: row.pack_template_id || null,
+              name: 'Unknown Pack'
+            };
           }
 
           claimablePacks.push({
             pack_asset_id: packAssetId,
-            pack_template_id: row.pack_template_id || null,
-            template_mint: templateMint,
+            pack_template_id: packData.template_id,
+            template_mint: packData.template_mint,
+            name: packData.name,
             roll_ids: rollIds,
             roll_count: rollIds.length,
             unlock_time: row.unlock_time || null
           });
 
-          console.log(`  ✅ Pack ${packAssetId}: ${rollIds.length} rolls ready to claim (Mint #${templateMint || 'Unknown'})`);
+          console.log(`  ✅ Pack ${packAssetId} (${packData.name}): template ${packData.template_id}, mint #${packData.template_mint || 'Unknown'}, ${rollIds.length} rolls ready`);
         }
       } catch (error) {
         console.warn(`  ⚠️ Error fetching rolls for pack ${row.pack_asset_id}:`, error.message);
