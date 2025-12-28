@@ -526,7 +526,7 @@ function createActionCard(action, actionTypeEmoji) {
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
           <span style="background: var(--bg-card); padding: 5px 10px; border-radius: 5px; font-size: 0.85rem; color: var(--accent); font-weight: bold;">${action.action_type}</span>
         </div>
-        ${action.action_description ? `<p style="margin: 8px 0; color: var(--text-secondary); font-size: 0.9rem;">${action.action_description}</p>` : ''}
+        ${action.action_description ? `<div style="margin: 8px 0; color: var(--text-secondary); font-size: 0.9rem;" class="markdown-content">${marked.parse(action.action_description)}</div>` : ''}
         ${isCompleted && action.completed_at ? `
           <div style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">
             Completed: ${new Date(action.completed_at).toLocaleString()}
