@@ -626,8 +626,19 @@ async function markActionComplete(action, transactionId = null, resultData = nul
 
     if (data.success) {
       console.log('✅ Action marked as complete');
+
+      // Save current scroll position
+      const currentScrollY = window.scrollY;
+
       // Reload progress to show updated state
-      setTimeout(() => loadStoryProgress(), 1500);
+      setTimeout(async () => {
+        await loadStoryProgress();
+
+        // Restore scroll position after story loads
+        setTimeout(() => {
+          window.scrollTo({ top: currentScrollY, behavior: 'instant' });
+        }, 100);
+      }, 1500);
     }
   } catch (error) {
     console.error('Error marking action complete:', error);
