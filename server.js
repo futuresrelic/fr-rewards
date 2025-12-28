@@ -1043,6 +1043,18 @@ app.get('/api/config/public', async (req, res) => {
   try {
     const config = db.config.get();
     const enabledTemplates = db.templates.getEnabled();
+
+    // Check if favicon file exists, if not clear it from database
+    let faviconUrl = config.favicon_url || null;
+    if (faviconUrl) {
+      const faviconPath = path.join(__dirname, 'public', faviconUrl);
+      if (!fs.existsSync(faviconPath)) {
+        console.warn(`⚠️ Favicon file not found: ${faviconPath} - clearing from database`);
+        db.config.updateBranding({ favicon_url: null });
+        faviconUrl = null;
+      }
+    }
+
     res.json({
       success: true,
       config: {
@@ -1051,7 +1063,7 @@ app.get('/api/config/public', async (req, res) => {
         page_title: config.page_title || 'NFT Holder Rewards',
         page_subtitle: config.page_subtitle || 'Connect your wallet to claim rewards!',
         logo_url: config.logo_url || null,
-        favicon_url: config.favicon_url || null
+        favicon_url: faviconUrl
       }
     });
   } catch (error) {

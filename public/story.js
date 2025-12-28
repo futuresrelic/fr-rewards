@@ -89,13 +89,29 @@ async function loadPageBranding() {
       }
       // Update favicon if configured
       if (data.config.favicon_url) {
-        let favicon = document.querySelector('link[rel="icon"]');
-        if (!favicon) {
-          favicon = document.createElement('link');
-          favicon.rel = 'icon';
-          document.head.appendChild(favicon);
-        }
-        favicon.href = data.config.favicon_url;
+        // Test if favicon URL is accessible before setting it
+        const testImg = new Image();
+        testImg.onload = () => {
+          let favicon = document.querySelector('link[rel="icon"]');
+          if (!favicon) {
+            favicon = document.createElement('link');
+            favicon.rel = 'icon';
+            document.head.appendChild(favicon);
+          }
+          favicon.href = data.config.favicon_url;
+        };
+        testImg.onerror = () => {
+          console.warn('Favicon not found at:', data.config.favicon_url, '- using default');
+          // Use default favicon.ico if custom one is missing
+          let favicon = document.querySelector('link[rel="icon"]');
+          if (!favicon) {
+            favicon = document.createElement('link');
+            favicon.rel = 'icon';
+            document.head.appendChild(favicon);
+          }
+          favicon.href = '/favicon.ico';
+        };
+        testImg.src = data.config.favicon_url;
       }
     }
   } catch (error) {
@@ -1956,12 +1972,48 @@ async function executeBlend(action, config) {
 async function executeBlendArray(action, config) {
   console.log('🔍 BLEND_ARRAY config:', config);
 
-  if (!config || !config.blend_options || !Array.isArray(config.blend_options)) {
-    console.error('❌ Invalid BLEND_ARRAY config. Expected blend_options array, got:', config);
-    throw new Error('BLEND_ARRAY action requires blend_options array in config. Please configure this action in the admin panel.');
+  if (!config || !config.blend_ids || !Array.isArray(config.blend_ids)) {
+    console.error('❌ Invalid BLEND_ARRAY config. Expected blend_ids array, got:', config);
+    throw new Error('BLEND_ARRAY action requires blend_ids array in config. Please configure this action in the admin panel.');
   }
 
-  console.log(`⚡ BLEND_ARRAY with ${config.blend_options.length} options`);
+  console.log(`⚡ BLEND_ARRAY with ${config.blend_ids.length} blend options`);
+
+  // Fetch blend details from blockchain for each blend ID
+  const blendDetails = await Promise.all(
+    config.blend_ids.map(async (blendId) => {
+      try {
+        const response = await fetch(`${API_URL}/api/wax/table`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: 'blenderizerx',
+            scope: 'blenderizerx',
+            table: 'blends',
+            lower_bound: blendId,
+            upper_bound: blendId,
+            limit: 1
+          })
+        });
+
+        const data = await response.json();
+        if (data.rows && data.rows.length > 0) {
+          return data.rows[0];
+        }
+        return null;
+      } catch (error) {
+        console.error(`Failed to fetch blend ${blendId}:`, error);
+        return null;
+      }
+    })
+  );
+
+  // Filter out failed fetches
+  const validBlends = blendDetails.filter(b => b !== null);
+
+  if (validBlends.length === 0) {
+    throw new Error('Failed to fetch blend details from blockchain');
+  }
 
   // Get user's assets
   const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
@@ -1974,23 +2026,49 @@ async function executeBlendArray(action, config) {
   const userAssets = assetsData.data;
 
   // Check which blends are possible
-  const blendOptions = config.blend_options.map(option => {
-    // Filter assets by template IDs for this blend option
-    let ingredientAssets = userAssets;
-    if (option.ingredient_templates) {
-      const templateIds = option.ingredient_templates.map(t => t.toString());
-      ingredientAssets = userAssets.filter(asset =>
-        templateIds.includes(asset.template.template_id)
-      );
-    }
+  const blendOptions = validBlends.map(blend => {
+    // Extract ingredient template IDs from blend
+    const ingredientTemplates = blend.ingredients.map(ing => ing.template_id.toString());
 
-    const canExecute = ingredientAssets.length >= (option.ingredient_count || 1);
+    // Filter assets by template IDs for this blend
+    const ingredientAssets = userAssets.filter(asset =>
+      ingredientTemplates.includes(asset.template.template_id)
+    );
+
+    // Group assets by template to check if we have enough of each ingredient
+    const assetsByTemplate = {};
+    ingredientAssets.forEach(asset => {
+      const templateId = asset.template.template_id;
+      if (!assetsByTemplate[templateId]) {
+        assetsByTemplate[templateId] = [];
+      }
+      assetsByTemplate[templateId].push(asset);
+    });
+
+    // Check if we have enough assets for each ingredient
+    let canExecute = true;
+    let missingCount = 0;
+
+    blend.ingredients.forEach(ingredient => {
+      const templateId = ingredient.template_id.toString();
+      const required = ingredient.amount || 1;
+      const available = (assetsByTemplate[templateId] || []).length;
+
+      if (available < required) {
+        canExecute = false;
+        missingCount += (required - available);
+      }
+    });
 
     return {
-      ...option,
+      blend_id: blend.blend_id,
+      name: blend.display_data || `Blend #${blend.blend_id}`,
+      description: blend.description || '',
+      ingredients: blend.ingredients,
+      ingredient_templates: ingredientTemplates,
       available_assets: ingredientAssets,
       can_execute: canExecute,
-      missing_count: canExecute ? 0 : (option.ingredient_count || 1) - ingredientAssets.length
+      missing_count: missingCount
     };
   });
 
