@@ -957,12 +957,37 @@ async function verifyAndUpdatePackStatus() {
 
   try {
     // Step 1: Check if pack is in unboxassets table (already unpacked, ready to claim)
-    console.log(`🔍 Checking if pack ${selectedAssetId} is claimable...`);
+    console.log(`🔍 STEP 1: Checking if pack ${selectedAssetId} has been unpacked...`);
     const rollResponse = await fetch(`${API_URL}/api/pack/unboxed-rolls/${selectedAssetId}`);
+
+    // 404 = Pack not unpacked yet (NORMAL, expected for packs in wallet)
+    // 200 = Pack has been unpacked and has rolls (ready to claim)
+    if (rollResponse.status === 404) {
+      console.log(`  ℹ️  STEP 2: Pack ${selectedAssetId} is NOT unpacked yet → Ready to UNPACK`);
+
+      // Pack is in wallet, ready to unpack
+      statusDiv.innerHTML = `
+        <div style="color: var(--success);">
+          ✅ <strong>Ready to Unpack</strong><br>
+          <span style="font-size: 0.9rem;">Mint #${selectedPack.template_mint || 'Unknown'} • Click to open this pack</span>
+        </div>
+      `;
+
+      unpackBtn.style.display = 'block';
+      skipBtn.style.display = 'block';
+      return;
+    }
+
+    if (!rollResponse.ok) {
+      throw new Error(`Server error: ${rollResponse.status}`);
+    }
+
     const rollData = await rollResponse.json();
 
     if (rollData.success && rollData.roll_ids && rollData.roll_ids.length > 0) {
-      // Pack is ready to claim!
+      console.log(`  ✅ STEP 2: Pack ${selectedAssetId} HAS been unpacked → Ready to CLAIM (${rollData.roll_ids.length} rolls)`);
+
+      // Pack has been unpacked, ready to claim!
       selectedPack.roll_ids = rollData.roll_ids;
       selectedPack.is_claimable = true;
 
@@ -978,12 +1003,12 @@ async function verifyAndUpdatePackStatus() {
       return;
     }
 
-    // Step 2: Pack not claimable - assume ready to unpack
-    // Ownership will be verified by smart contract when unpacking
+    // Fallback: treat as ready to unpack
+    console.log(`  ℹ️  STEP 2: Pack ${selectedAssetId} status unclear → Assuming ready to UNPACK`);
     statusDiv.innerHTML = `
       <div style="color: var(--success);">
         ✅ <strong>Ready to Unpack</strong><br>
-        <span style="font-size: 0.9rem;">Mint #${selectedPack.template_mint} • Click to open this pack</span>
+        <span style="font-size: 0.9rem;">Mint #${selectedPack.template_mint || 'Unknown'} • Click to open this pack</span>
       </div>
     `;
 
@@ -991,7 +1016,7 @@ async function verifyAndUpdatePackStatus() {
     skipBtn.style.display = 'block';
 
   } catch (error) {
-    console.error('Error verifying pack:', error);
+    console.error('❌ ERROR verifying pack:', error);
     statusDiv.innerHTML = `
       <div style="color: var(--error);">
         ❌ <strong>Verification Error</strong><br>
