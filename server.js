@@ -961,17 +961,63 @@ app.post('/api/admin/upload-logo', authenticateAdmin, upload.single('logo'), asy
 });
 
 /**
+ * POST /api/admin/upload-favicon
+ * Upload and resize a favicon image (auto-resize to 32x32)
+ */
+app.post('/api/admin/upload-favicon', authenticateAdmin, upload.single('favicon'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const sharp = require('sharp');
+    const path = require('path');
+    const fs = require('fs');
+
+    // Generate filename for favicon
+    const timestamp = Date.now();
+    const faviconFilename = `favicon-${timestamp}.png`;
+    const faviconPath = path.join(__dirname, 'public', 'uploads', faviconFilename);
+
+    // Resize image to 32x32 and save as PNG
+    await sharp(req.file.path)
+      .resize(32, 32, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      })
+      .png()
+      .toFile(faviconPath);
+
+    // Delete the original uploaded file
+    fs.unlinkSync(req.file.path);
+
+    const faviconUrl = `/uploads/${faviconFilename}`;
+
+    // Update database with new favicon URL
+    db.config.updateBranding({ favicon_url: faviconUrl });
+
+    res.json({
+      success: true,
+      favicon_url: faviconUrl,
+      message: 'Favicon uploaded and resized to 32x32 successfully'
+    });
+  } catch (error) {
+    console.error('Error uploading favicon:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * PUT /api/admin/branding
  * Update page branding (title, subtitle)
  */
 app.put('/api/admin/branding', authenticateAdmin, async (req, res) => {
   try {
-    const { page_title, page_subtitle, favicon_url } = req.body;
+    const { page_title, page_subtitle } = req.body;
 
     const updates = {};
     if (page_title !== undefined) updates.page_title = page_title;
     if (page_subtitle !== undefined) updates.page_subtitle = page_subtitle;
-    if (favicon_url !== undefined) updates.favicon_url = favicon_url;
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No branding fields provided' });
@@ -1770,21 +1816,13 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
           .sort((a, b) => a - b);
 
         if (rollIds.length > 0) {
-          // Also fetch the asset details to get template_mint
+          // Fetch asset details from AtomicAssets API to get template_mint
           let templateMint = null;
           try {
-            const assetResult = await rpc.get_table_rows({
-              json: true,
-              code: 'atomicassets',
-              scope: 'atomicpacksx', // Pack is now owned by atomicpacksx
-              table: 'assets',
-              lower_bound: packAssetId,
-              limit: 1
-            });
-
-            // Verify we got the right asset (in case there are multiple)
-            if (assetResult.rows && assetResult.rows.length > 0 && assetResult.rows[0].asset_id === packAssetId) {
-              templateMint = assetResult.rows[0].template_mint;
+            const apiResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${packAssetId}`);
+            if (apiResponse.ok) {
+              const apiData = await apiResponse.json();
+              templateMint = apiData.data.template_mint;
             }
           } catch (err) {
             console.warn(`Could not fetch template_mint for pack ${packAssetId}:`, err.message);
@@ -2042,6 +2080,116 @@ app.get('/api/assets/:account', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching user assets:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+// ==================== DEBUG ENDPOINTS ====================
+
+/**
+ * GET /api/debug/inspect-asset/:assetId
+ * Debug tool: Inspect full asset details from AtomicAssets API
+ */
+app.get('/api/debug/inspect-asset/:assetId', async (req, res) => {
+  try {
+    const { assetId } = req.params;
+    console.log(`🔍 Inspecting asset ${assetId}...`);
+
+    // Fetch from AtomicAssets API
+    const response = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${assetId}`);
+
+    if (!response.ok) {
+      return res.status(404).json({
+        success: false,
+        error: `Asset ${assetId} not found on AtomicAssets API`
+      });
+    }
+
+    const data = await response.json();
+    const asset = data.data;
+
+    res.json({
+      success: true,
+      asset_id: asset.asset_id,
+      collection_name: asset.collection.collection_name,
+      schema_name: asset.schema.schema_name,
+      template_id: asset.template?.template_id || null,
+      template_mint: asset.template_mint,
+      owner: asset.owner,
+      backed_tokens: asset.backed_tokens,
+      immutable_data: asset.immutable_data || {},
+      mutable_data: asset.mutable_data || {},
+      raw_response: asset
+    });
+  } catch (error) {
+    console.error('Error inspecting asset:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/debug/inspect-claimable-pack/:assetId
+ * Debug tool: Inspect claimable pack from both blockchain table and API
+ */
+app.get('/api/debug/inspect-claimable-pack/:assetId', async (req, res) => {
+  try {
+    const { assetId } = req.params;
+    console.log(`🔍 Inspecting claimable pack ${assetId}...`);
+
+    const results = {};
+
+    // 1. Try to fetch from atomicassets table (blockchain RPC)
+    try {
+      console.log('  Querying atomicassets::assets table (scope: atomicpacksx)...');
+      const tableResult = await rpc.get_table_rows({
+        json: true,
+        code: 'atomicassets',
+        scope: 'atomicpacksx',
+        table: 'assets',
+        lower_bound: assetId,
+        limit: 5
+      });
+
+      const matchingAsset = tableResult.rows.find(r => r.asset_id === assetId);
+      results.asset_table_result = matchingAsset || null;
+      results.asset_table_all_rows = tableResult.rows;
+      console.log(`  Found in table: ${matchingAsset ? 'YES' : 'NO'}`);
+      if (matchingAsset) {
+        console.log(`  template_mint from table: ${matchingAsset.template_mint}`);
+      }
+    } catch (err) {
+      results.asset_table_error = err.message;
+    }
+
+    // 2. Fetch from AtomicAssets API
+    try {
+      console.log('  Querying AtomicAssets API...');
+      const apiResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${assetId}`);
+
+      if (apiResponse.ok) {
+        const apiData = await apiResponse.json();
+        results.atomic_api_result = {
+          success: true,
+          data: apiData.data
+        };
+        console.log(`  template_mint from API: ${apiData.data.template_mint}`);
+      } else {
+        results.atomic_api_result = {
+          success: false,
+          status: apiResponse.status
+        };
+      }
+    } catch (err) {
+      results.atomic_api_error = err.message;
+    }
+
+    res.json({
+      success: true,
+      asset_id: assetId,
+      ...results
+    });
+  } catch (error) {
+    console.error('Error inspecting claimable pack:', error);
     res.status(500).json({ error: error.message, success: false });
   }
 });

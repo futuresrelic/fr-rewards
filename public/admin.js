@@ -32,6 +32,10 @@ function setupEventListeners() {
     document.getElementById('logo-upload').click();
   });
   document.getElementById('logo-upload').addEventListener('change', handleLogoUpload);
+  document.getElementById('upload-favicon-btn').addEventListener('click', () => {
+    document.getElementById('favicon-upload-input').click();
+  });
+  document.getElementById('favicon-upload-input').addEventListener('change', handleFaviconUpload);
 }
 
 // Check existing session
@@ -599,15 +603,54 @@ async function handleLogoUpload(e) {
   e.target.value = '';
 }
 
+// Handle favicon upload
+async function handleFaviconUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const brandingMessage = document.getElementById('branding-message');
+
+  try {
+    const formData = new FormData();
+    formData.append('favicon', file);
+
+    const response = await fetch(`${API_URL}/api/admin/upload-favicon`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Upload failed');
+    }
+
+    // Show preview
+    const faviconPreview = document.getElementById('favicon-preview');
+    const faviconPreviewImg = document.getElementById('favicon-preview-img');
+    faviconPreviewImg.src = data.favicon_url;
+    faviconPreview.style.display = 'block';
+
+    showBrandingMessage('Favicon uploaded successfully!', 'success');
+  } catch (error) {
+    showBrandingMessage('Favicon upload failed: ' + error.message, 'error');
+  }
+
+  // Reset file input
+  e.target.value = '';
+}
+
 // Handle branding update
 async function handleBrandingUpdate(e) {
   e.preventDefault();
 
   const pageTitle = document.getElementById('page-title-input').value.trim();
   const pageSubtitle = document.getElementById('page-subtitle-input').value.trim();
-  const faviconUrl = document.getElementById('favicon-url-input').value.trim();
 
-  if (!pageTitle && !pageSubtitle && !faviconUrl) {
+  if (!pageTitle && !pageSubtitle) {
     showBrandingMessage('Please enter at least one field', 'error');
     return;
   }
@@ -621,8 +664,7 @@ async function handleBrandingUpdate(e) {
       },
       body: JSON.stringify({
         page_title: pageTitle || undefined,
-        page_subtitle: pageSubtitle || undefined,
-        favicon_url: faviconUrl || undefined
+        page_subtitle: pageSubtitle || undefined
       })
     });
 
@@ -659,13 +701,19 @@ async function loadBranding() {
     if (data.success && data.config) {
       document.getElementById('page-title-input').value = data.config.page_title || '';
       document.getElementById('page-subtitle-input').value = data.config.page_subtitle || '';
-      document.getElementById('favicon-url-input').value = data.config.favicon_url || '';
 
       if (data.config.logo_url) {
         const logoPreview = document.getElementById('logo-preview');
         const logoPreviewImg = document.getElementById('logo-preview-img');
         logoPreviewImg.src = data.config.logo_url;
         logoPreview.style.display = 'block';
+      }
+
+      if (data.config.favicon_url) {
+        const faviconPreview = document.getElementById('favicon-preview');
+        const faviconPreviewImg = document.getElementById('favicon-preview-img');
+        faviconPreviewImg.src = data.config.favicon_url;
+        faviconPreview.style.display = 'block';
       }
     }
   } catch (error) {

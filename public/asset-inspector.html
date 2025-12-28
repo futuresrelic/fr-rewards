@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asset Inspector - Debug Tool</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .inspector-container {
+      max-width: 1200px;
+      margin: 2em auto;
+      padding: 2em;
+    }
+    .search-box {
+      margin-bottom: 2em;
+    }
+    .search-box input {
+      width: 100%;
+      max-width: 600px;
+      padding: 0.8em;
+      font-size: 1em;
+      border: 2px solid #3a4a5a;
+      border-radius: 4px;
+      background: #1a2332;
+      color: #e0e0e0;
+    }
+    .search-box button {
+      margin-left: 1em;
+      padding: 0.8em 2em;
+      font-size: 1em;
+    }
+    .asset-details {
+      background: #1a2332;
+      border-radius: 8px;
+      padding: 1.5em;
+      margin-top: 2em;
+    }
+    .attr-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1em;
+    }
+    .attr-table th,
+    .attr-table td {
+      padding: 0.8em;
+      text-align: left;
+      border-bottom: 1px solid #3a4a5a;
+    }
+    .attr-table th {
+      background: #2a3a4a;
+      font-weight: bold;
+    }
+    .attr-table tr:hover {
+      background: #2a3a4a;
+    }
+    .json-view {
+      background: #0d1620;
+      padding: 1em;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin-top: 1em;
+    }
+    .json-view pre {
+      margin: 0;
+      color: #4af;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+    .section-title {
+      color: #4af;
+      font-size: 1.2em;
+      margin-top: 1.5em;
+      margin-bottom: 0.5em;
+      border-bottom: 2px solid #3a4a5a;
+      padding-bottom: 0.3em;
+    }
+    .error-msg {
+      color: #f44;
+      padding: 1em;
+      background: #2a1a1a;
+      border-radius: 4px;
+      margin-top: 1em;
+    }
+    .success-msg {
+      color: #4f4;
+      padding: 1em;
+      background: #1a2a1a;
+      border-radius: 4px;
+      margin-top: 1em;
+    }
+  </style>
+</head>
+<body>
+  <div class="inspector-container">
+    <header>
+      <h1>🔍 Asset Inspector</h1>
+      <p class="subtitle">Debug tool to inspect WAX blockchain asset attributes</p>
+    </header>
+
+    <div class="search-box">
+      <input
+        type="text"
+        id="asset-id-input"
+        placeholder="Enter Asset ID (e.g., 1099967229465)"
+      >
+      <button class="btn btn-primary" onclick="inspectAsset()">Inspect Asset</button>
+      <button class="btn btn-secondary" onclick="inspectClaimablePack()">Inspect as Claimable Pack</button>
+    </div>
+
+    <div id="result-container"></div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+
+    async function inspectAsset() {
+      const assetId = document.getElementById('asset-id-input').value.trim();
+      if (!assetId) {
+        showError('Please enter an asset ID');
+        return;
+      }
+
+      showLoading();
+
+      try {
+        const response = await fetch(`${API_URL}/api/debug/inspect-asset/${assetId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch asset');
+        }
+
+        displayAssetDetails(data);
+      } catch (error) {
+        showError('Error: ' + error.message);
+      }
+    }
+
+    async function inspectClaimablePack() {
+      const assetId = document.getElementById('asset-id-input').value.trim();
+      if (!assetId) {
+        showError('Please enter an asset ID');
+        return;
+      }
+
+      showLoading();
+
+      try {
+        const response = await fetch(`${API_URL}/api/debug/inspect-claimable-pack/${assetId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to fetch pack');
+        }
+
+        displayClaimablePackDetails(data);
+      } catch (error) {
+        showError('Error: ' + error.message);
+      }
+    }
+
+    function displayAssetDetails(data) {
+      const container = document.getElementById('result-container');
+
+      let html = '<div class="asset-details">';
+      html += '<div class="success-msg">✅ Asset found!</div>';
+
+      // Basic Info
+      html += '<div class="section-title">Basic Information</div>';
+      html += '<table class="attr-table">';
+      html += `<tr><th>Property</th><th>Value</th></tr>`;
+      html += `<tr><td>Asset ID</td><td>${data.asset_id}</td></tr>`;
+      html += `<tr><td>Collection</td><td>${data.collection_name}</td></tr>`;
+      html += `<tr><td>Schema</td><td>${data.schema_name}</td></tr>`;
+      html += `<tr><td>Template ID</td><td>${data.template_id || 'N/A'}</td></tr>`;
+      html += `<tr><td>Template Mint</td><td><strong style="color: #4f4">${data.template_mint || 'N/A'}</strong></td></tr>`;
+      html += `<tr><td>Owner</td><td>${data.owner}</td></tr>`;
+      html += `<tr><td>Backed Tokens</td><td>${JSON.stringify(data.backed_tokens)}</td></tr>`;
+      html += '</table>';
+
+      // Immutable Data
+      if (data.immutable_data && Object.keys(data.immutable_data).length > 0) {
+        html += '<div class="section-title">Immutable Data (Template Attributes)</div>';
+        html += '<table class="attr-table">';
+        html += `<tr><th>Attribute</th><th>Value</th></tr>`;
+        for (const [key, value] of Object.entries(data.immutable_data)) {
+          html += `<tr><td>${key}</td><td>${formatValue(value)}</td></tr>`;
+        }
+        html += '</table>';
+      }
+
+      // Mutable Data
+      if (data.mutable_data && Object.keys(data.mutable_data).length > 0) {
+        html += '<div class="section-title">Mutable Data (Asset-Specific Attributes)</div>';
+        html += '<table class="attr-table">';
+        html += `<tr><th>Attribute</th><th>Value</th></tr>`;
+        for (const [key, value] of Object.entries(data.mutable_data)) {
+          html += `<tr><td>${key}</td><td>${formatValue(value)}</td></tr>`;
+        }
+        html += '</table>';
+      }
+
+      // Raw JSON
+      html += '<div class="section-title">Raw JSON Response</div>';
+      html += '<div class="json-view"><pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function displayClaimablePackDetails(data) {
+      const container = document.getElementById('result-container');
+
+      let html = '<div class="asset-details">';
+      html += '<div class="success-msg">✅ Claimable pack inspection complete!</div>';
+
+      // Asset Table Query Result
+      html += '<div class="section-title">Asset Table Query (atomicassets::assets)</div>';
+      html += '<table class="attr-table">';
+      html += `<tr><th>Property</th><th>Value</th></tr>`;
+      if (data.asset_table_result) {
+        for (const [key, value] of Object.entries(data.asset_table_result)) {
+          html += `<tr><td>${key}</td><td><strong>${formatValue(value)}</strong></td></tr>`;
+        }
+      } else {
+        html += `<tr><td colspan="2">No asset found in table</td></tr>`;
+      }
+      html += '</table>';
+
+      // AtomicAssets API Result
+      html += '<div class="section-title">AtomicAssets API Result</div>';
+      if (data.atomic_api_result && data.atomic_api_result.success) {
+        const asset = data.atomic_api_result.data;
+        html += '<table class="attr-table">';
+        html += `<tr><th>Property</th><th>Value</th></tr>`;
+        html += `<tr><td>Asset ID</td><td>${asset.asset_id}</td></tr>`;
+        html += `<tr><td>Template ID</td><td>${asset.template?.template_id || 'N/A'}</td></tr>`;
+        html += `<tr><td>Template Mint</td><td><strong style="color: #4f4">${asset.template_mint || 'N/A'}</strong></td></tr>`;
+        html += `<tr><td>Collection</td><td>${asset.collection?.collection_name || 'N/A'}</td></tr>`;
+        html += `<tr><td>Schema</td><td>${asset.schema?.schema_name || 'N/A'}</td></tr>`;
+        html += `<tr><td>Owner</td><td>${asset.owner || 'N/A'}</td></tr>`;
+        html += '</table>';
+
+        if (asset.data) {
+          html += '<div class="section-title">Asset Data from API</div>';
+          html += '<table class="attr-table">';
+          html += `<tr><th>Attribute</th><th>Value</th></tr>`;
+          for (const [key, value] of Object.entries(asset.data)) {
+            html += `<tr><td>${key}</td><td>${formatValue(value)}</td></tr>`;
+          }
+          html += '</table>';
+        }
+      } else {
+        html += '<p>API request failed or returned no data</p>';
+      }
+
+      // Raw JSON
+      html += '<div class="section-title">Raw JSON Response</div>';
+      html += '<div class="json-view"><pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function formatValue(value) {
+      if (typeof value === 'object') {
+        return JSON.stringify(value);
+      }
+      return String(value);
+    }
+
+    function showLoading() {
+      document.getElementById('result-container').innerHTML =
+        '<div class="asset-details"><p>Loading...</p></div>';
+    }
+
+    function showError(message) {
+      document.getElementById('result-container').innerHTML =
+        `<div class="error-msg">${message}</div>`;
+    }
+  </script>
+</body>
+</html>
