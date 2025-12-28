@@ -1,7 +1,10 @@
 # FR-REWARDS SYSTEM STATE REPORT
-**Generated:** 2025-12-28
+**Generated:** 2025-12-28 (UPDATED with critical fixes)
 **Session:** claude/continue-project-review-aB6RT
+**Status:** ✅ PRODUCTION READY - All critical bugs fixed
 **Purpose:** Lock-in current system state for future reference and debugging
+
+**⚠️ CRITICAL:** See `CRITICAL_FIXES_2025-12-28.md` for recent bug fixes and rules
 
 ---
 
@@ -20,15 +23,17 @@
 - `GET /api/user/eligibility/:account` - Check eligible NFTs (**LIVE BLOCKCHAIN**)
 - `GET /api/user/cooldowns/:account` - Get cooldown status
 - `GET /api/user/claims/:account` - Get claim history
-- `POST /api/user/claim` - Claim reward
+- `POST /api/user/claim` - Claim reward (**LIVE BLOCKCHAIN**)
 
 **Data Sources:**
 - **LIVE BLOCKCHAIN QUERIES** via `getUserAssetsLive()` (wax.js)
 - Direct RPC queries to atomicassets contract
 - Real-time ownership verification (no cache delay)
+- ✅ Both eligibility AND claim use same LIVE RPC method (no mismatches)
 
-**WAX RPC:**
-- Endpoint: `https://wax.greymass.com` (via WaxJS)
+**WAX RPC (Primary):**
+- `https://api.wax.alohaeos.com` (user requested primary)
+- Fallback: greymass, waxsweden, eosphere, eosamsterdam, cryptolions
 
 ---
 
@@ -183,22 +188,23 @@ ATOMIC_APIS = [
 ---
 
 ### **WAX RPC Endpoints** (Live Blockchain)
-**Used For:** Real-time queries, LIVE eligibility checks
-**Configuration:** `wax.js` lines 459-466
+**Used For:** Real-time wallet ownership checks, LIVE eligibility/claim verification
+**Configuration:** `wax.js` lines 461-467
 
 ```javascript
-// LIVE blockchain RPC endpoints
+// LIVE blockchain RPC endpoints - PRIORITY ORDER
 rpcEndpoints = [
+  'https://api.wax.alohaeos.com',      // 🔴 PRIMARY (user requested)
   'https://wax.greymass.com',
   'https://api.waxsweden.org',
   'https://wax.eosphere.io',
-  'https://api.wax.alohaeos.com',
   'https://wax.eu.eosamsterdam.net',
   'https://wax.cryptolions.io'
 ]
 ```
 
-**Default:** `https://api.waxsweden.org` (WAX_RPC_ENDPOINT env var)
+**Primary:** `https://api.wax.alohaeos.com` (user requested for wallet checks)
+**Purpose:** ZERO-DELAY wallet ownership verification (not cached)
 
 ---
 
@@ -478,12 +484,28 @@ rpcEndpoints = [
 
 ## 🚨 CRITICAL RULES TO NEVER BREAK
 
-### 1. **CLAIM PAGE MUST STAY LIVE**
-- `/api/user/eligibility/:account` uses `getUserAssetsLive()` (wax.js:457)
-- DO NOT switch back to `checkEligibility()` (cached)
-- DO NOT remove cache-busting or RPC queries
+### 1. **ELIGIBILITY & CLAIM MUST MATCH** (MOST CRITICAL)
+- **BOTH** `/api/user/eligibility` AND `/api/user/claim` MUST use `getUserAssetsLive()`
+- ❌ NEVER use `checkEligibility()` for claim verification (it's cached!)
+- ✅ Both must query LIVE blockchain via RPC
+- **Why:** Prevents "Ready to claim!" → "You don't own this NFT" errors
+- **Code:** server.js:454-457
 
-### 2. **FAVICON STORAGE**
+```javascript
+// ✅ CORRECT - Both endpoints use this
+const eligibleAssets = await wax.getUserAssetsLive(account, collection, whitelistTemplates);
+
+// ❌ WRONG - DO NOT USE FOR CLAIMS
+const eligibleAssets = await wax.checkEligibility(account, collection, whitelistTemplates);
+```
+
+### 2. **RPC ENDPOINT PRIORITY FOR WALLET CHECKS**
+- Primary: `https://api.wax.alohaeos.com` (user requested)
+- Fallback order: greymass → waxsweden → eosphere → eosamsterdam → cryptolions
+- **NEVER** use cached AtomicAssets API for wallet ownership
+- **Why:** User specifically requested alohaeos for live wallet checks
+
+### 3. **FAVICON STORAGE**
 - Favicon stored as base64 in database (favicon_url column)
 - DO NOT use file system for favicons
 - Files in `/public/uploads/` are NOT persistent
@@ -526,8 +548,8 @@ rpcEndpoints = [
 4. Update branding: `/api/admin/branding`
 
 **External APIs:**
-1. AtomicAssets: `https://aa.wax.blacklusion.io` (cached)
-2. WAX RPC: `https://wax.greymass.com` (live)
+1. AtomicAssets: `https://aa.wax.blacklusion.io` (cached - asset data only)
+2. WAX RPC: `https://api.wax.alohaeos.com` (LIVE - wallet checks)
 3. IPFS: `https://ipfs.io/ipfs/`
 
 ---
@@ -537,14 +559,17 @@ rpcEndpoints = [
 ### Claim Page Flow
 1. User connects wallet → WaxJS/Anchor
 2. Frontend calls `/api/user/eligibility/:account`
-3. Backend calls `getUserAssetsLive()` → Direct RPC to blockchain
+3. Backend calls `getUserAssetsLive()` → **LIVE RPC** to blockchain (alohaeos)
 4. Query `atomicassets.assets` table (scope=account)
-5. Fetch template data from AtomicAssets API
+5. Fetch template data from AtomicAssets API (cached - fast)
 6. Return enriched assets with rewards
 7. Frontend displays eligible NFTs with claim buttons
 8. User clicks claim → `/api/user/claim`
-9. Backend mints NFT via WAX account
-10. Transaction recorded in database
+9. Backend calls `getUserAssetsLive()` → **LIVE RPC** to verify (SAME METHOD!)
+10. Verification passes → Mint NFT via WAX account
+11. Transaction recorded in database
+
+**Key:** Both eligibility AND claim use LIVE RPC = no cache mismatches ✅
 
 ### Story Page Flow
 1. User connects wallet
