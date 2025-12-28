@@ -1594,7 +1594,7 @@ app.get('/api/user/assets/:account/:template_id', async (req, res) => {
  * GET /api/user/check-ownership/:account
  * Check if user owns specific template IDs (for action status checking)
  * Query params: template_ids (comma-separated list of template IDs)
- * Uses wax.getUserAssets with timeout and fallback endpoints
+ * Uses blockchain RPC for real-time ownership checking (no cache)
  */
 app.get('/api/user/check-ownership/:account', async (req, res) => {
   try {
@@ -1610,13 +1610,62 @@ app.get('/api/user/check-ownership/:account', async (req, res) => {
 
     console.log(`Checking ownership for ${account}:`, templateIdArray);
 
-    // Fetch all user assets once (more efficient)
-    const allAssets = await wax.getUserAssets(account);
+    // Use blockchain RPC to check ownership (real-time, no cache)
+    const { JsonRpc } = require('eosjs');
+    const rpcEndpoints = [
+      'https://wax.api.eosnation.io',
+      'https://wax.eosphere.io',
+      'https://api-wax-mainnet.wecan.dev'
+    ];
+
+    let allAssets = [];
+    let success = false;
+
+    // Try RPC endpoints until one works
+    for (const endpoint of rpcEndpoints) {
+      try {
+        const rpc = new JsonRpc(endpoint, { fetch });
+        let hasMore = true;
+        let lowerBound = '';
+
+        // Paginate through all assets
+        while (hasMore) {
+          const result = await rpc.get_table_rows({
+            json: true,
+            code: 'atomicassets',
+            scope: account,
+            table: 'assets',
+            lower_bound: lowerBound,
+            limit: 1000
+          });
+
+          if (result.rows && result.rows.length > 0) {
+            allAssets = allAssets.concat(result.rows);
+            hasMore = result.more;
+            if (hasMore) {
+              lowerBound = result.next_key;
+            }
+          } else {
+            hasMore = false;
+          }
+        }
+
+        success = true;
+        break; // Exit endpoint loop on success
+      } catch (err) {
+        console.warn(`RPC endpoint ${endpoint} failed:`, err.message);
+        continue; // Try next endpoint
+      }
+    }
+
+    if (!success) {
+      throw new Error('All RPC endpoints failed');
+    }
 
     // Check each template ID
     for (const templateId of templateIdArray) {
       const ownsTemplate = allAssets.some(asset =>
-        asset.template && asset.template.template_id === templateId
+        asset.template_id && asset.template_id.toString() === templateId.toString()
       );
       ownershipStatus[templateId] = ownsTemplate;
       console.log(`Template ${templateId}: ${ownsTemplate ? 'OWNED' : 'NOT OWNED'}`);

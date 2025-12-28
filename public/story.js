@@ -723,15 +723,18 @@ async function executeUnpack(action, config) {
   }
 
   // Fetch claimable packs (unpacked but not claimed) from atomicpacksx
-  // Show ALL claimable packs regardless of template (same as packs page)
+  // Filter by template to match this specific action's pack requirement
   let claimablePacks = [];
   try {
     const claimResponse = await fetch(`${API_URL}/api/user/claimable-packs/${currentAccount}`);
     if (claimResponse.ok) {
       const claimData = await claimResponse.json();
       if (claimData.success && claimData.claimable_packs) {
-        claimablePacks = claimData.claimable_packs;
-        console.log(`🎁 Found ${claimablePacks.length} claimable packs in atomicpacksx`);
+        // IMPORTANT: Filter claimable packs to match this action's template ID
+        claimablePacks = claimData.claimable_packs.filter(pack =>
+          pack.pack_template_id === parseInt(config.pack_template_id)
+        );
+        console.log(`🎁 Found ${claimablePacks.length} claimable packs for template ${config.pack_template_id} in atomicpacksx`);
 
         // Add required fields for display
         claimablePacks.forEach(pack => {
