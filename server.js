@@ -971,34 +971,29 @@ app.post('/api/admin/upload-favicon', authenticateAdmin, upload.single('favicon'
     }
 
     const sharp = require('sharp');
-    const path = require('path');
     const fs = require('fs');
 
-    // Generate filename for favicon
-    const timestamp = Date.now();
-    const faviconFilename = `favicon-${timestamp}.png`;
-    const faviconPath = path.join(__dirname, 'public', 'uploads', faviconFilename);
-
-    // Resize image to 32x32 and save as PNG
-    await sharp(req.file.path)
+    // Resize image to 32x32 and convert to PNG buffer
+    const resizedBuffer = await sharp(req.file.path)
       .resize(32, 32, {
         fit: 'contain',
         background: { r: 0, g: 0, b: 0, alpha: 0 }
       })
       .png()
-      .toFile(faviconPath);
+      .toBuffer();
+
+    // Convert to base64 data URI
+    const base64Data = `data:image/png;base64,${resizedBuffer.toString('base64')}`;
 
     // Delete the original uploaded file
     fs.unlinkSync(req.file.path);
 
-    const faviconUrl = `/uploads/${faviconFilename}`;
-
-    // Update database with new favicon URL
-    db.config.updateBranding({ favicon_url: faviconUrl });
+    // Update database with base64 favicon data (stored in favicon_url for now)
+    db.config.updateBranding({ favicon_url: base64Data });
 
     res.json({
       success: true,
-      favicon_url: faviconUrl,
+      favicon_url: base64Data,
       message: 'Favicon uploaded and resized to 32x32 successfully'
     });
   } catch (error) {
@@ -1044,17 +1039,6 @@ app.get('/api/config/public', async (req, res) => {
     const config = db.config.get();
     const enabledTemplates = db.templates.getEnabled();
 
-    // Check if favicon file exists, if not clear it from database
-    let faviconUrl = config.favicon_url || null;
-    if (faviconUrl) {
-      const faviconPath = path.join(__dirname, 'public', faviconUrl);
-      if (!fs.existsSync(faviconPath)) {
-        console.warn(`⚠️ Favicon file not found: ${faviconPath} - clearing from database`);
-        db.config.updateBranding({ favicon_url: null });
-        faviconUrl = null;
-      }
-    }
-
     res.json({
       success: true,
       config: {
@@ -1063,7 +1047,7 @@ app.get('/api/config/public', async (req, res) => {
         page_title: config.page_title || 'NFT Holder Rewards',
         page_subtitle: config.page_subtitle || 'Connect your wallet to claim rewards!',
         logo_url: config.logo_url || null,
-        favicon_url: faviconUrl
+        favicon_url: config.favicon_url || null  // Now returns base64 data URI
       }
     });
   } catch (error) {

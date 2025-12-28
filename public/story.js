@@ -87,31 +87,15 @@ async function loadPageBranding() {
         logoEl.src = data.config.logo_url;
         logoEl.style.display = 'block';
       }
-      // Update favicon if configured
+      // Update favicon if configured (now supports base64 data URIs)
       if (data.config.favicon_url) {
-        // Test if favicon URL is accessible before setting it
-        const testImg = new Image();
-        testImg.onload = () => {
-          let favicon = document.querySelector('link[rel="icon"]');
-          if (!favicon) {
-            favicon = document.createElement('link');
-            favicon.rel = 'icon';
-            document.head.appendChild(favicon);
-          }
-          favicon.href = data.config.favicon_url;
-        };
-        testImg.onerror = () => {
-          console.warn('Favicon not found at:', data.config.favicon_url, '- using default');
-          // Use default favicon.ico if custom one is missing
-          let favicon = document.querySelector('link[rel="icon"]');
-          if (!favicon) {
-            favicon = document.createElement('link');
-            favicon.rel = 'icon';
-            document.head.appendChild(favicon);
-          }
-          favicon.href = '/favicon.ico';
-        };
-        testImg.src = data.config.favicon_url;
+        let favicon = document.querySelector('link[rel="icon"]');
+        if (!favicon) {
+          favicon = document.createElement('link');
+          favicon.rel = 'icon';
+          document.head.appendChild(favicon);
+        }
+        favicon.href = data.config.favicon_url;
       }
     }
   } catch (error) {
@@ -1979,14 +1963,22 @@ async function executeBlendArray(action, config) {
 
   console.log(`⚡ BLEND_ARRAY with ${config.blend_ids.length} blend options`);
 
-  // Fetch blend details from blockchain for each blend ID
-  const blendDetails = await Promise.all(
-    config.blend_ids.map(async (blendId) => {
+  // Fetch blend details from blockchain for each blend ID using public RPC
+  const rpcEndpoints = [
+    'https://wax.greymass.com',
+    'https://api.waxsweden.org',
+    'https://wax.eosphere.io',
+    'https://api.wax.alohaeos.com'
+  ];
+
+  async function queryBlendFromChain(blendId) {
+    for (const endpoint of rpcEndpoints) {
       try {
-        const response = await fetch(`${API_URL}/api/wax/table`, {
+        const response = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            json: true,
             code: 'blenderizerx',
             scope: 'blenderizerx',
             table: 'blends',
@@ -1996,16 +1988,24 @@ async function executeBlendArray(action, config) {
           })
         });
 
+        if (!response.ok) continue; // Try next endpoint
+
         const data = await response.json();
         if (data.rows && data.rows.length > 0) {
           return data.rows[0];
         }
         return null;
       } catch (error) {
-        console.error(`Failed to fetch blend ${blendId}:`, error);
-        return null;
+        console.warn(`Failed to fetch blend ${blendId} from ${endpoint}:`, error.message);
+        continue; // Try next endpoint
       }
-    })
+    }
+    console.error(`Failed to fetch blend ${blendId} from all endpoints`);
+    return null;
+  }
+
+  const blendDetails = await Promise.all(
+    config.blend_ids.map(blendId => queryBlendFromChain(blendId))
   );
 
   // Filter out failed fetches
