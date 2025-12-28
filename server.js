@@ -152,7 +152,9 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
       });
     }
 
-    const eligibleAssets = await wax.checkEligibility(account, config.collection_name, whitelistTemplates);
+    // Use LIVE blockchain query (not cached API) for real-time eligibility
+    console.log(`🔴 LIVE MODE: Querying blockchain directly for ${account}`);
+    const eligibleAssets = await wax.getUserAssetsLive(account, config.collection_name, whitelistTemplates);
 
     // Get all template rewards for enabled templates
     const allRewards = db.templateRewards.getAllEnabled();

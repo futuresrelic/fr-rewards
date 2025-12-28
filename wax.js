@@ -446,8 +446,137 @@ async function verifyTransaction(transactionId) {
   }
 }
 
+/**
+ * Get user assets LIVE from blockchain RPC (not cached)
+ * Queries atomicassets contract directly for real-time data
+ * @param {string} account - WAX account name
+ * @param {string} collection - Collection name (optional filter)
+ * @param {Array<number>} templateFilter - Template IDs to filter (optional)
+ * @returns {Promise<Array>} Array of assets with template data
+ */
+async function getUserAssetsLive(account, collection = null, templateFilter = null) {
+  // Live RPC endpoints from EOSNation validator and other reliable sources
+  const rpcEndpoints = [
+    'https://wax.greymass.com',
+    'https://api.waxsweden.org',
+    'https://wax.eosphere.io',
+    'https://api.wax.alohaeos.com',
+    'https://wax.eu.eosamsterdam.net',
+    'https://wax.cryptolions.io'
+  ];
+
+  let lastError = null;
+
+  for (const endpoint of rpcEndpoints) {
+    try {
+      console.log(`🔗 Querying LIVE blockchain via ${endpoint}...`);
+      const rpc = new JsonRpc(endpoint, { fetch });
+
+      let allAssets = [];
+      let lowerBound = null;
+      let hasMore = true;
+
+      // Paginate through assets table (scoped by owner)
+      while (hasMore && allAssets.length < 10000) {
+        const result = await rpc.get_table_rows({
+          json: true,
+          code: 'atomicassets',
+          scope: account,  // Assets are scoped by owner
+          table: 'assets',
+          lower_bound: lowerBound,
+          limit: 1000,
+          reverse: false,
+          show_payer: false
+        });
+
+        if (!result.rows || result.rows.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        // Filter by collection if specified
+        let filteredAssets = result.rows;
+        if (collection) {
+          filteredAssets = filteredAssets.filter(asset =>
+            asset.collection_name === collection
+          );
+        }
+
+        // Filter by template IDs if specified
+        if (templateFilter && templateFilter.length > 0) {
+          filteredAssets = filteredAssets.filter(asset =>
+            templateFilter.includes(parseInt(asset.template_id))
+          );
+        }
+
+        allAssets = allAssets.concat(filteredAssets);
+
+        // Check if more results
+        if (result.rows.length < 1000) {
+          hasMore = false;
+        } else {
+          lowerBound = result.next_key;
+        }
+      }
+
+      console.log(`✅ Found ${allAssets.length} assets LIVE from blockchain`);
+
+      // Fetch template data for each unique template
+      const uniqueTemplates = [...new Set(allAssets.map(a => a.template_id))];
+      const templateDataMap = new Map();
+
+      console.log(`📋 Fetching ${uniqueTemplates.length} unique templates...`);
+
+      await Promise.all(uniqueTemplates.map(async (templateId) => {
+        try {
+          const templateData = await getTemplate(collection || 'futuresrelic', templateId);
+          templateDataMap.set(templateId, templateData);
+        } catch (error) {
+          console.warn(`Failed to fetch template ${templateId}:`, error.message);
+        }
+      }));
+
+      // Enrich assets with template data
+      const enrichedAssets = allAssets.map(asset => {
+        const templateData = templateDataMap.get(asset.template_id);
+        const immutableData = templateData?.immutable_data || {};
+
+        // Get image/video URL
+        let mediaUrl = null;
+        if (immutableData.video) {
+          mediaUrl = getIpfsUrl(immutableData.video);
+        } else if (immutableData.img) {
+          mediaUrl = getIpfsUrl(immutableData.img);
+        }
+
+        return {
+          asset_id: asset.asset_id,
+          template: {
+            template_id: asset.template_id
+          },
+          name: immutableData.name || `Asset #${asset.asset_id}`,
+          image_url: mediaUrl,
+          collection: {
+            collection_name: asset.collection_name
+          }
+        };
+      });
+
+      return enrichedAssets;
+
+    } catch (error) {
+      console.warn(`❌ RPC ${endpoint} failed:`, error.message);
+      lastError = error;
+      continue;
+    }
+  }
+
+  throw new Error(`All RPC endpoints failed. Last error: ${lastError?.message}`);
+}
+
 module.exports = {
   getUserAssets,
+  getUserAssetsLive,
   getTemplate,
   checkEligibility,
   mintNFT,
