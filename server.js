@@ -1779,11 +1779,11 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
               scope: 'atomicpacksx', // Pack is now owned by atomicpacksx
               table: 'assets',
               lower_bound: packAssetId,
-              upper_bound: packAssetId,
               limit: 1
             });
 
-            if (assetResult.rows && assetResult.rows.length > 0) {
+            // Verify we got the right asset (in case there are multiple)
+            if (assetResult.rows && assetResult.rows.length > 0 && assetResult.rows[0].asset_id === packAssetId) {
               templateMint = assetResult.rows[0].template_mint;
             }
           } catch (err) {
