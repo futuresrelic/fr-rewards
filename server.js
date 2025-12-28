@@ -1865,25 +1865,49 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
     console.log(`Querying claimable packs for ${account}...`);
 
     const { JsonRpc } = require('eosjs');
-    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+    const rpcEndpoints = [
+      'https://wax.api.eosnation.io',
+      'https://wax.eosphere.io',
+      'https://api-wax-mainnet.wecan.dev',
+      'https://wax.eosdac.io'
+    ];
 
-    // Query the unboxpacks table - scope is the user's account
-    // This table contains all packs that have been unpacked but not claimed
-    const result = await rpc.get_table_rows({
-      json: true,
-      code: 'atomicpacksx',
-      scope: 'atomicpacksx',  // Global scope for unboxpacks
-      table: 'unboxpacks',
-      lower_bound: account,
-      upper_bound: account,
-      key_type: 'name',
-      index_position: 2,  // Secondary index by unlock_account (claimer)
-      limit: 100,
-      reverse: false,
-      show_payer: false
-    });
+    let result = null;
+    let rpc = null;
 
-    console.log(`Found ${result.rows.length} entries in unboxpacks table`);
+    // Try each RPC endpoint until one works
+    for (const endpoint of rpcEndpoints) {
+      try {
+        console.log(`  Trying RPC endpoint: ${endpoint}`);
+        rpc = new JsonRpc(endpoint, { fetch });
+
+        // Query the unboxpacks table - scope is the user's account
+        // This table contains all packs that have been unpacked but not claimed
+        result = await rpc.get_table_rows({
+          json: true,
+          code: 'atomicpacksx',
+          scope: 'atomicpacksx',  // Global scope for unboxpacks
+          table: 'unboxpacks',
+          lower_bound: account,
+          upper_bound: account,
+          key_type: 'name',
+          index_position: 2,  // Secondary index by unlock_account (claimer)
+          limit: 100,
+          reverse: false,
+          show_payer: false
+        });
+
+        console.log(`  ✅ Success - Found ${result.rows.length} entries in unboxpacks table`);
+        break; // Success, exit loop
+      } catch (err) {
+        console.warn(`  ❌ RPC endpoint ${endpoint} failed:`, err.message);
+        continue; // Try next endpoint
+      }
+    }
+
+    if (!result) {
+      throw new Error('All RPC endpoints failed for claimable packs query');
+    }
 
     if (!result.rows || result.rows.length === 0) {
       return res.json({
