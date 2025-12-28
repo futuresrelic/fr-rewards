@@ -1259,12 +1259,20 @@ async function showUnpackedAssetsModal(claimedAssets) {
       const videoUrl = combinedData.video.startsWith('Qm')
         ? `https://ipfs.io/ipfs/${combinedData.video}`
         : combinedData.video;
-      mediaHtml = `<video src="${videoUrl}" autoplay loop muted playsinline style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;"></video>`;
+      mediaHtml = `
+        <div style="width: 100%; height: 250px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; background: var(--bg-dark); border-radius: 8px;">
+          <video src="${videoUrl}" autoplay loop muted playsinline style="max-width: 100%; max-height: 100%; width: auto; height: auto; border-radius: 8px;"></video>
+        </div>
+      `;
     } else if (combinedData.img) {
       const imgUrl = combinedData.img.startsWith('Qm')
         ? `https://ipfs.io/ipfs/${combinedData.img}`
         : combinedData.img;
-      mediaHtml = `<img src="${imgUrl}" alt="${asset.name}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">`;
+      mediaHtml = `
+        <div style="width: 100%; height: 250px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; background: var(--bg-dark); border-radius: 8px;">
+          <img src="${imgUrl}" alt="${asset.name}" style="max-width: 100%; max-height: 100%; width: auto; height: auto; border-radius: 8px;">
+        </div>
+      `;
     }
 
     assetCard.innerHTML = `
