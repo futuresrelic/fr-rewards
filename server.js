@@ -2468,6 +2468,36 @@ app.get('/api/assets/:account', async (req, res) => {
 // ==================== DEBUG ENDPOINTS ====================
 
 /**
+ * GET /api/debug/raw-assets/:account
+ * Shows RAW blockchain data for first 50 assets to debug structure
+ */
+app.get('/api/debug/raw-assets/:account', async (req, res) => {
+  try {
+    const { account } = req.params;
+    const { collection_name } = req.query;
+
+    console.log(`🔍 DEBUG: Fetching raw assets for ${account}`);
+
+    const allAssets = await wax.getUserAssetsLive(account, collection_name || null, null);
+    const first50 = allAssets.slice(0, 50);
+
+    // Show raw structure
+    res.json({
+      success: true,
+      total_assets: allAssets.length,
+      showing_first: first50.length,
+      raw_assets: first50,
+      sample_structure: first50[0] || null,
+      // Show ALL unique template IDs in first 50
+      template_ids_found: [...new Set(first50.map(a => a.template?.template_id || 'NO_TEMPLATE'))]
+    });
+  } catch (error) {
+    console.error('Error in debug endpoint:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/debug/inspect-asset/:assetId
  * Debug tool: Inspect full asset details from AtomicAssets API
  */
