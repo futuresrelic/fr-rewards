@@ -2400,6 +2400,7 @@ app.post('/api/blends/details', async (req, res) => {
     // Fetch missing blends from blockchain
     if (blendsToFetch.length > 0) {
       console.log(`🔗 Fetching ${blendsToFetch.length} blends from blockchain...`);
+      console.log(`🎯 USING CONTRACT: blend.nefty (v1.1 fix applied)`);
 
       const { JsonRpc } = require('eosjs');
 
