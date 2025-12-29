@@ -463,6 +463,65 @@ if (!assetData) {
 
 ---
 
+### BLEND ASSET SELECTION USING CACHED API - 2025-12-29
+
+**Git Commit:** `122a37f` - Fix blend asset selection to use LIVE blockchain RPC instead of cached API
+
+**Problem:**
+- User just claimed Intern Card (template 210857) from pack
+- Blend requires Intern Card as ingredient #1
+- Blend modal shows "0 available - you need to acquire this!"
+- User actually HAS the card in wallet (just claimed it)
+- Same issue as old claim verification bug: LIVE vs CACHED mismatch
+
+**Root Cause:**
+```javascript
+// server.js line 2442 - WRONG (before fix)
+const assets = await wax.getUserAssets(account, collection_name); // ❌ CACHED API!
+
+// Meanwhile, claim verification uses:
+const assets = await wax.getUserAssetsLive(account, collection_name); // ✅ LIVE RPC
+```
+
+**Why This Happens:**
+- Blend asset fetching used cached AtomicAssets API (`getUserAssets`)
+- Claim verification uses LIVE blockchain RPC (`getUserAssetsLive`)
+- Mixing LIVE and CACHED creates inconsistency:
+  - User claims pack → sees new asset on eligibility page (LIVE)
+  - User tries to blend → asset not found (CACHED - 30-120s lag)
+  - "You have 0 but you just claimed it!" confusion
+
+**Fix Applied:**
+```javascript
+// server.js line 2443 - Use LIVE RPC for blend assets
+const assets = await wax.getUserAssetsLive(account, collection_name || null, null);
+
+res.json({
+  success: true,
+  data: assets,
+  source: 'blockchain_rpc_live' // ✅ LIVE!
+});
+```
+
+**Consistency Rule:**
+```javascript
+// ✅ ALL wallet checks MUST use getUserAssetsLive():
+- Eligibility check → getUserAssetsLive()
+- Claim verification → getUserAssetsLive()
+- Blend asset selection → getUserAssetsLive()
+- Unpack checks → getUserAssetsLive()
+
+// ❌ NEVER mix LIVE and CACHED for same user flow
+```
+
+**Result:**
+✅ Blend sees newly claimed assets immediately
+✅ No more "0 available" for assets you just got
+✅ Consistent with claim/eligibility verification
+✅ All wallet checks use same LIVE RPC source
+
+---
+
 ## 🚨 CRITICAL BUG FIXES
 
 ### 1. **CLAIM VERIFICATION MISMATCH** (MOST CRITICAL)
