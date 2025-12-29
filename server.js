@@ -11,6 +11,7 @@ require('dotenv').config();
 
 const db = require('./database');
 const wax = require('./wax');
+const validators = require('./validators');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -136,6 +137,12 @@ app.get('/api/user/holdings/:account', async (req, res) => {
 app.get('/api/user/eligibility/:account', async (req, res) => {
   try {
     const { account } = req.params;
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
     const config = db.config.get();
     const enabledTemplates = db.templates.getEnabled();
     const whitelistTemplates = enabledTemplates.map(t => t.template_id);
@@ -431,21 +438,39 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
   try {
     const { account, template_id, reward_id } = req.body;
 
+    // Validate required fields
     if (!account || !template_id || !reward_id) {
       return res.status(400).json({ error: 'Missing required fields: account, template_id, reward_id' });
+    }
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    // Validate and parse template_id
+    const validatedTemplateId = validators.validateTemplateId(template_id);
+    if (validatedTemplateId === null) {
+      return res.status(400).json({ error: 'Invalid template_id - must be a positive integer' });
+    }
+
+    // Validate and parse reward_id
+    const validatedRewardId = validators.validateInteger(reward_id, { min: 1 });
+    if (validatedRewardId === null) {
+      return res.status(400).json({ error: 'Invalid reward_id - must be a positive integer' });
     }
 
     const config = db.config.get();
 
     // Get template configuration
-    const templateConfig = db.templates.getById(parseInt(template_id));
+    const templateConfig = db.templates.getById(validatedTemplateId);
     if (!templateConfig || !templateConfig.enabled) {
       return res.status(400).json({ error: 'Template not enabled or does not exist' });
     }
 
     // Get reward configuration
-    const rewardConfig = db.templateRewards.getById(parseInt(reward_id));
-    if (!rewardConfig || !rewardConfig.enabled || rewardConfig.template_id !== parseInt(template_id)) {
+    const rewardConfig = db.templateRewards.getById(validatedRewardId);
+    if (!rewardConfig || !rewardConfig.enabled || rewardConfig.template_id !== validatedTemplateId) {
       return res.status(400).json({ error: 'Reward not found or not enabled for this template' });
     }
 
@@ -454,14 +479,14 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
     const enabledTemplates = db.templates.getEnabled();
     const whitelistTemplates = enabledTemplates.map(t => t.template_id);
     const eligibleAssets = await wax.getUserAssetsLive(account, config.collection_name, whitelistTemplates);
-    const userAssets = eligibleAssets.filter(asset => parseInt(asset.template.template_id) === parseInt(template_id));
+    const userAssets = eligibleAssets.filter(asset => parseInt(asset.template.template_id) === validatedTemplateId);
 
     if (userAssets.length === 0) {
       return res.status(403).json({ error: 'You do not hold this whitelisted NFT' });
     }
 
     // Check cooldown
-    const canClaim = db.claims.canClaim(account, template_id, reward_id);
+    const canClaim = db.claims.canClaim(account, validatedTemplateId, validatedRewardId);
     if (!canClaim) {
       return res.status(429).json({ error: 'Cooldown period has not expired' });
     }
@@ -481,11 +506,11 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
     // Record claim with reward_id
     db.claims.add(
       account,
-      template_id,
+      validatedTemplateId,
       rewardConfig.reward_template_id,
       transactionIds[0], // Use first transaction ID
       rewardConfig.cooldown_hours,
-      reward_id
+      validatedRewardId
     );
 
     res.json({
@@ -748,23 +773,56 @@ app.post('/api/admin/template-rewards', authenticateAdmin, async (req, res) => {
   try {
     const { template_id, reward_template_id, reward_name, cooldown_hours, max_claims, match_quantity } = req.body;
 
-    if (!template_id || !reward_template_id || !cooldown_hours) {
+    if (!template_id || !reward_template_id || cooldown_hours === undefined) {
       return res.status(400).json({ error: 'Missing required fields: template_id, reward_template_id, cooldown_hours' });
     }
 
+    // Validate template_id
+    const validatedTemplateId = validators.validateTemplateId(template_id);
+    if (validatedTemplateId === null) {
+      return res.status(400).json({ error: 'Invalid template_id - must be a positive integer' });
+    }
+
+    // Validate reward_template_id
+    const validatedRewardTemplateId = validators.validateTemplateId(reward_template_id);
+    if (validatedRewardTemplateId === null) {
+      return res.status(400).json({ error: 'Invalid reward_template_id - must be a positive integer' });
+    }
+
+    // Validate cooldown_hours
+    const validatedCooldownHours = validators.validateCooldownHours(cooldown_hours);
+    if (validatedCooldownHours === null) {
+      return res.status(400).json({ error: 'Invalid cooldown_hours - must be between 0 and 8760 (1 year)' });
+    }
+
+    // Validate max_claims (optional)
+    let validatedMaxClaims = null;
+    if (max_claims !== null && max_claims !== undefined) {
+      validatedMaxClaims = validators.validateInteger(max_claims, { min: 1, max: 1000 });
+      if (validatedMaxClaims === null) {
+        return res.status(400).json({ error: 'Invalid max_claims - must be between 1 and 1000' });
+      }
+    }
+
+    // Validate reward_name (optional)
+    const validatedRewardName = validators.validateString(reward_name || '', {
+      maxLength: 100,
+      required: false
+    });
+
     // Verify template exists
-    const template = db.templates.getById(parseInt(template_id));
+    const template = db.templates.getById(validatedTemplateId);
     if (!template) {
       return res.status(404).json({ error: 'Template not found' });
     }
 
     db.templateRewards.add(
-      parseInt(template_id),
-      parseInt(reward_template_id),
-      reward_name || null,
-      parseInt(cooldown_hours),
-      max_claims ? parseInt(max_claims) : null,
-      match_quantity || false
+      validatedTemplateId,
+      validatedRewardTemplateId,
+      validatedRewardName || null,
+      validatedCooldownHours,
+      validatedMaxClaims,
+      validators.validateBoolean(match_quantity)
     );
 
     res.json({ success: true, message: 'Reward added successfully' });
@@ -1014,8 +1072,30 @@ app.put('/api/admin/branding', authenticateAdmin, async (req, res) => {
     const { page_title, page_subtitle } = req.body;
 
     const updates = {};
-    if (page_title !== undefined) updates.page_title = page_title;
-    if (page_subtitle !== undefined) updates.page_subtitle = page_subtitle;
+
+    // Validate page_title (max 100 chars)
+    if (page_title !== undefined) {
+      const validatedTitle = validators.validateString(page_title, {
+        maxLength: 100,
+        required: false
+      });
+      if (validatedTitle === null) {
+        return res.status(400).json({ error: 'Invalid page_title - max length 100 characters' });
+      }
+      updates.page_title = validatedTitle;
+    }
+
+    // Validate page_subtitle (max 200 chars)
+    if (page_subtitle !== undefined) {
+      const validatedSubtitle = validators.validateString(page_subtitle, {
+        maxLength: 200,
+        required: false
+      });
+      if (validatedSubtitle === null) {
+        return res.status(400).json({ error: 'Invalid page_subtitle - max length 200 characters' });
+      }
+      updates.page_subtitle = validatedSubtitle;
+    }
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: 'No branding fields provided' });
