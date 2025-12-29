@@ -2931,7 +2931,7 @@ app.get('/admin', (req, res) => {
 // ==================== START SERVER ====================
 
 app.listen(PORT, () => {
-  console.log(`\n🚀 WAX NFT Rewards System v1.0`);
+  console.log(`\n🚀 WAX NFT Rewards System v1.1 (blend.nefty fix)`);
   console.log(`📡 Server running on http://localhost:${PORT}`);
   console.log(`🔧 Admin panel: http://localhost:${PORT}/admin`);
 
