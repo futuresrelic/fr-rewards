@@ -522,6 +522,89 @@ res.json({
 
 ---
 
+### API ENDPOINTS CONFIGURATION PANEL - 2025-12-29
+
+**Git Commit:** `52befd4` - Add API Endpoints Configuration admin panel for visibility and testing
+
+**Problem:**
+- No visibility into which API endpoints are being used where
+- Hard to debug LIVE vs CACHED inconsistencies
+- No way to test endpoints or see their status
+- Difficult to understand why blend/unpack/claim failures occur
+- Mixing of hardcoded endpoints throughout codebase
+
+**User Feedback:**
+> "I feel you are using api endpoints all over the place, hardcoded or whatever, its not working entirely and its annoying and unstable. We need consistency and we need live asset check in wallet... what are marketplaces using? like NeftyBlocks, it knows when we have an asset and its not struggling with the same crap as we are!"
+
+**Solution Created:**
+New **API Endpoints Configuration Panel** at `/admin-endpoints.html`
+
+**Features:**
+1. **Complete Endpoint Inventory**
+   - Lists all API endpoints used in the application
+   - Shows which are LIVE RPC (real-time) vs CACHED API (delayed)
+   - Documents the purpose of each endpoint
+   - Shows file locations for each usage
+
+2. **Visual Status Indicators**
+   - 🟢 LIVE RPC - Real-time blockchain queries
+   - 🟡 CACHED API - Template metadata only
+   - 🔵 Application endpoints - Internal backend APIs
+
+3. **Endpoint Testing**
+   - Built-in test buttons for key endpoints
+   - Shows response time and data source
+   - Helps verify endpoints are working correctly
+
+4. **Best Practices Documentation**
+   - When to use LIVE vs CACHED
+   - Common mistakes to avoid
+   - How NeftyBlocks likely handles this
+   - Consistency rules
+
+5. **Current Endpoint Status**
+   - ✅ `/api/user/eligibility` → getUserAssetsLive() (LIVE)
+   - ✅ `/api/user/claim` → getUserAssetsLive() (LIVE)
+   - ✅ `/api/assets/:account` → getUserAssetsLive() (LIVE)
+   - ✅ `/api/user/assets-rpc/:account/:template_id` → Direct RPC (LIVE)
+   - ✅ `/api/pack/unboxed-rolls/:packAssetId` → atomicpacksx RPC (LIVE)
+   - ✅ `/api/templates/:template_id` → AtomicAssets API (CACHED - metadata only)
+
+**Consistency Rule Enforced:**
+```javascript
+// ✅ ALL wallet checks MUST use getUserAssetsLive():
+- Eligibility check → getUserAssetsLive()
+- Claim verification → getUserAssetsLive()
+- Blend asset selection → getUserAssetsLive()
+- Unpack checks → getUserAssetsLive()
+
+// ❌ NEVER mix LIVE and CACHED for same user flow
+```
+
+**How NeftyBlocks Does It:**
+- Direct database access to their own indexed blockchain data
+- Real-time WebSocket subscriptions to blockchain events
+- Their own API infrastructure with sub-second indexing
+- Cached layers for metadata but LIVE queries for ownership
+
+**Our Approach (Standard for Independent dApps):**
+- Public RPC nodes (alohaeos, greymass, etc.) for LIVE data
+- Public AtomicAssets APIs for metadata only
+- No custom infrastructure needed
+- Industry standard approach
+
+**Access:**
+Navigate to: **Admin Panel → 🌐 API Endpoints**
+
+**Result:**
+✅ Complete visibility into all API endpoint usage
+✅ Easy testing and verification
+✅ Clear documentation of LIVE vs CACHED
+✅ Prevents future LIVE/CACHED mixing bugs
+✅ Educational resource for understanding the system
+
+---
+
 ## 🚨 CRITICAL BUG FIXES
 
 ### 1. **CLAIM VERIFICATION MISMATCH** (MOST CRITICAL)
