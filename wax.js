@@ -575,55 +575,20 @@ async function getUserAssetsLive(account, collection = null, templateFilter = nu
 
       console.log(`✅ Found ${allAssets.length} assets LIVE from blockchain`);
 
-      // Fetch template data for each unique template
-      const uniqueTemplates = [...new Set(allAssets.map(a => a.template_id))];
-      const templateDataMap = new Map();
-
-      console.log(`📋 Fetching ${uniqueTemplates.length} unique templates...`);
-
-      await Promise.all(uniqueTemplates.map(async (templateId) => {
-        try {
-          const templateData = await getTemplate(collection || 'futuresrelic', templateId);
-          templateDataMap.set(templateId, templateData);
-          console.log(`   ✓ Template ${templateId}: ${templateData?.immutable_data?.name || 'No name'}`);
-        } catch (error) {
-          console.error(`   ✗ Template ${templateId} FAILED:`, error.message);
-          // Set minimal data even on failure so asset still renders
-          templateDataMap.set(templateId, {
-            template_id: templateId,
-            immutable_data: {},
-            collection_name: collection || 'futuresrelic'
-          });
+      // Return RAW blockchain data without template metadata
+      // Frontend will enrich with template data from its cache
+      const rawAssets = allAssets.map(asset => ({
+        asset_id: asset.asset_id,
+        template: {
+          template_id: asset.template_id
+        },
+        backed_tokens: asset.backed_tokens || [],
+        collection: {
+          collection_name: asset.collection_name
         }
       }));
 
-      // Enrich assets with template data
-      const enrichedAssets = allAssets.map(asset => {
-        const templateData = templateDataMap.get(asset.template_id);
-        const immutableData = templateData?.immutable_data || {};
-
-        // Match AtomicAssets API structure for frontend compatibility
-        return {
-          asset_id: asset.asset_id,
-          template: {
-            template_id: asset.template_id,
-            immutable_data: immutableData
-          },
-          name: immutableData.name || `Asset #${asset.asset_id}`,
-          data: {
-            img: immutableData.img || null,
-            video: immutableData.video || null,
-            ...immutableData  // Include all immutable data fields
-          },
-          template_mint: null,  // Not available from blockchain RPC - would require separate API query
-          backed_tokens: asset.backed_tokens || [],
-          collection: {
-            collection_name: asset.collection_name
-          }
-        };
-      });
-
-      return enrichedAssets;
+      return rawAssets;
 
     } catch (error) {
       console.warn(`❌ RPC ${endpoint} failed:`, error.message);

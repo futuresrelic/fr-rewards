@@ -49,6 +49,9 @@ let currentBlendAction = null;
 let currentBlendConfig = null;
 let availableBlendAssets = [];
 
+// Template data cache (session-persistent)
+const templateDataCache = {};
+
 // Blend array state
 let currentBlendArrayAction = null;
 let currentBlendArrayConfig = null;
@@ -118,6 +121,64 @@ function setupEventListeners() {
   confirmClaimBtn.addEventListener('click', confirmClaim);
   confirmBlendBtn.addEventListener('click', confirmBlend);
   markDropCompleteBtn.addEventListener('click', markDropAsComplete);
+}
+
+// Fetch and cache template data for specific template IDs
+async function fetchTemplateData(templateIds, collectionName = 'futuresrelic') {
+  // Convert to array and filter out already cached templates
+  const idsArray = Array.isArray(templateIds) ? templateIds : [templateIds];
+  const uncachedIds = idsArray.filter(id => !templateDataCache[id]);
+
+  if (uncachedIds.length === 0) {
+    console.log('✅ All templates already cached');
+    return; // All templates already cached
+  }
+
+  console.log(`🔍 Fetching ${uncachedIds.length} template(s):`, uncachedIds);
+
+  // AtomicAssets API endpoints with fallback
+  const endpoints = [
+    'https://wax.api.atomicassets.io',
+    'https://aa.wax.blacklusion.io',
+    'https://atomic.wax.eosrio.io',
+    'https://aa.dapplica.io'
+  ];
+
+  // Fetch templates one by one (not parallel to avoid rate limits)
+  for (const templateId of uncachedIds) {
+    let fetched = false;
+
+    for (const endpoint of endpoints) {
+      try {
+        const url = `${endpoint}/atomicassets/v1/templates/${collectionName}/${templateId}`;
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          templateDataCache[templateId] = data.data;
+          console.log(`✅ Cached template ${templateId}: ${data.data?.immutable_data?.name || 'Unknown'}`);
+          fetched = true;
+          break; // Success, move to next template
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch template ${templateId} from ${endpoint}:`, error.message);
+        continue; // Try next endpoint
+      }
+    }
+
+    if (!fetched) {
+      console.error(`❌ Failed to fetch template ${templateId} from all endpoints`);
+      // Set minimal data so we don't keep trying
+      templateDataCache[templateId] = {
+        template_id: templateId,
+        immutable_data: {}
+      };
+    }
+  }
+
+  console.log(`📦 Template cache now has ${Object.keys(templateDataCache).length} templates`);
 }
 
 // Show error message
@@ -2135,50 +2196,48 @@ async function executeBlend(action, config) {
     throw new Error('BLEND action requires blend_id in config');
   }
 
-  // Get user's assets to find ingredients (via server proxy to avoid CORS)
-  // HYBRID APPROACH: Try cached first (fast, has metadata), fallback to LIVE for missing templates
-  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
+  console.log(`🔮 Starting blend ${config.blend_id}`);
+
+  // STEP 1: Fetch and cache template data for blend ingredients ONLY
+  if (config.ingredient_templates && config.ingredient_templates.length > 0) {
+    console.log(`📋 Fetching template data for ${config.ingredient_templates.length} ingredient(s)...`);
+    await fetchTemplateData(config.ingredient_templates, config.collection_name || 'futuresrelic');
+  }
+
+  // STEP 2: Fetch LIVE blockchain assets (raw data, no template metadata)
+  console.log(`🔴 Fetching LIVE blockchain assets for ${currentAccount}...`);
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
   const assetsData = await assetsResponse.json();
 
   if (!assetsData.success) {
     throw new Error('Failed to fetch assets');
   }
 
-  let allAssets = assetsData.data;
+  // STEP 3: Enrich assets with cached template data
+  console.log(`✨ Enriching ${assetsData.data.length} assets with template data...`);
+  const enrichedAssets = assetsData.data.map(asset => {
+    const templateId = asset.template.template_id.toString();
+    const templateData = templateDataCache[templateId];
 
-  // Filter assets by template IDs if specified
-  let ingredientAssets = [];
-  if (config.ingredient_templates) {
+    return {
+      ...asset,
+      name: templateData?.immutable_data?.name || `Asset ${asset.asset_id}`,
+      data: templateData?.immutable_data || {},
+      template: {
+        ...asset.template,
+        immutable_data: templateData?.immutable_data || {}
+      }
+    };
+  });
+
+  // STEP 4: Filter for blend ingredients
+  let ingredientAssets = enrichedAssets;
+  if (config.ingredient_templates && config.ingredient_templates.length > 0) {
     const templateIds = config.ingredient_templates.map(t => t.toString());
-    ingredientAssets = allAssets.filter(asset =>
+    ingredientAssets = enrichedAssets.filter(asset =>
       templateIds.includes(asset.template.template_id.toString())
     );
-
-    // Check for missing templates (new assets not in cached API yet)
-    const foundTemplates = [...new Set(ingredientAssets.map(a => a.template.template_id.toString()))];
-    const missingTemplates = templateIds.filter(tid => !foundTemplates.includes(tid));
-
-    if (missingTemplates.length > 0) {
-      console.log(`⚠️ Missing ${missingTemplates.length} templates from cache, fetching LIVE...`, missingTemplates);
-
-      // Fetch LIVE blockchain data for missing templates
-      const liveResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
-      const liveData = await liveResponse.json();
-
-      if (liveData.success) {
-        // Filter for missing templates only
-        const liveAssets = liveData.data.filter(asset =>
-          missingTemplates.includes(asset.template.template_id.toString())
-        );
-
-        console.log(`✅ Found ${liveAssets.length} assets from LIVE blockchain for missing templates`);
-
-        // Merge LIVE assets with cached assets
-        ingredientAssets = [...ingredientAssets, ...liveAssets];
-      }
-    }
-  } else {
-    ingredientAssets = allAssets;
+    console.log(`🎯 Filtered to ${ingredientAssets.length} ingredient assets (from ${enrichedAssets.length} total)`);
   }
 
   if (ingredientAssets.length < (config.ingredient_count || 1)) {
@@ -2252,44 +2311,41 @@ async function executeBlendArray(action, config) {
     throw new Error('Failed to fetch blend details from blockchain');
   }
 
-  // Get user's assets
-  // HYBRID APPROACH: Try cached first (fast, has metadata), fallback to LIVE for missing templates
-  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
+  // STEP 1: Collect all required templates across ALL blend options
+  const allRequiredTemplates = [...new Set(validBlends.flatMap(blend =>
+    blend.ingredients.map(ing => ing.template_id.toString())
+  ))];
+
+  console.log(`📋 Fetching template data for ${allRequiredTemplates.length} unique ingredient(s) across all blends...`);
+
+  // STEP 2: Fetch and cache template data for ALL blend ingredients
+  await fetchTemplateData(allRequiredTemplates, config.collection_name || 'futuresrelic');
+
+  // STEP 3: Fetch LIVE blockchain assets (raw data, no template metadata)
+  console.log(`🔴 Fetching LIVE blockchain assets for ${currentAccount}...`);
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
   const assetsData = await assetsResponse.json();
 
   if (!assetsData.success) {
     throw new Error('Failed to fetch assets');
   }
 
-  let userAssets = assetsData.data;
+  // STEP 4: Enrich assets with cached template data
+  console.log(`✨ Enriching ${assetsData.data.length} assets with template data...`);
+  const userAssets = assetsData.data.map(asset => {
+    const templateId = asset.template.template_id.toString();
+    const templateData = templateDataCache[templateId];
 
-  // Check for missing required templates across ALL blend options
-  const allRequiredTemplates = [...new Set(validBlends.flatMap(blend =>
-    blend.ingredients.map(ing => ing.template_id.toString())
-  ))];
-
-  const foundTemplates = [...new Set(userAssets.map(a => a.template.template_id.toString()))];
-  const missingTemplates = allRequiredTemplates.filter(tid => !foundTemplates.includes(tid));
-
-  if (missingTemplates.length > 0) {
-    console.log(`⚠️ Missing ${missingTemplates.length} templates from cache, fetching LIVE...`, missingTemplates);
-
-    // Fetch LIVE blockchain data for missing templates
-    const liveResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
-    const liveData = await liveResponse.json();
-
-    if (liveData.success) {
-      // Filter for missing templates only
-      const liveAssets = liveData.data.filter(asset =>
-        missingTemplates.includes(asset.template.template_id.toString())
-      );
-
-      console.log(`✅ Found ${liveAssets.length} assets from LIVE blockchain for missing templates`);
-
-      // Merge LIVE assets with cached assets
-      userAssets = [...userAssets, ...liveAssets];
-    }
-  }
+    return {
+      ...asset,
+      name: templateData?.immutable_data?.name || `Asset ${asset.asset_id}`,
+      data: templateData?.immutable_data || {},
+      template: {
+        ...asset.template,
+        immutable_data: templateData?.immutable_data || {}
+      }
+    };
+  });
 
   // Check which blends are possible
   const blendOptions = validBlends.map(blend => {
