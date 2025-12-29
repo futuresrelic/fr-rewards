@@ -2136,8 +2136,7 @@ async function executeBlend(action, config) {
   }
 
   // Get user's assets to find ingredients (via server proxy to avoid CORS)
-  // Use CACHED API for display (has full metadata: names, images, mint numbers)
-  // LIVE verification happens during actual blend execution via check-ownership
+  // HYBRID APPROACH: Try cached first (fast, has metadata), fallback to LIVE for missing templates
   const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
   const assetsData = await assetsResponse.json();
 
@@ -2145,13 +2144,41 @@ async function executeBlend(action, config) {
     throw new Error('Failed to fetch assets');
   }
 
+  let allAssets = assetsData.data;
+
   // Filter assets by template IDs if specified
-  let ingredientAssets = assetsData.data;
+  let ingredientAssets = [];
   if (config.ingredient_templates) {
     const templateIds = config.ingredient_templates.map(t => t.toString());
-    ingredientAssets = ingredientAssets.filter(asset =>
+    ingredientAssets = allAssets.filter(asset =>
       templateIds.includes(asset.template.template_id.toString())
     );
+
+    // Check for missing templates (new assets not in cached API yet)
+    const foundTemplates = [...new Set(ingredientAssets.map(a => a.template.template_id.toString()))];
+    const missingTemplates = templateIds.filter(tid => !foundTemplates.includes(tid));
+
+    if (missingTemplates.length > 0) {
+      console.log(`⚠️ Missing ${missingTemplates.length} templates from cache, fetching LIVE...`, missingTemplates);
+
+      // Fetch LIVE blockchain data for missing templates
+      const liveResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
+      const liveData = await liveResponse.json();
+
+      if (liveData.success) {
+        // Filter for missing templates only
+        const liveAssets = liveData.data.filter(asset =>
+          missingTemplates.includes(asset.template.template_id.toString())
+        );
+
+        console.log(`✅ Found ${liveAssets.length} assets from LIVE blockchain for missing templates`);
+
+        // Merge LIVE assets with cached assets
+        ingredientAssets = [...ingredientAssets, ...liveAssets];
+      }
+    }
+  } else {
+    ingredientAssets = allAssets;
   }
 
   if (ingredientAssets.length < (config.ingredient_count || 1)) {
@@ -2226,8 +2253,7 @@ async function executeBlendArray(action, config) {
   }
 
   // Get user's assets
-  // Use CACHED API for display (has full metadata: names, images, mint numbers)
-  // LIVE verification happens during actual blend execution via check-ownership
+  // HYBRID APPROACH: Try cached first (fast, has metadata), fallback to LIVE for missing templates
   const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
   const assetsData = await assetsResponse.json();
 
@@ -2235,7 +2261,35 @@ async function executeBlendArray(action, config) {
     throw new Error('Failed to fetch assets');
   }
 
-  const userAssets = assetsData.data;
+  let userAssets = assetsData.data;
+
+  // Check for missing required templates across ALL blend options
+  const allRequiredTemplates = [...new Set(validBlends.flatMap(blend =>
+    blend.ingredients.map(ing => ing.template_id.toString())
+  ))];
+
+  const foundTemplates = [...new Set(userAssets.map(a => a.template.template_id.toString()))];
+  const missingTemplates = allRequiredTemplates.filter(tid => !foundTemplates.includes(tid));
+
+  if (missingTemplates.length > 0) {
+    console.log(`⚠️ Missing ${missingTemplates.length} templates from cache, fetching LIVE...`, missingTemplates);
+
+    // Fetch LIVE blockchain data for missing templates
+    const liveResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
+    const liveData = await liveResponse.json();
+
+    if (liveData.success) {
+      // Filter for missing templates only
+      const liveAssets = liveData.data.filter(asset =>
+        missingTemplates.includes(asset.template.template_id.toString())
+      );
+
+      console.log(`✅ Found ${liveAssets.length} assets from LIVE blockchain for missing templates`);
+
+      // Merge LIVE assets with cached assets
+      userAssets = [...userAssets, ...liveAssets];
+    }
+  }
 
   // Check which blends are possible
   const blendOptions = validBlends.map(blend => {
@@ -2244,7 +2298,7 @@ async function executeBlendArray(action, config) {
 
     // Filter assets by template IDs for this blend
     const ingredientAssets = userAssets.filter(asset =>
-      ingredientTemplates.includes(asset.template.template_id)
+      ingredientTemplates.includes(asset.template.template_id.toString())
     );
 
     // Group assets by template to check if we have enough of each ingredient
