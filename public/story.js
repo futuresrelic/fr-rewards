@@ -2136,8 +2136,9 @@ async function executeBlend(action, config) {
   }
 
   // Get user's assets to find ingredients (via server proxy to avoid CORS)
-  // Use LIVE=true to bypass cache and get real-time blockchain data for blend verification
-  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
+  // Use CACHED API for display (has full metadata: names, images, mint numbers)
+  // LIVE verification happens during actual blend execution via check-ownership
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
   const assetsData = await assetsResponse.json();
 
   if (!assetsData.success) {
@@ -2225,8 +2226,9 @@ async function executeBlendArray(action, config) {
   }
 
   // Get user's assets
-  // Use LIVE=true to bypass cache and get real-time blockchain data for blend verification
-  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
+  // Use CACHED API for display (has full metadata: names, images, mint numbers)
+  // LIVE verification happens during actual blend execution via check-ownership
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}`);
   const assetsData = await assetsResponse.json();
 
   if (!assetsData.success) {
