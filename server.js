@@ -2415,6 +2415,21 @@ app.post('/api/blends/details', async (req, res) => {
       }
 
       if (blendData) {
+        // Parse ingredients from blockchain format: [["TEMPLATE_INGREDIENT", {template_id, amount}], ...]
+        if (blendData.ingredients && Array.isArray(blendData.ingredients)) {
+          blendData.ingredients = blendData.ingredients.map(ing => {
+            if (Array.isArray(ing) && ing.length >= 2 && ing[0] === 'TEMPLATE_INGREDIENT') {
+              const data = ing[1];
+              return {
+                template_id: data.template_id,
+                amount: data.amount || 1
+              };
+            }
+            // If already parsed or unknown format, return as-is
+            return ing;
+          }).filter(ing => ing && ing.template_id); // Remove any invalid entries
+        }
+
         blendDetails.push(blendData);
       } else {
         console.warn(`  ❌ Failed to fetch blend ${blendId} from all endpoints`);
