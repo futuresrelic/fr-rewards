@@ -25,6 +25,13 @@ function setupEventListeners() {
 
   // Action type change listener
   document.getElementById('action-type-input').addEventListener('change', handleActionTypeChange);
+
+  // Edit modals
+  document.getElementById('close-edit-step-modal').addEventListener('click', closeEditStepModal);
+  document.getElementById('close-edit-action-modal').addEventListener('click', closeEditActionModal);
+  document.getElementById('edit-step-form').addEventListener('submit', handleEditStep);
+  document.getElementById('edit-action-form').addEventListener('submit', handleEditAction);
+  document.getElementById('edit-action-type').addEventListener('change', handleEditActionTypeChange);
 }
 
 // Handle action type change to show/hide config fields
@@ -215,6 +222,7 @@ async function loadSteps() {
             <button class="btn btn-primary btn-sm" onclick="openActionsModal(${step.id}, '${step.name.replace(/'/g, "\\'")}', '${(step.description || '').replace(/'/g, "\\'")}')">
               ⚡ Manage Actions
             </button>
+            <button class="btn btn-secondary btn-sm" onclick="openEditStepModal(${step.id})">✏️ Edit</button>
             <button class="btn btn-secondary btn-sm" onclick="toggleStep(${step.id}, ${step.enabled})">${step.enabled ? '⏸️ Disable' : '▶️ Enable'}</button>
             <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="deleteStep(${step.id})">🗑️ Delete</button>
           </div>
@@ -404,7 +412,7 @@ async function loadActions(stepId) {
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
             <button class="btn btn-sm btn-secondary" onclick="moveActionUp(${action.id}, ${action.action_order})" ${action.action_order === 0 ? 'disabled' : ''}>↑ Up</button>
             <button class="btn btn-sm btn-secondary" onclick="moveActionDown(${action.id}, ${action.action_order}, ${actions.length - 1})">↓ Down</button>
-            <button class="btn btn-sm btn-primary" onclick="editAction(${action.id})">✏️ Edit</button>
+            <button class="btn btn-sm btn-primary" onclick="openEditActionModal(${action.id})">✏️ Edit</button>
             <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="deleteAction(${action.id})">🗑️ Delete</button>
           </div>
         </div>
@@ -489,50 +497,7 @@ async function deleteAction(actionId) {
   }
 }
 
-// Edit action
-async function editAction(actionId) {
-  try {
-    // Fetch the action details
-    const response = await fetch(`${API_URL}/api/admin/workflow/actions?step_id=${currentStepId}`, {
-      headers: { 'Authorization': `Bearer ${adminToken}` }
-    });
-    const data = await response.json();
-    const action = data.actions.find(a => a.id === actionId);
-
-    if (!action) {
-      throw new Error('Action not found');
-    }
-
-    // Prompt for new order
-    const newOrder = prompt(`Enter new order for "${action.name}" (current: ${action.action_order}):`, action.action_order);
-    if (newOrder === null) return; // Cancelled
-
-    const orderNum = parseInt(newOrder);
-    if (isNaN(orderNum) || orderNum < 0) {
-      showActionsMessage('Invalid order number', 'error');
-      return;
-    }
-
-    // Update the action
-    const updateResponse = await fetch(`${API_URL}/api/admin/workflow/actions/${actionId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminToken}`
-      },
-      body: JSON.stringify({ action_order: orderNum })
-    });
-
-    if (!updateResponse.ok) {
-      throw new Error('Failed to update action');
-    }
-
-    showActionsMessage('Action order updated!', 'success');
-    await loadActions(currentStepId);
-  } catch (error) {
-    showActionsMessage('Error: ' + error.message, 'error');
-  }
-}
+// REMOVED OLD editAction - replaced with full modal editing below
 
 // Move action up
 async function moveActionUp(actionId, currentOrder) {
@@ -602,3 +567,527 @@ setInterval(() => {
     loadSteps();
   }
 }, 30000);
+
+// ==================== EDIT STEP MODAL ====================
+
+let allSteps = []; // Store all steps for editing
+
+async function openEditStepModal(stepId) {
+  try {
+    // Fetch fresh step data
+    const response = await fetch(`${API_URL}/api/admin/workflow/steps`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    const data = await response.json();
+    const step = data.steps.find(s => s.id === stepId);
+
+    if (!step) {
+      showStepMessage('Step not found', 'error');
+      return;
+    }
+
+    // Populate form
+    document.getElementById('edit-step-id').value = step.id;
+    document.getElementById('edit-step-order').value = step.step_order;
+    document.getElementById('edit-step-name').value = step.name;
+    document.getElementById('edit-step-description').value = step.description || '';
+    document.getElementById('edit-step-enabled').checked = step.enabled === 1;
+
+    // Show modal
+    document.getElementById('edit-step-modal').style.display = 'block';
+  } catch (error) {
+    showStepMessage('Error loading step: ' + error.message, 'error');
+  }
+}
+
+function closeEditStepModal() {
+  document.getElementById('edit-step-modal').style.display = 'none';
+}
+
+async function handleEditStep(e) {
+  e.preventDefault();
+
+  const stepId = document.getElementById('edit-step-id').value;
+  const updates = {
+    step_order: parseInt(document.getElementById('edit-step-order').value),
+    name: document.getElementById('edit-step-name').value,
+    description: document.getElementById('edit-step-description').value || null,
+    enabled: document.getElementById('edit-step-enabled').checked ? 1 : 0
+  };
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/workflow/steps/${stepId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify(updates)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to update step');
+    }
+
+    showStepMessage('✅ Step updated successfully!', 'success');
+    closeEditStepModal();
+    await loadSteps();
+
+  } catch (error) {
+    showStepMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// ==================== EDIT ACTION MODAL ====================
+
+let currentEditingAction = null;
+
+async function openEditActionModal(actionId) {
+  try {
+    // Fetch action data
+    const response = await fetch(`${API_URL}/api/admin/workflow/actions?step_id=${currentStepId}`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    const data = await response.json();
+    const action = data.actions.find(a => a.id === actionId);
+
+    if (!action) {
+      showActionsMessage('Action not found', 'error');
+      return;
+    }
+
+    currentEditingAction = action;
+
+    // Parse config
+    let config = {};
+    try {
+      config = action.config ? JSON.parse(action.config) : {};
+    } catch (e) {
+      console.error('Failed to parse action config:', e);
+    }
+
+    // Populate basic fields
+    document.getElementById('edit-action-id').value = action.id;
+    document.getElementById('edit-action-order').value = action.action_order;
+    document.getElementById('edit-action-type').value = action.action_type;
+    document.getElementById('edit-action-name').value = action.name;
+    document.getElementById('edit-action-description').value = action.description || '';
+    document.getElementById('edit-action-enabled').checked = action.enabled === 1;
+
+    // Show correct config section
+    handleEditActionTypeChange({ target: { value: action.action_type } });
+
+    // Populate config fields
+    populateEditConfigFields(action.action_type, config);
+
+    // Show modal
+    document.getElementById('edit-action-modal').style.display = 'block';
+
+  } catch (error) {
+    showActionsMessage('Error loading action: ' + error.message, 'error');
+  }
+}
+
+function closeEditActionModal() {
+  document.getElementById('edit-action-modal').style.display = 'none';
+  currentEditingAction = null;
+}
+
+function handleEditActionTypeChange(e) {
+  const actionType = e.target.value;
+
+  // Hide all edit config sections
+  document.querySelectorAll('#edit-config-fields .config-section').forEach(section => {
+    section.style.display = 'none';
+  });
+
+  // Show relevant section
+  const sectionMap = {
+    'CLAIM': 'edit-config-claim',
+    'UNPACK': 'edit-config-unpack',
+    'BLEND': 'edit-config-blend',
+    'DROP': 'edit-config-drop',
+    'MARKET_SCOUT': 'edit-config-market'
+  };
+
+  const sectionId = sectionMap[actionType];
+  if (sectionId) {
+    document.getElementById(sectionId).style.display = 'block';
+  }
+}
+
+function populateEditConfigFields(actionType, config) {
+  switch (actionType) {
+    case 'CLAIM':
+      document.getElementById('edit-claim-template-id').value = config.template_id || '';
+      break;
+
+    case 'UNPACK':
+      document.getElementById('edit-unpack-pack-template').value = config.pack_template_id || '';
+      document.getElementById('edit-unpack-url').value = '';
+      break;
+
+    case 'BLEND':
+      document.getElementById('edit-blend-blend-id').value = config.blend_id || '';
+      document.getElementById('edit-blend-ingredients').value = config.ingredient_templates ? config.ingredient_templates.join(',') : '';
+      document.getElementById('edit-blend-count').value = config.ingredient_count || '';
+      document.getElementById('edit-blend-collection').value = config.collection_name || 'futuresrelic';
+      document.getElementById('edit-blend-url').value = '';
+      break;
+
+    case 'DROP':
+      document.getElementById('edit-drop-drop-id').value = config.drop_id || '';
+      document.getElementById('edit-drop-collection').value = config.collection || 'futuresrelic';
+      document.getElementById('edit-drop-url').value = '';
+      break;
+
+    case 'MARKET_SCOUT':
+      document.getElementById('edit-market-template-id').value = config.template_id || '';
+      document.getElementById('edit-market-collection').value = config.collection_name || 'futuresrelic';
+      break;
+  }
+}
+
+function buildEditConfigFromFields(actionType) {
+  const config = {};
+
+  switch (actionType) {
+    case 'CLAIM':
+      const claimTemplateId = document.getElementById('edit-claim-template-id').value;
+      if (claimTemplateId) config.template_id = parseInt(claimTemplateId);
+      break;
+
+    case 'UNPACK':
+      const packTemplate = document.getElementById('edit-unpack-pack-template').value;
+      if (packTemplate) config.pack_template_id = parseInt(packTemplate);
+      break;
+
+    case 'BLEND':
+      const blendId = document.getElementById('edit-blend-blend-id').value;
+      const ingredients = document.getElementById('edit-blend-ingredients').value;
+      const count = document.getElementById('edit-blend-count').value;
+      const blendCollection = document.getElementById('edit-blend-collection').value;
+
+      if (blendId) config.blend_id = parseInt(blendId);
+      if (ingredients) config.ingredient_templates = ingredients.split(',').map(t => parseInt(t.trim()));
+      if (count) config.ingredient_count = parseInt(count);
+      if (blendCollection) config.collection_name = blendCollection;
+      break;
+
+    case 'DROP':
+      const dropId = document.getElementById('edit-drop-drop-id').value;
+      const dropCollection = document.getElementById('edit-drop-collection').value;
+
+      if (dropId) config.drop_id = dropId;
+      if (dropCollection) config.collection = dropCollection;
+      break;
+
+    case 'MARKET_SCOUT':
+      const marketTemplateId = document.getElementById('edit-market-template-id').value;
+      const marketCollection = document.getElementById('edit-market-collection').value;
+
+      if (marketTemplateId) config.template_id = parseInt(marketTemplateId);
+      if (marketCollection) config.collection_name = marketCollection;
+      break;
+  }
+
+  return Object.keys(config).length > 0 ? config : null;
+}
+
+async function handleEditAction(e) {
+  e.preventDefault();
+
+  const actionId = document.getElementById('edit-action-id').value;
+  const actionType = document.getElementById('edit-action-type').value;
+
+  const updates = {
+    action_order: parseInt(document.getElementById('edit-action-order').value),
+    action_type: actionType,
+    name: document.getElementById('edit-action-name').value,
+    description: document.getElementById('edit-action-description').value || null,
+    enabled: document.getElementById('edit-action-enabled').checked ? 1 : 0,
+    config: buildEditConfigFromFields(actionType) // Server will stringify it
+  };
+
+  try {
+    const response = await fetch(`${API_URL}/api/admin/workflow/actions/${actionId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`
+      },
+      body: JSON.stringify(updates)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to update action');
+    }
+
+    showActionsMessage('✅ Action updated successfully!', 'success');
+    closeEditActionModal();
+    await loadActions(currentStepId);
+
+  } catch (error) {
+    showActionsMessage('Error: ' + error.message, 'error');
+  }
+}
+
+// ==================== URL AUTO-FETCH FUNCTIONS ====================
+
+// Fetch Pack Data from AtomicHub URL
+async function fetchPackData() {
+  const url = document.getElementById('unpack-url').value.trim();
+  if (!url) {
+    alert('Please enter an AtomicHub pack URL');
+    return;
+  }
+
+  try {
+    // Extract asset ID from URL
+    // Example: https://wax.atomichub.io/explorer/asset/wax-mainnet/Intern-Task-3-Completed_1099974449032
+    const assetIdMatch = url.match(/asset\/[^/]+\/[^_]+_(\d+)/);
+    if (!assetIdMatch) {
+      throw new Error('Could not extract asset ID from URL. Expected format: https://wax.atomichub.io/explorer/asset/wax-mainnet/Name_123456');
+    }
+
+    const assetId = assetIdMatch[1];
+
+    // Fetch asset data from AtomicAssets API
+    const response = await fetch(`https://aa.wax.blacklusion.io/atomicassets/v1/assets/${assetId}`);
+    if (!response.ok) throw new Error('Failed to fetch asset data');
+
+    const data = await response.json();
+    const templateId = data.data.template.template_id;
+
+    // Auto-fill template ID
+    document.getElementById('unpack-pack-template').value = templateId;
+    alert(`✅ Fetched pack data! Template ID: ${templateId}`);
+
+  } catch (error) {
+    alert('❌ Error fetching pack data: ' + error.message);
+    console.error(error);
+  }
+}
+
+async function fetchPackDataEdit() {
+  const url = document.getElementById('edit-unpack-url').value.trim();
+  if (!url) {
+    alert('Please enter an AtomicHub pack URL');
+    return;
+  }
+
+  try {
+    const assetIdMatch = url.match(/asset\/[^/]+\/[^_]+_(\d+)/);
+    if (!assetIdMatch) {
+      throw new Error('Could not extract asset ID from URL');
+    }
+
+    const assetId = assetIdMatch[1];
+    const response = await fetch(`https://aa.wax.blacklusion.io/atomicassets/v1/assets/${assetId}`);
+    if (!response.ok) throw new Error('Failed to fetch asset data');
+
+    const data = await response.json();
+    const templateId = data.data.template.template_id;
+
+    document.getElementById('edit-unpack-pack-template').value = templateId;
+    alert(`✅ Fetched! Template ID: ${templateId}`);
+
+  } catch (error) {
+    alert('❌ Error: ' + error.message);
+    console.error(error);
+  }
+}
+
+// Fetch Blend Data from NeftyBlocks URL
+async function fetchBlendData() {
+  const url = document.getElementById('blend-url').value.trim();
+  if (!url) {
+    alert('Please enter a NeftyBlocks blend URL');
+    return;
+  }
+
+  try {
+    // Extract blend ID from URL
+    // Example: https://neftyblocks.com/c/futuresrelic/blends/blend/12049
+    const blendIdMatch = url.match(/blend\/(\d+)/);
+    if (!blendIdMatch) {
+      throw new Error('Could not extract blend ID from URL. Expected format: https://neftyblocks.com/c/collection/blends/blend/12345');
+    }
+
+    const blendId = blendIdMatch[1];
+
+    // Fetch blend data from blockchain
+    const blendData = await queryBlendFromChain(blendId);
+
+    if (!blendData) {
+      throw new Error('Blend not found on blockchain');
+    }
+
+    // Auto-fill fields
+    document.getElementById('blend-blend-id').value = blendId;
+
+    // Extract ingredient templates
+    const ingredients = blendData.ingredients_schema.map(ing => ing.template_id);
+    document.getElementById('blend-ingredients').value = ingredients.join(',');
+    document.getElementById('blend-count').value = blendData.ingredients_schema.length;
+
+    // Extract collection from URL
+    const collectionMatch = url.match(/\/c\/([^/]+)\//);
+    if (collectionMatch) {
+      document.getElementById('blend-collection').value = collectionMatch[1];
+    }
+
+    alert(`✅ Fetched blend data!\nBlend ID: ${blendId}\nIngredients: ${ingredients.join(', ')}\nCount: ${blendData.ingredients_schema.length}`);
+
+  } catch (error) {
+    alert('❌ Error fetching blend data: ' + error.message);
+    console.error(error);
+  }
+}
+
+async function fetchBlendDataEdit() {
+  const url = document.getElementById('edit-blend-url').value.trim();
+  if (!url) {
+    alert('Please enter a NeftyBlocks blend URL');
+    return;
+  }
+
+  try {
+    const blendIdMatch = url.match(/blend\/(\d+)/);
+    if (!blendIdMatch) {
+      throw new Error('Could not extract blend ID from URL');
+    }
+
+    const blendId = blendIdMatch[1];
+    const blendData = await queryBlendFromChain(blendId);
+
+    if (!blendData) {
+      throw new Error('Blend not found on blockchain');
+    }
+
+    document.getElementById('edit-blend-blend-id').value = blendId;
+
+    const ingredients = blendData.ingredients_schema.map(ing => ing.template_id);
+    document.getElementById('edit-blend-ingredients').value = ingredients.join(',');
+    document.getElementById('edit-blend-count').value = blendData.ingredients_schema.length;
+
+    const collectionMatch = url.match(/\/c\/([^/]+)\//);
+    if (collectionMatch) {
+      document.getElementById('edit-blend-collection').value = collectionMatch[1];
+    }
+
+    alert(`✅ Fetched blend data!\nIngredients: ${ingredients.join(', ')}`);
+
+  } catch (error) {
+    alert('❌ Error: ' + error.message);
+    console.error(error);
+  }
+}
+
+// Query blend data from blockchain
+async function queryBlendFromChain(blendId) {
+  const rpcEndpoints = [
+    'https://api.wax.alohaeos.com',
+    'https://wax.greymass.com',
+    'https://api.waxsweden.org',
+    'https://wax.eosphere.io'
+  ];
+
+  for (const endpoint of rpcEndpoints) {
+    try {
+      const response = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          json: true,
+          code: 'blenderizerx',
+          scope: 'blenderizerx',
+          table: 'blends',
+          lower_bound: blendId,
+          upper_bound: blendId,
+          limit: 1
+        })
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      if (data.rows && data.rows.length > 0) {
+        return data.rows[0];
+      }
+    } catch (error) {
+      console.error(`RPC ${endpoint} failed:`, error);
+      continue;
+    }
+  }
+
+  return null;
+}
+
+// Fetch Drop Data from NeftyBlocks URL
+async function fetchDropData() {
+  const url = document.getElementById('drop-url').value.trim();
+  if (!url) {
+    alert('Please enter a NeftyBlocks drop URL');
+    return;
+  }
+
+  try {
+    // Extract drop ID from URL
+    // Example: https://neftyblocks.com/c/futuresrelic/drops/229014
+    const dropIdMatch = url.match(/drops\/(\d+)/);
+    if (!dropIdMatch) {
+      throw new Error('Could not extract drop ID from URL. Expected format: https://neftyblocks.com/c/collection/drops/12345');
+    }
+
+    const dropId = dropIdMatch[1];
+
+    // Auto-fill fields
+    document.getElementById('drop-drop-id').value = dropId;
+
+    // Extract collection from URL
+    const collectionMatch = url.match(/\/c\/([^/]+)\//);
+    if (collectionMatch) {
+      document.getElementById('drop-collection').value = collectionMatch[1];
+    }
+
+    alert(`✅ Fetched drop data!\nDrop ID: ${dropId}\nCollection: ${collectionMatch ? collectionMatch[1] : 'Not found'}`);
+
+  } catch (error) {
+    alert('❌ Error fetching drop data: ' + error.message);
+    console.error(error);
+  }
+}
+
+async function fetchDropDataEdit() {
+  const url = document.getElementById('edit-drop-url').value.trim();
+  if (!url) {
+    alert('Please enter a NeftyBlocks drop URL');
+    return;
+  }
+
+  try {
+    const dropIdMatch = url.match(/drops\/(\d+)/);
+    if (!dropIdMatch) {
+      throw new Error('Could not extract drop ID from URL');
+    }
+
+    const dropId = dropIdMatch[1];
+    document.getElementById('edit-drop-drop-id').value = dropId;
+
+    const collectionMatch = url.match(/\/c\/([^/]+)\//);
+    if (collectionMatch) {
+      document.getElementById('edit-drop-collection').value = collectionMatch[1];
+    }
+
+    alert(`✅ Fetched drop data! Drop ID: ${dropId}`);
+
+  } catch (error) {
+    alert('❌ Error: ' + error.message);
+    console.error(error);
+  }
+}
