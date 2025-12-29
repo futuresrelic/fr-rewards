@@ -2436,14 +2436,16 @@ app.get('/api/assets/:account', async (req, res) => {
       return res.status(400).json({ error: 'account parameter required', success: false });
     }
 
-    console.log(`📦 Fetching assets for ${account} in collection ${collection_name || 'all'}`);
+    console.log(`📦 Fetching LIVE assets for ${account} in collection ${collection_name || 'all'}`);
 
-    // Use wax.getUserAssets which has fallback/retry logic and preferred endpoint
-    const assets = await wax.getUserAssets(account, collection_name || null);
+    // Use getUserAssetsLive for real-time blockchain data (same as claim verification)
+    // This ensures blend asset selection sees newly acquired assets immediately
+    const assets = await wax.getUserAssetsLive(account, collection_name || null, null);
 
     res.json({
       success: true,
-      data: assets
+      data: assets,
+      source: 'blockchain_rpc_live'
     });
   } catch (error) {
     console.error('Error fetching user assets:', error);
