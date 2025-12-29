@@ -1619,6 +1619,86 @@ function extractAssetIdsFromTransaction(transactionResult) {
   }
 }
 
+// Query asset directly from blockchain (fallback for newly minted assets not yet in API cache)
+async function queryAssetFromBlockchain(assetId) {
+  const rpcEndpoints = [
+    'https://api.wax.alohaeos.com',
+    'https://wax.greymass.com',
+    'https://api.waxsweden.org',
+    'https://wax.eosphere.io'
+  ];
+
+  for (const endpoint of rpcEndpoints) {
+    try {
+      const response = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          json: true,
+          code: 'atomicassets',
+          scope: currentAccount,
+          table: 'assets',
+          lower_bound: assetId,
+          upper_bound: assetId,
+          limit: 1
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.rows && data.rows.length > 0) {
+          const asset = data.rows[0];
+          console.log(`✅ Found asset ${assetId} on blockchain:`, asset);
+
+          // Try to get template data for the name
+          let templateName = null;
+          if (asset.template_id && asset.template_id > 0) {
+            try {
+              const templateResponse = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  json: true,
+                  code: 'atomicassets',
+                  scope: asset.collection_name,
+                  table: 'templates',
+                  lower_bound: asset.template_id,
+                  upper_bound: asset.template_id,
+                  limit: 1
+                })
+              });
+
+              if (templateResponse.ok) {
+                const templateData = await templateResponse.json();
+                if (templateData.rows && templateData.rows.length > 0) {
+                  templateName = templateData.rows[0].immutable_data?.name;
+                }
+              }
+            } catch (err) {
+              console.warn('Could not fetch template name:', err);
+            }
+          }
+
+          return {
+            asset_id: asset.asset_id,
+            name: templateName || asset.immutable_data?.name || asset.mutable_data?.name || `Asset ${assetId}`,
+            immutable_data: asset.immutable_data || {},
+            mutable_data: asset.mutable_data || {},
+            template_id: asset.template_id,
+            collection_name: asset.collection_name,
+            schema_name: asset.schema_name
+          };
+        }
+      }
+    } catch (error) {
+      console.warn(`RPC ${endpoint} failed:`, error.message);
+      continue;
+    }
+  }
+
+  return null;
+}
+
 // Fetch details for unpacked assets
 async function fetchUnpackedAssetDetails(assetIds) {
   const atomicEndpoints = [
@@ -1661,13 +1741,36 @@ async function fetchUnpackedAssetDetails(assetIds) {
         immutable_data: assetMutableData
       });
     } else {
-      // Fallback if API fails
-      assets.push({
-        asset_id: assetId,
-        name: 'Unknown NFT',
-        template_data: null,
-        immutable_data: null
-      });
+      // Fallback: Query blockchain directly for newly minted assets
+      console.log(`⚠️ API failed for asset ${assetId} - querying blockchain...`);
+      try {
+        const blockchainData = await queryAssetFromBlockchain(assetId);
+        if (blockchainData) {
+          assets.push({
+            asset_id: assetId,
+            name: blockchainData.name || `Asset ${assetId}`,
+            template_data: blockchainData.immutable_data || {},
+            immutable_data: blockchainData.mutable_data || {},
+            blockchain_only: true
+          });
+        } else {
+          // Final fallback
+          assets.push({
+            asset_id: assetId,
+            name: `Asset ${assetId}`,
+            template_data: null,
+            immutable_data: null
+          });
+        }
+      } catch (err) {
+        console.error(`Failed to query blockchain for asset ${assetId}:`, err);
+        assets.push({
+          asset_id: assetId,
+          name: `Asset ${assetId}`,
+          template_data: null,
+          immutable_data: null
+        });
+      }
     }
   }
 
@@ -1717,11 +1820,7 @@ function renderBlendAssetsGrouped(templateIds, allAssets) {
     // Filter assets for this template
     const groupAssets = allAssets.filter(asset => asset.template.template_id === templateId.toString());
 
-    if (groupAssets.length === 0) {
-      return; // Skip empty groups
-    }
-
-    // Create group container
+    // Create group container (even if no assets - show that it's required)
     const groupContainer = document.createElement('div');
     groupContainer.style.cssText = `
       margin-bottom: 20px;
@@ -1739,6 +1838,18 @@ function renderBlendAssetsGrouped(templateIds, allAssets) {
       color: var(--text-primary);
       font-size: 0.95rem;
     `;
+
+    if (groupAssets.length === 0) {
+      // Show ingredient even if user has none
+      groupHeader.innerHTML = `
+        Ingredient ${groupIndex + 1}: ${templateId}
+        <span style="color: #ff6b6b; font-weight: normal; font-size: 0.85rem;">(0 available - you need to acquire this!)</span>
+      `;
+      groupContainer.appendChild(groupHeader);
+      blendSelectionList.appendChild(groupContainer);
+      return; // Skip asset rendering but show the requirement
+    }
+
     groupHeader.innerHTML = `
       Ingredient ${groupIndex + 1}: ${groupAssets[0].name || `Template ${templateId}`}
       <span style="color: var(--text-secondary); font-weight: normal; font-size: 0.85rem;">(${groupAssets.length} available)</span>
