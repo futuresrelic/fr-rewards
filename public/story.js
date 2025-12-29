@@ -789,7 +789,20 @@ async function executeUnpack(action, config) {
   console.log(`📦 Total packs for template ${config.pack_template_id}: ${allPacks.length} (${ownedPacks.length} owned total + ${claimablePacks.length} claimable total = ${allPacks.length} matching template)`);
 
   if (allPacks.length === 0) {
-    throw new Error(`You don't have any packs of template #${config.pack_template_id} (owned or claimable)`);
+    // Provide helpful error showing what templates were actually found
+    const foundTemplates = [...ownedPacks, ...claimablePacks]
+      .map(p => p.template?.template_id)
+      .filter((v, i, a) => v && a.indexOf(v) === i); // unique templates
+
+    if (foundTemplates.length > 0) {
+      throw new Error(
+        `❌ You don't have any packs of template #${config.pack_template_id}.\n` +
+        `Found packs with templates: ${foundTemplates.join(', ')}\n\n` +
+        `⚠️ ACTION CONFIG ERROR: Check admin panel - this action might have wrong pack_template_id`
+      );
+    } else {
+      throw new Error(`You don't have any packs of template #${config.pack_template_id} (owned or claimable)`);
+    }
   }
 
   // Quick filter: remove obviously burned packs (only for owned packs)
