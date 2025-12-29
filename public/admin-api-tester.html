@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live API Tester - Futures Relic Admin</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .test-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .test-input {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-family: monospace;
+    }
+    .test-button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      margin: 10px 5px 10px 0;
+    }
+    .test-button:hover {
+      opacity: 0.8;
+    }
+    .test-button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    .results-container {
+      margin-top: 20px;
+    }
+    .result-item {
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 15px;
+      margin-bottom: 10px;
+    }
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .result-endpoint {
+      font-weight: bold;
+      color: var(--text-primary);
+      font-family: monospace;
+      font-size: 0.95rem;
+    }
+    .result-time {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+    .result-status {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+    .status-success {
+      background: #10b981;
+      color: white;
+    }
+    .status-error {
+      background: #ef4444;
+      color: white;
+    }
+    .status-testing {
+      background: #f59e0b;
+      color: white;
+    }
+    .result-data {
+      background: rgba(0,0,0,0.3);
+      border-radius: 4px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      margin-top: 10px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .asset-card {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px;
+      margin: 5px 0;
+      font-size: 0.85rem;
+    }
+    .summary-box {
+      background: rgba(16, 185, 129, 0.1);
+      border: 2px solid #10b981;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .summary-box h3 {
+      margin-top: 0;
+      color: #10b981;
+    }
+    .winner {
+      background: rgba(16, 185, 129, 0.2);
+      border: 2px solid #10b981;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 30px;
+      background: var(--bg-dark);
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 Live API Testing & Benchmarking</h1>
+    <p style="color: var(--text-secondary);">Test RPC endpoints with real data to find the fastest and most reliable one.</p>
+
+    <!-- Test Configuration -->
+    <div class="test-section">
+      <h2>Test Configuration</h2>
+
+      <label for="test-account">WAX Account:</label>
+      <input type="text" id="test-account" class="test-input" placeholder="e.g., czkua.wam" value="czkua.wam">
+
+      <label for="test-collection">Collection (optional):</label>
+      <input type="text" id="test-collection" class="test-input" placeholder="e.g., futuresrelic" value="futuresrelic">
+
+      <label for="test-template">Template ID Filter (optional):</label>
+      <input type="text" id="test-template" class="test-input" placeholder="e.g., 210857 or leave empty for all">
+
+      <button class="test-button" onclick="runFullTest()">🚀 Run Full RPC Benchmark</button>
+      <button class="test-button" onclick="testBackendEndpoint()">🔍 Test Backend /api/assets</button>
+      <button class="test-button" onclick="clearResults()">🗑️ Clear Results</button>
+    </div>
+
+    <!-- Progress -->
+    <div id="progress-container" style="display: none;">
+      <div class="progress-bar">
+        <div id="progress-fill" class="progress-fill">0%</div>
+      </div>
+      <p id="progress-text" style="color: var(--text-secondary); text-align: center;"></p>
+    </div>
+
+    <!-- Summary -->
+    <div id="summary-container"></div>
+
+    <!-- Results -->
+    <div class="results-container">
+      <h2>Test Results</h2>
+      <div id="results"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+
+    const RPC_ENDPOINTS = [
+      'https://api.wax.alohaeos.com',
+      'https://wax.greymass.com',
+      'https://api.waxsweden.org',
+      'https://wax.eosphere.io',
+      'https://wax.eu.eosamsterdam.net',
+      'https://wax.cryptolions.io',
+      'https://api.wax.liquidstudios.io',
+      'https://wax.dapplica.io',
+      'https://wax.pink.gg'
+    ];
+
+    let testResults = [];
+
+    async function runFullTest() {
+      const account = document.getElementById('test-account').value.trim();
+      const collection = document.getElementById('test-collection').value.trim();
+      const templateId = document.getElementById('test-template').value.trim();
+
+      if (!account) {
+        alert('Please enter a WAX account to test');
+        return;
+      }
+
+      clearResults();
+      document.getElementById('progress-container').style.display = 'block';
+      testResults = [];
+
+      let completedTests = 0;
+      const totalTests = RPC_ENDPOINTS.length;
+
+      for (const endpoint of RPC_ENDPOINTS) {
+        await testRPCEndpoint(endpoint, account, collection, templateId);
+        completedTests++;
+        updateProgress(completedTests, totalTests);
+      }
+
+      document.getElementById('progress-container').style.display = 'none';
+      displaySummary();
+    }
+
+    function updateProgress(completed, total) {
+      const percent = Math.round((completed / total) * 100);
+      document.getElementById('progress-fill').style.width = percent + '%';
+      document.getElementById('progress-fill').textContent = percent + '%';
+      document.getElementById('progress-text').textContent = `Testing ${completed} of ${total} endpoints...`;
+    }
+
+    async function testRPCEndpoint(endpoint, account, collection, templateId) {
+      const resultId = `result-${Date.now()}-${Math.random()}`;
+      const resultsDiv = document.getElementById('results');
+
+      // Add placeholder
+      const placeholder = document.createElement('div');
+      placeholder.id = resultId;
+      placeholder.className = 'result-item';
+      placeholder.innerHTML = `
+        <div class="result-header">
+          <div class="result-endpoint">${endpoint}</div>
+          <div class="result-status status-testing">TESTING...</div>
+        </div>
+      `;
+      resultsDiv.appendChild(placeholder);
+
+      const startTime = Date.now();
+      let success = false;
+      let assets = [];
+      let error = null;
+
+      try {
+        // Query blockchain directly
+        const response = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            json: true,
+            code: 'atomicassets',
+            scope: account,
+            table: 'assets',
+            limit: 1000
+          }),
+          signal: AbortSignal.timeout(10000) // 10 second timeout
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        let allAssets = data.rows || [];
+
+        // Filter by collection if specified
+        if (collection) {
+          allAssets = allAssets.filter(a => a.collection_name === collection);
+        }
+
+        // Filter by template if specified
+        if (templateId) {
+          allAssets = allAssets.filter(a => a.template_id.toString() === templateId);
+        }
+
+        assets = allAssets;
+        success = true;
+
+      } catch (err) {
+        error = err.message;
+      }
+
+      const duration = Date.now() - startTime;
+
+      // Store result
+      testResults.push({
+        endpoint,
+        success,
+        duration,
+        assetCount: assets.length,
+        error
+      });
+
+      // Update display
+      placeholder.innerHTML = `
+        <div class="result-header">
+          <div class="result-endpoint">${endpoint}</div>
+          <div class="result-time">${duration}ms</div>
+          <div class="result-status ${success ? 'status-success' : 'status-error'}">
+            ${success ? '✅ SUCCESS' : '❌ FAILED'}
+          </div>
+        </div>
+        <div class="result-data">
+          ${success ? `
+            <strong>Assets Found:</strong> ${assets.length}<br>
+            ${assets.length > 0 ? `
+              <strong>Sample Assets:</strong><br>
+              ${assets.slice(0, 5).map(a => `
+                <div class="asset-card">
+                  Asset ID: ${a.asset_id} | Template: ${a.template_id} | Collection: ${a.collection_name}
+                </div>
+              `).join('')}
+              ${assets.length > 5 ? `<div style="margin-top: 5px;">... and ${assets.length - 5} more</div>` : ''}
+            ` : '<div style="color: #f59e0b;">No assets found matching criteria</div>'}
+          ` : `
+            <strong style="color: #ef4444;">Error:</strong> ${error}
+          `}
+        </div>
+      `;
+    }
+
+    async function testBackendEndpoint() {
+      const account = document.getElementById('test-account').value.trim();
+      const collection = document.getElementById('test-collection').value.trim();
+
+      if (!account) {
+        alert('Please enter a WAX account to test');
+        return;
+      }
+
+      const resultId = `result-backend-${Date.now()}`;
+      const resultsDiv = document.getElementById('results');
+
+      const placeholder = document.createElement('div');
+      placeholder.id = resultId;
+      placeholder.className = 'result-item';
+      placeholder.innerHTML = `
+        <div class="result-header">
+          <div class="result-endpoint">${API_URL}/api/assets/${account}</div>
+          <div class="result-status status-testing">TESTING...</div>
+        </div>
+      `;
+      resultsDiv.insertBefore(placeholder, resultsDiv.firstChild);
+
+      const startTime = Date.now();
+      let success = false;
+      let assets = [];
+      let error = null;
+      let source = 'unknown';
+
+      try {
+        const url = collection
+          ? `${API_URL}/api/assets/${account}?collection_name=${collection}`
+          : `${API_URL}/api/assets/${account}`;
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        assets = data.data || [];
+        source = data.source || 'not specified';
+        success = true;
+
+      } catch (err) {
+        error = err.message;
+      }
+
+      const duration = Date.now() - startTime;
+
+      placeholder.innerHTML = `
+        <div class="result-header">
+          <div class="result-endpoint">${API_URL}/api/assets/${account}</div>
+          <div class="result-time">${duration}ms</div>
+          <div class="result-status ${success ? 'status-success' : 'status-error'}">
+            ${success ? '✅ SUCCESS' : '❌ FAILED'}
+          </div>
+        </div>
+        <div class="result-data">
+          ${success ? `
+            <strong>Source:</strong> ${source}<br>
+            <strong>Assets Found:</strong> ${assets.length}<br>
+            ${assets.length > 0 ? `
+              <strong>Sample Assets:</strong><br>
+              ${assets.slice(0, 5).map(a => `
+                <div class="asset-card">
+                  Asset ID: ${a.asset_id} | Template: ${a.template?.template_id || 'N/A'} | Collection: ${a.collection?.collection_name || 'N/A'}
+                </div>
+              `).join('')}
+              ${assets.length > 5 ? `<div style="margin-top: 5px;">... and ${assets.length - 5} more</div>` : ''}
+            ` : '<div style="color: #f59e0b;">No assets found</div>'}
+          ` : `
+            <strong style="color: #ef4444;">Error:</strong> ${error}
+          `}
+        </div>
+      `;
+    }
+
+    function displaySummary() {
+      const successfulTests = testResults.filter(r => r.success);
+      const failedTests = testResults.filter(r => !r.success);
+
+      if (successfulTests.length === 0) {
+        document.getElementById('summary-container').innerHTML = `
+          <div class="summary-box" style="border-color: #ef4444; background: rgba(239, 68, 68, 0.1);">
+            <h3 style="color: #ef4444;">❌ All Tests Failed</h3>
+            <p>None of the RPC endpoints responded successfully. This could indicate:</p>
+            <ul>
+              <li>Network connectivity issues</li>
+              <li>The account has no assets</li>
+              <li>All endpoints are temporarily down</li>
+            </ul>
+          </div>
+        `;
+        return;
+      }
+
+      // Find fastest
+      const fastest = successfulTests.reduce((prev, current) =>
+        current.duration < prev.duration ? current : prev
+      );
+
+      // Calculate averages
+      const avgDuration = Math.round(
+        successfulTests.reduce((sum, r) => sum + r.duration, 0) / successfulTests.length
+      );
+
+      const avgAssets = Math.round(
+        successfulTests.reduce((sum, r) => sum + r.assetCount, 0) / successfulTests.length
+      );
+
+      document.getElementById('summary-container').innerHTML = `
+        <div class="summary-box">
+          <h3>📊 Test Summary</h3>
+          <p><strong>Successful:</strong> ${successfulTests.length} / ${testResults.length}</p>
+          <p><strong>Failed:</strong> ${failedTests.length} / ${testResults.length}</p>
+          <p><strong>Average Response Time:</strong> ${avgDuration}ms</p>
+          <p><strong>Average Assets Found:</strong> ${avgAssets}</p>
+        </div>
+
+        <div class="summary-box winner">
+          <h3>🏆 Fastest & Most Reliable Endpoint</h3>
+          <p><strong>Endpoint:</strong> <code>${fastest.endpoint}</code></p>
+          <p><strong>Response Time:</strong> ${fastest.duration}ms</p>
+          <p><strong>Assets Found:</strong> ${fastest.assetCount}</p>
+          <p style="margin-top: 15px; color: #10b981;">
+            <strong>✅ Recommendation:</strong> Use this endpoint as your PRIMARY in wax.js getUserAssetsLive()
+          </p>
+        </div>
+
+        ${failedTests.length > 0 ? `
+          <div class="summary-box" style="border-color: #f59e0b; background: rgba(245, 158, 11, 0.1);">
+            <h3 style="color: #f59e0b;">⚠️ Failed Endpoints</h3>
+            <ul>
+              ${failedTests.map(r => `<li><code>${r.endpoint}</code> - ${r.error}</li>`).join('')}
+            </ul>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    function clearResults() {
+      document.getElementById('results').innerHTML = '';
+      document.getElementById('summary-container').innerHTML = '';
+      testResults = [];
+    }
+  </script>
+</body>
+</html>
