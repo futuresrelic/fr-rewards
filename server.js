@@ -1262,7 +1262,7 @@ app.post('/api/admin/workflow/actions', authenticateAdmin, async (req, res) => {
     }
 
     // Validate action_type
-    const validActionTypes = ['CLAIM', 'UNPACK', 'BLEND', 'DROP', 'MARKET_SCOUT'];
+    const validActionTypes = ['CLAIM', 'UNPACK', 'BLEND', 'BLEND_ARRAY', 'DROP', 'MARKET_SCOUT'];
     if (!validActionTypes.includes(action_type)) {
       return res.status(400).json({ error: 'Invalid action_type' });
     }
@@ -1299,7 +1299,7 @@ app.put('/api/admin/workflow/actions/:id', authenticateAdmin, async (req, res) =
 
     // Validate action_type if provided
     if (action_type) {
-      const validActionTypes = ['CLAIM', 'UNPACK', 'BLEND', 'DROP', 'MARKET_SCOUT'];
+      const validActionTypes = ['CLAIM', 'UNPACK', 'BLEND', 'BLEND_ARRAY', 'DROP', 'MARKET_SCOUT'];
       if (!validActionTypes.includes(action_type)) {
         return res.status(400).json({ error: 'Invalid action_type' });
       }
