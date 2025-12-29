@@ -2430,19 +2430,27 @@ app.post('/api/asset/verify-ownership-rpc', async (req, res) => {
 app.get('/api/assets/:account', async (req, res) => {
   try {
     const { account } = req.params;
-    const { collection_name, template_id } = req.query;
+    const { collection_name, template_id, live } = req.query;
 
     if (!account) {
       return res.status(400).json({ error: 'account parameter required', success: false });
     }
 
-    console.log(`📦 Fetching LIVE assets for ${account} in collection ${collection_name || 'all'}${template_id ? ` (template ${template_id})` : ''}`);
+    const useLive = live === 'true';
+    console.log(`📦 Fetching ${useLive ? 'LIVE' : 'CACHED'} assets for ${account} in collection ${collection_name || 'all'}${template_id ? ` (template ${template_id})` : ''}`);
 
-    // Use CACHED getUserAssets for browsing/display (includes full template metadata)
-    // This is FAST and COMPLETE - AtomicAssets API returns assets with embedded template data
-    // No need to fetch hundreds of templates separately (which times out)
-    // LIVE RPC is only used for ownership VERIFICATION during actual blend execution
-    const allAssets = await wax.getUserAssets(account, collection_name || null);
+    let allAssets;
+    let source;
+
+    if (useLive) {
+      // LIVE RPC for real-time data (use for newly claimed assets)
+      allAssets = await wax.getUserAssetsLive(account, collection_name || null, null);
+      source = 'blockchain_rpc_live';
+    } else {
+      // CACHED API for browsing (fast, has full metadata)
+      allAssets = await wax.getUserAssets(account, collection_name || null);
+      source = 'atomicassets_api_cached';
+    }
 
     // Filter by template if specified
     let assets = allAssets;
@@ -2456,7 +2464,7 @@ app.get('/api/assets/:account', async (req, res) => {
     res.json({
       success: true,
       data: assets,
-      source: 'atomicassets_api_cached',
+      source,
       total_assets: allAssets.length,
       filtered_assets: template_id ? assets.length : null,
       filter: template_id ? { template_id } : null
