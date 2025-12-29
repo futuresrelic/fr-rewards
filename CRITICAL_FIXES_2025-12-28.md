@@ -1,7 +1,179 @@
-# CRITICAL FIXES - 2025-12-28
+# CRITICAL FIXES - 2025-12-28 (Updated 2025-12-29)
 **Session:** claude/continue-project-review-aB6RT
 **Branch:** claude/continue-project-review-aB6RT
 **Status:** ✅ PRODUCTION READY
+
+---
+
+## 🚨 MAJOR REGRESSION FIXED - 2025-12-29
+
+### 0. **RESTORE FULL EDITING FUNCTIONALITY** (CRITICAL REGRESSION)
+
+**Git Commit:**
+- `bf0e3de` - RESTORE FULL EDITING: Add complete CRUD for story steps and actions
+
+**Problem:**
+- Users could NOT edit story steps (name, description, order)
+- Users could NOT edit actions (only order was editable via prompt)
+- NO URL auto-fetch for AtomicHub/NeftyBlocks links
+- This was functionality that existed before but was LOST
+
+**What Was Missing:**
+1. **No step editing** - Could only enable/disable or delete
+2. **Severely limited action editing** - Old `editAction()` only allowed changing order via prompt
+3. **No URL auto-fetch** - Had to manually enter blend IDs, template IDs, ingredients
+
+**Root Cause:**
+- Session handoff between Claude instances lost the full editing implementation
+- Only basic "order change" edit function remained
+- URL fetch functionality never existed in this branch
+
+**Fix Applied:**
+
+### Story Step Editing (admin-workflow.html + admin-workflow.js)
+```javascript
+// NEW: Edit button on each step card (line 225)
+<button class="btn btn-secondary btn-sm" onclick="openEditStepModal(${step.id})">✏️ Edit</button>
+
+// NEW: Full edit modal with all fields (lines 93-128)
+async function openEditStepModal(stepId) {
+  // Fetch step data
+  // Populate form: order, name, description, enabled
+  // Show modal
+}
+
+async function handleEditStep(e) {
+  const updates = {
+    step_order: parseInt(document.getElementById('edit-step-order').value),
+    name: document.getElementById('edit-step-name').value,
+    description: document.getElementById('edit-step-description').value || null,
+    enabled: document.getElementById('edit-step-enabled').checked ? 1 : 0
+  };
+
+  await fetch(`${API_URL}/api/admin/workflow/steps/${stepId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates)
+  });
+}
+```
+
+### Action Full Editing (admin-workflow.js)
+```javascript
+// REMOVED OLD editAction() that only changed order (line 500)
+// REPLACED with full modal editing
+
+async function openEditActionModal(actionId) {
+  // Fetch action data
+  // Parse config JSON
+  // Populate ALL fields: order, type, name, description, config, enabled
+  // Show correct config section based on action type
+  // Show modal
+}
+
+async function handleEditAction(e) {
+  const updates = {
+    action_order: parseInt(...),
+    action_type: document.getElementById('edit-action-type').value,
+    name: document.getElementById('edit-action-name').value,
+    description: document.getElementById('edit-action-description').value || null,
+    enabled: document.getElementById('edit-action-enabled').checked ? 1 : 0,
+    config: buildEditConfigFromFields(actionType) // All config fields
+  };
+
+  await fetch(`${API_URL}/api/admin/workflow/actions/${actionId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates)
+  });
+}
+```
+
+### URL Auto-Fetch (admin-workflow.html + admin-workflow.js)
+```javascript
+// UNPACK - AtomicHub Pack URL
+async function fetchPackData() {
+  const url = document.getElementById('unpack-url').value;
+  // Extract: asset/wax-mainnet/Name_1099974449032 → assetId
+  const assetId = url.match(/asset\/[^/]+\/[^_]+_(\d+)/)[1];
+
+  // Fetch from AtomicAssets API
+  const response = await fetch(`https://aa.wax.blacklusion.io/atomicassets/v1/assets/${assetId}`);
+  const data = await response.json();
+
+  // Auto-fill template ID
+  document.getElementById('unpack-pack-template').value = data.data.template.template_id;
+}
+
+// BLEND - NeftyBlocks Blend URL
+async function fetchBlendData() {
+  const url = document.getElementById('blend-url').value;
+  // Extract: /c/futuresrelic/blends/blend/12049 → blendId
+  const blendId = url.match(/blend\/(\d+)/)[1];
+
+  // Query blockchain directly (blenderizerx contract)
+  const blendData = await queryBlendFromChain(blendId);
+
+  // Auto-fill ALL fields
+  document.getElementById('blend-blend-id').value = blendId;
+  document.getElementById('blend-ingredients').value = blendData.ingredients_schema.map(ing => ing.template_id).join(',');
+  document.getElementById('blend-count').value = blendData.ingredients_schema.length;
+  document.getElementById('blend-collection').value = collectionMatch[1];
+}
+
+async function queryBlendFromChain(blendId) {
+  // Try multiple RPC endpoints with fallback
+  for (const endpoint of rpcEndpoints) {
+    const response = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+      body: JSON.stringify({
+        code: 'blenderizerx',
+        scope: 'blenderizerx',
+        table: 'blends',
+        lower_bound: blendId,
+        upper_bound: blendId,
+        limit: 1
+      })
+    });
+    if (response.ok) return response.json().rows[0];
+  }
+}
+
+// DROP - NeftyBlocks Drop URL
+async function fetchDropData() {
+  const url = document.getElementById('drop-url').value;
+  // Extract: /c/futuresrelic/drops/229014 → dropId
+  const dropId = url.match(/drops\/(\d+)/)[1];
+  document.getElementById('drop-drop-id').value = dropId;
+  document.getElementById('drop-collection').value = collectionMatch[1];
+}
+```
+
+**HTML Changes:**
+```html
+<!-- Add and Edit forms now have URL fields -->
+<div class="form-group">
+  <label>🔗 NeftyBlocks Blend URL (Auto-Fill):</label>
+  <input type="text" id="blend-url" placeholder="https://neftyblocks.com/c/futuresrelic/blends/blend/12049">
+  <button type="button" onclick="fetchBlendData()">🔍 Fetch Blend Data</button>
+  <small>Paste NeftyBlocks blend URL to auto-fill all fields below</small>
+</div>
+```
+
+**Result:**
+✅ Full step editing restored - all fields editable
+✅ Full action editing restored - type, name, description, config, enabled
+✅ URL auto-fetch added for AtomicHub packs
+✅ URL auto-fetch added for NeftyBlocks blends (with blockchain query)
+✅ URL auto-fetch added for NeftyBlocks drops
+✅ Backend already supported full updates - this was purely UI regression
+✅ Works for both ADD and EDIT operations
+
+**Files Changed:**
+- `public/admin-workflow.html` - Added edit modals, URL fetch fields
+- `public/admin-workflow.js` - Full edit functions, URL parsers, blockchain queries
+
+**CRITICAL RULE:**
+🚨 **NEVER REMOVE EDITING FUNCTIONALITY AGAIN**
+🚨 **ALWAYS ALLOW EDITING ALL FIELDS, NOT JUST ORDER**
+🚨 **ALWAYS PROVIDE URL AUTO-FETCH FOR BLOCKCHAIN URLs**
 
 ---
 
