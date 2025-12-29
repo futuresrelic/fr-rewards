@@ -2397,7 +2397,7 @@ app.post('/api/blends/details', async (req, res) => {
             json: true,
             code: 'blenderizerx',
             scope: 'blenderizerx',
-            table: 'blends',
+            table: 'config',
             lower_bound: blendId,
             upper_bound: blendId,
             limit: 1
