@@ -1576,6 +1576,7 @@ app.get('/api/user/assets-rpc/:account/:template_id', async (req, res) => {
 
     let allMatchingAssets = [];
     let querySuccess = false;
+    let totalChecked = 0; // Declare outside loop so it's accessible in response
 
     // Try each RPC endpoint until one succeeds
     for (const endpoint of rpcEndpoints) {
@@ -1585,7 +1586,7 @@ app.get('/api/user/assets-rpc/:account/:template_id', async (req, res) => {
 
         let hasMore = true;
         let lowerBound = '';
-        let totalChecked = 0;
+        totalChecked = 0; // Reset for each endpoint attempt
 
         // Paginate through all assets until we find all matching templates
         while (hasMore && totalChecked < 10000) { // Safety limit: max 10k assets to check
