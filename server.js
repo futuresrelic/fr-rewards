@@ -2424,8 +2424,8 @@ app.post('/api/blends/details', async (req, res) => {
 
             const result = await rpc.get_table_rows({
               json: true,
-              code: 'blenderizerx',
-              scope: 'blenderizerx',
+              code: 'blend.nefty',
+              scope: 'blend.nefty',
               table: 'config',
               lower_bound: blendId,
               upper_bound: blendId,
