@@ -838,34 +838,58 @@ async function handleEditAction(e) {
 
 // ==================== URL AUTO-FETCH FUNCTIONS ====================
 
-// Fetch Pack Data from AtomicHub URL
+// Fetch Pack Data from AtomicHub URL OR NeftyBlocks Pack URL
 async function fetchPackData() {
   const url = document.getElementById('unpack-url').value.trim();
   if (!url) {
-    alert('Please enter an AtomicHub pack URL');
+    alert('Please enter an AtomicHub pack URL or NeftyBlocks pack URL');
     return;
   }
 
   try {
-    // Extract asset ID from URL
-    // Example: https://wax.atomichub.io/explorer/asset/wax-mainnet/Intern-Task-3-Completed_1099974449032
-    const assetIdMatch = url.match(/asset\/[^/]+\/[^_]+_(\d+)/);
-    if (!assetIdMatch) {
-      throw new Error('Could not extract asset ID from URL. Expected format: https://wax.atomichub.io/explorer/asset/wax-mainnet/Name_123456');
+    // Check if it's a NeftyBlocks pack URL
+    // Example: https://neftyblocks.com/collection/futuresrelic/packs/atomicpacksx/2404
+    const neftyPackMatch = url.match(/neftyblocks\.com\/collection\/[^/]+\/packs\/atomicpacksx\/(\d+)/);
+
+    if (neftyPackMatch) {
+      // NeftyBlocks pack - query atomicpacksx contract
+      const packId = neftyPackMatch[1];
+      const packData = await queryPackFromChain(packId);
+
+      if (!packData) {
+        throw new Error('Pack not found on blockchain');
+      }
+
+      // Get template_id from pack data
+      const templateId = packData.pack_template_id;
+
+      // Auto-fill template ID
+      document.getElementById('unpack-pack-template').value = templateId;
+      alert(`✅ Fetched NeftyBlocks pack!\nPack ID: ${packId}\nTemplate ID: ${templateId}`);
+      return;
     }
 
-    const assetId = assetIdMatch[1];
+    // Check if it's an AtomicHub asset URL
+    // Example: https://wax.atomichub.io/explorer/asset/wax-mainnet/Intern-Task-3-Completed_1099974449032
+    const assetIdMatch = url.match(/asset\/[^/]+\/[^_]+_(\d+)/);
 
-    // Fetch asset data from AtomicAssets API
-    const response = await fetch(`https://aa.wax.blacklusion.io/atomicassets/v1/assets/${assetId}`);
-    if (!response.ok) throw new Error('Failed to fetch asset data');
+    if (assetIdMatch) {
+      const assetId = assetIdMatch[1];
 
-    const data = await response.json();
-    const templateId = data.data.template.template_id;
+      // Fetch asset data from AtomicAssets API
+      const response = await fetch(`https://aa.wax.blacklusion.io/atomicassets/v1/assets/${assetId}`);
+      if (!response.ok) throw new Error('Failed to fetch asset data');
 
-    // Auto-fill template ID
-    document.getElementById('unpack-pack-template').value = templateId;
-    alert(`✅ Fetched pack data! Template ID: ${templateId}`);
+      const data = await response.json();
+      const templateId = data.data.template.template_id;
+
+      // Auto-fill template ID
+      document.getElementById('unpack-pack-template').value = templateId;
+      alert(`✅ Fetched AtomicHub asset!\nAsset ID: ${assetId}\nTemplate ID: ${templateId}`);
+      return;
+    }
+
+    throw new Error('URL format not recognized. Please use:\n- AtomicHub: https://wax.atomichub.io/explorer/asset/...\n- NeftyBlocks: https://neftyblocks.com/collection/.../packs/atomicpacksx/...');
 
   } catch (error) {
     alert('❌ Error fetching pack data: ' + error.message);
@@ -876,25 +900,45 @@ async function fetchPackData() {
 async function fetchPackDataEdit() {
   const url = document.getElementById('edit-unpack-url').value.trim();
   if (!url) {
-    alert('Please enter an AtomicHub pack URL');
+    alert('Please enter an AtomicHub pack URL or NeftyBlocks pack URL');
     return;
   }
 
   try {
-    const assetIdMatch = url.match(/asset\/[^/]+\/[^_]+_(\d+)/);
-    if (!assetIdMatch) {
-      throw new Error('Could not extract asset ID from URL');
+    // Check if it's a NeftyBlocks pack URL
+    const neftyPackMatch = url.match(/neftyblocks\.com\/collection\/[^/]+\/packs\/atomicpacksx\/(\d+)/);
+
+    if (neftyPackMatch) {
+      const packId = neftyPackMatch[1];
+      const packData = await queryPackFromChain(packId);
+
+      if (!packData) {
+        throw new Error('Pack not found on blockchain');
+      }
+
+      const templateId = packData.pack_template_id;
+      document.getElementById('edit-unpack-pack-template').value = templateId;
+      alert(`✅ Fetched! Pack ID: ${packId}, Template ID: ${templateId}`);
+      return;
     }
 
-    const assetId = assetIdMatch[1];
-    const response = await fetch(`https://aa.wax.blacklusion.io/atomicassets/v1/assets/${assetId}`);
-    if (!response.ok) throw new Error('Failed to fetch asset data');
+    // Check if it's an AtomicHub asset URL
+    const assetIdMatch = url.match(/asset\/[^/]+\/[^_]+_(\d+)/);
 
-    const data = await response.json();
-    const templateId = data.data.template.template_id;
+    if (assetIdMatch) {
+      const assetId = assetIdMatch[1];
+      const response = await fetch(`https://aa.wax.blacklusion.io/atomicassets/v1/assets/${assetId}`);
+      if (!response.ok) throw new Error('Failed to fetch asset data');
 
-    document.getElementById('edit-unpack-pack-template').value = templateId;
-    alert(`✅ Fetched! Template ID: ${templateId}`);
+      const data = await response.json();
+      const templateId = data.data.template.template_id;
+
+      document.getElementById('edit-unpack-pack-template').value = templateId;
+      alert(`✅ Fetched! Template ID: ${templateId}`);
+      return;
+    }
+
+    throw new Error('URL format not recognized');
 
   } catch (error) {
     alert('❌ Error: ' + error.message);
@@ -1009,6 +1053,46 @@ async function queryBlendFromChain(blendId) {
           table: 'blends',
           lower_bound: blendId,
           upper_bound: blendId,
+          limit: 1
+        })
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      if (data.rows && data.rows.length > 0) {
+        return data.rows[0];
+      }
+    } catch (error) {
+      console.error(`RPC ${endpoint} failed:`, error);
+      continue;
+    }
+  }
+
+  return null;
+}
+
+// Query pack data from blockchain (atomicpacksx contract)
+async function queryPackFromChain(packId) {
+  const rpcEndpoints = [
+    'https://api.wax.alohaeos.com',
+    'https://wax.greymass.com',
+    'https://api.waxsweden.org',
+    'https://wax.eosphere.io'
+  ];
+
+  for (const endpoint of rpcEndpoints) {
+    try {
+      const response = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          json: true,
+          code: 'atomicpacksx',
+          scope: 'atomicpacksx',
+          table: 'packs',
+          lower_bound: packId,
+          upper_bound: packId,
           limit: 1
         })
       });
