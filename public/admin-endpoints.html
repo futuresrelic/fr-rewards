@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Endpoints Configuration - Futures Relic Admin</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .endpoint-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .endpoint-section h2 {
+      margin-top: 0;
+      color: var(--text-primary);
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 10px;
+    }
+    .endpoint-item {
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    .endpoint-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .endpoint-name {
+      font-weight: bold;
+      color: var(--text-primary);
+      font-size: 1.1rem;
+    }
+    .endpoint-type {
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: bold;
+    }
+    .type-live {
+      background: #10b981;
+      color: white;
+    }
+    .type-cached {
+      background: #f59e0b;
+      color: white;
+    }
+    .type-mixed {
+      background: #ef4444;
+      color: white;
+    }
+    .endpoint-url {
+      font-family: monospace;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      margin: 5px 0;
+    }
+    .endpoint-purpose {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin: 8px 0;
+    }
+    .endpoint-details {
+      background: rgba(0,0,0,0.3);
+      border-radius: 4px;
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 0.9rem;
+    }
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 5px 0;
+    }
+    .detail-label {
+      color: var(--text-secondary);
+    }
+    .detail-value {
+      color: var(--text-primary);
+      font-family: monospace;
+    }
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+    }
+    .status-good { background: #10b981; }
+    .status-warning { background: #f59e0b; }
+    .status-error { background: #ef4444; }
+    .status-unknown { background: #6b7280; }
+    .test-button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      margin-top: 10px;
+    }
+    .test-button:hover {
+      opacity: 0.8;
+    }
+    .test-result {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+    .test-success {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #10b981;
+    }
+    .test-error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid #ef4444;
+      color: #ef4444;
+    }
+    .warning-box {
+      background: rgba(245, 158, 11, 0.1);
+      border: 2px solid #f59e0b;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    .warning-box h3 {
+      color: #f59e0b;
+      margin-top: 0;
+    }
+    .code-block {
+      background: rgba(0,0,0,0.5);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌐 API Endpoints Configuration</h1>
+    <p style="color: var(--text-secondary);">Monitor and understand which API endpoints are being used for each feature.</p>
+
+    <!-- Critical Warning -->
+    <div class="warning-box">
+      <h3>⚠️ CRITICAL: LIVE vs CACHED Consistency</h3>
+      <p>
+        <strong>Problem:</strong> Mixing LIVE blockchain RPC and CACHED API endpoints causes errors like "You have 0 but you just claimed it!"
+      </p>
+      <p>
+        <strong>Rule:</strong> ALL wallet ownership checks (eligibility, claim, blend, unpack) MUST use the same source.
+      </p>
+      <p>
+        <strong>Current Standard:</strong> Use <code>getUserAssetsLive()</code> everywhere for real-time blockchain data.
+      </p>
+    </div>
+
+    <!-- LIVE Blockchain RPC Endpoints -->
+    <div class="endpoint-section">
+      <h2>🟢 LIVE Blockchain RPC Endpoints (Real-Time)</h2>
+      <p style="color: var(--text-secondary);">Direct blockchain queries via RPC - no cache, instant updates after transactions.</p>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">getUserAssetsLive()</div>
+          <div class="endpoint-type type-live">LIVE RPC</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Get user's assets directly from blockchain atomicassets contract
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Primary RPC:</span>
+            <span class="detail-value">https://api.wax.alohaeos.com</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Fallbacks:</span>
+            <span class="detail-value">wax.greymass.com, api.waxsweden.org, wax.eosphere.io</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Method:</span>
+            <span class="detail-value">POST /v1/chain/get_table_rows</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Table Query:</span>
+            <span class="detail-value">atomicassets.assets (scope: user account)</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Cache Lag:</span>
+            <span class="detail-value" style="color: #10b981;">0 seconds (instant)</span>
+          </div>
+        </div>
+        <div class="code-block">
+          <strong>Used By:</strong><br>
+          ✅ /api/user/eligibility (server.js:164)<br>
+          ✅ /api/user/claim (server.js:481)<br>
+          ✅ /api/assets/:account (server.js:2443) - FOR BLEND SELECTION<br>
+          ✅ /api/user/assets-rpc/:account/:template_id (server.js:1555)
+        </div>
+      </div>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">Unpack RPC Query</div>
+          <div class="endpoint-type type-live">LIVE RPC</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Query atomicpacksx contract for unpacked pack rolls
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Contract:</span>
+            <span class="detail-value">atomicpacksx</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Tables:</span>
+            <span class="detail-value">unboxassets, unboxpacks, packs</span>
+          </div>
+        </div>
+        <div class="code-block">
+          <strong>Used By:</strong><br>
+          ✅ /api/pack/unboxed-rolls/:packAssetId (server.js:1719)<br>
+          ✅ story.js doUnpack() function (frontend)
+        </div>
+      </div>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">Blend RPC Query</div>
+          <div class="endpoint-type type-live">LIVE RPC</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Query blenderizerx contract for blend configuration
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Contract:</span>
+            <span class="detail-value">blenderizerx</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Table:</span>
+            <span class="detail-value">blends</span>
+          </div>
+        </div>
+        <div class="code-block">
+          <strong>Used By:</strong><br>
+          ✅ admin-workflow.js queryBlendFromChain() (URL auto-fetch)<br>
+          ✅ story.js executeBlendArray() (frontend)
+        </div>
+      </div>
+    </div>
+
+    <!-- CACHED API Endpoints -->
+    <div class="endpoint-section">
+      <h2>🟡 CACHED API Endpoints (Template Metadata Only)</h2>
+      <p style="color: var(--text-secondary);">AtomicAssets API - used ONLY for template images/metadata. Has 30-120 second cache lag.</p>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">AtomicAssets API</div>
+          <div class="endpoint-type type-cached">CACHED</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Fetch template images, names, and metadata for display purposes ONLY
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Primary:</span>
+            <span class="detail-value">https://aa-wax-public1.neftyblocks.com</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Fallbacks:</span>
+            <span class="detail-value">wax-aa.eosdac.io, atomic-wax-mainnet.wecan.dev, wax-atomic-api.eosphere.io</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Cache Lag:</span>
+            <span class="detail-value" style="color: #f59e0b;">30-120 seconds</span>
+          </div>
+        </div>
+        <div class="code-block">
+          <strong>Safe Uses (metadata only):</strong><br>
+          ✅ /api/templates/:template_id (server.js:2413) - Get template image/name<br>
+          ✅ story.js fetchUnpackedAssetDetails() - Get asset images for modal<br>
+          ✅ eligibility.js - Get template images for display<br>
+          <br>
+          <strong style="color: #ef4444;">❌ NEVER use for:</strong><br>
+          ❌ Wallet ownership checks<br>
+          ❌ Claim verification<br>
+          ❌ Blend ingredient checking<br>
+          ❌ Unpack eligibility
+        </div>
+      </div>
+    </div>
+
+    <!-- Application Endpoints -->
+    <div class="endpoint-section">
+      <h2>🔵 Application API Endpoints</h2>
+      <p style="color: var(--text-secondary);">Internal backend endpoints - check which data source they use.</p>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">/api/user/eligibility</div>
+          <div class="endpoint-type type-live">LIVE RPC</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Check which NFTs user owns and can claim rewards for
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Backend Method:</span>
+            <span class="detail-value">wax.getUserAssetsLive()</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">File:</span>
+            <span class="detail-value">server.js:164</span>
+          </div>
+        </div>
+        <button class="test-button" onclick="testEndpoint('/api/user/eligibility', 'eligibility')">Test Endpoint</button>
+        <div id="test-eligibility"></div>
+      </div>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">/api/user/claim</div>
+          <div class="endpoint-type type-live">LIVE RPC</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Verify user owns NFT before minting reward
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Backend Method:</span>
+            <span class="detail-value">wax.getUserAssetsLive()</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">File:</span>
+            <span class="detail-value">server.js:481</span>
+          </div>
+        </div>
+        <div class="code-block">
+          <strong style="color: #10b981;">✅ CORRECT:</strong> Uses same LIVE source as eligibility check
+        </div>
+      </div>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">/api/assets/:account</div>
+          <div class="endpoint-type type-live">LIVE RPC</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Fetch user's assets for blend/unpack ingredient selection
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Backend Method:</span>
+            <span class="detail-value">wax.getUserAssetsLive()</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">File:</span>
+            <span class="detail-value">server.js:2443</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Status:</span>
+            <span class="detail-value" style="color: #10b981;">✅ FIXED - Now uses LIVE RPC</span>
+          </div>
+        </div>
+        <div class="code-block">
+          <strong>Recent Fix:</strong> Changed from getUserAssets() (cached) to getUserAssetsLive() (live)<br>
+          <strong>Commit:</strong> 122a37f - Fix blend asset selection to use LIVE blockchain RPC
+        </div>
+        <button class="test-button" onclick="testEndpoint('/api/assets/czkua.wam?collection_name=futuresrelic', 'assets')">Test Endpoint</button>
+        <div id="test-assets"></div>
+      </div>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">/api/user/assets-rpc/:account/:template_id</div>
+          <div class="endpoint-type type-live">LIVE RPC</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Check if user owns specific template (for pack unpack eligibility)
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Query Method:</span>
+            <span class="detail-value">Direct atomicassets RPC query</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">File:</span>
+            <span class="detail-value">server.js:1555</span>
+          </div>
+        </div>
+        <button class="test-button" onclick="testEndpoint('/api/user/assets-rpc/czkua.wam/210857', 'assets-rpc')">Test Endpoint (Template 210857)</button>
+        <div id="test-assets-rpc"></div>
+      </div>
+
+      <div class="endpoint-item">
+        <div class="endpoint-header">
+          <div class="endpoint-name">/api/pack/unboxed-rolls/:packAssetId</div>
+          <div class="endpoint-type type-live">LIVE RPC</div>
+        </div>
+        <div class="endpoint-purpose">
+          <strong>Purpose:</strong> Check if pack has been unpacked and get roll IDs
+        </div>
+        <div class="endpoint-details">
+          <div class="detail-row">
+            <span class="detail-label">Contract Query:</span>
+            <span class="detail-value">atomicpacksx.unboxassets</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">File:</span>
+            <span class="detail-value">server.js:1719</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Best Practices -->
+    <div class="endpoint-section">
+      <h2>📋 Best Practices & Guidelines</h2>
+
+      <h3 style="color: var(--text-primary);">When to Use LIVE RPC:</h3>
+      <ul style="color: var(--text-secondary);">
+        <li>✅ Checking wallet ownership (eligibility, claims, blends, unpacks)</li>
+        <li>✅ Verifying user has required NFTs</li>
+        <li>✅ Any decision-making based on what user owns</li>
+        <li>✅ Real-time transaction results</li>
+      </ul>
+
+      <h3 style="color: var(--text-primary); margin-top: 20px;">When to Use CACHED API:</h3>
+      <ul style="color: var(--text-secondary);">
+        <li>✅ Fetching template images/videos for display</li>
+        <li>✅ Getting template metadata (name, description)</li>
+        <li>✅ Collection information</li>
+        <li>✅ Schema details</li>
+        <li>⚠️ NEVER for ownership verification!</li>
+      </ul>
+
+      <h3 style="color: var(--text-primary); margin-top: 20px;">How NeftyBlocks Does It:</h3>
+      <div class="code-block">
+        NeftyBlocks likely uses:<br>
+        1. Direct database access to their own indexed blockchain data<br>
+        2. Real-time WebSocket subscriptions to blockchain events<br>
+        3. Their own API infrastructure with sub-second indexing<br>
+        4. Cached layers for metadata but LIVE queries for ownership<br>
+        <br>
+        <strong>We use:</strong><br>
+        - Public RPC nodes (alohaeos, greymass, etc.) for LIVE data<br>
+        - Public AtomicAssets APIs for metadata only<br>
+        - This is standard for independent dApps without custom infrastructure
+      </div>
+
+      <h3 style="color: var(--text-primary); margin-top: 20px;">Common Mistakes:</h3>
+      <div class="code-block" style="border-color: #ef4444;">
+        <strong style="color: #ef4444;">❌ NEVER DO THIS:</strong><br>
+        <br>
+        // Checking eligibility with LIVE:<br>
+        const eligibleAssets = await wax.getUserAssetsLive(account);<br>
+        <br>
+        // Then verifying claim with CACHED:<br>
+        const verifyAssets = await wax.getUserAssets(account); // ❌ WRONG!<br>
+        <br>
+        <strong style="color: #10b981;">✅ ALWAYS DO THIS:</strong><br>
+        <br>
+        // Use same source for everything:<br>
+        const eligibleAssets = await wax.getUserAssetsLive(account);<br>
+        const verifyAssets = await wax.getUserAssetsLive(account); // ✅ CORRECT!
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+
+    async function testEndpoint(endpoint, resultId) {
+      const resultDiv = document.getElementById(`test-${resultId}`);
+      resultDiv.innerHTML = '<div style="color: var(--text-secondary);">Testing...</div>';
+
+      try {
+        const startTime = Date.now();
+        const response = await fetch(`${API_URL}${endpoint}`);
+        const duration = Date.now() - startTime;
+
+        const data = await response.json();
+
+        let html = `<div class="test-result test-success">`;
+        html += `<strong>✅ Success</strong> (${duration}ms)<br>`;
+        html += `Source: ${data.source || 'not specified'}<br>`;
+        html += `Assets Count: ${data.data ? data.data.length : 0}<br>`;
+        if (data.total_checked) {
+          html += `Total Checked: ${data.total_checked}<br>`;
+        }
+        html += `</div>`;
+
+        resultDiv.innerHTML = html;
+      } catch (error) {
+        resultDiv.innerHTML = `<div class="test-result test-error"><strong>❌ Error:</strong> ${error.message}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>
