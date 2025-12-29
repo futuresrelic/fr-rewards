@@ -133,6 +133,46 @@ async function getUserAssets(account, collection = null) {
  * @param {number} templateId - Template ID
  * @returns {Promise<Object>} Template data
  */
+/**
+ * Fetch template data by querying a sample asset from AtomicAssets API
+ * This is a fallback when the templates endpoint fails
+ * @param {string} collection - Collection name
+ * @param {number} templateId - Template ID
+ * @returns {Promise<Object>} Template data from a sample asset
+ */
+async function getTemplateFromAssetSample(collection, templateId) {
+  for (const ATOMIC_API of ATOMIC_APIS) {
+    try {
+      // Query for one asset with this template_id to get full template metadata
+      const url = `${ATOMIC_API}/atomicassets/v1/assets?collection_name=${collection}&template_id=${templateId}&limit=1`;
+      const response = await fetch(url, { timeout: 10000 });
+
+      if (!response.ok) {
+        throw new Error(`Assets query failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.data && data.data.length > 0) {
+        const sampleAsset = data.data[0];
+        console.log(`✅ Fetched template ${templateId} metadata from sample asset (${ATOMIC_API})`);
+
+        // Return template data extracted from the sample asset
+        return {
+          template_id: sampleAsset.template?.template_id || templateId,
+          immutable_data: sampleAsset.template?.immutable_data || sampleAsset.data || {},
+          schema: sampleAsset.schema?.schema_name,
+          collection_name: collection
+        };
+      }
+    } catch (error) {
+      console.warn(`❌ Failed to fetch template from assets API (${ATOMIC_API}):`, error.message);
+      continue;
+    }
+  }
+
+  return null;
+}
+
 async function getTemplate(collection, templateId) {
   let lastError = null;
 
@@ -156,7 +196,20 @@ async function getTemplate(collection, templateId) {
     }
   }
 
-  throw new Error(`Failed to fetch template ${templateId}. Last error: ${lastError?.message}`);
+  // All template API endpoints failed - try fetching from a sample asset
+  console.warn(`⚠️ All AtomicAssets template endpoints failed for template ${templateId}, trying asset sample fallback...`);
+  const assetSampleTemplate = await getTemplateFromAssetSample(collection, templateId);
+  if (assetSampleTemplate) {
+    return assetSampleTemplate;
+  }
+
+  // Last resort: return minimal template data so asset can still be used
+  console.error(`❌ All template fetch methods failed for ${templateId}, returning minimal data`);
+  return {
+    template_id: templateId,
+    immutable_data: {},
+    collection_name: collection
+  };
 }
 
 /**
@@ -532,8 +585,15 @@ async function getUserAssetsLive(account, collection = null, templateFilter = nu
         try {
           const templateData = await getTemplate(collection || 'futuresrelic', templateId);
           templateDataMap.set(templateId, templateData);
+          console.log(`   ✓ Template ${templateId}: ${templateData?.immutable_data?.name || 'No name'}`);
         } catch (error) {
-          console.warn(`Failed to fetch template ${templateId}:`, error.message);
+          console.error(`   ✗ Template ${templateId} FAILED:`, error.message);
+          // Set minimal data even on failure so asset still renders
+          templateDataMap.set(templateId, {
+            template_id: templateId,
+            immutable_data: {},
+            collection_name: collection || 'futuresrelic'
+          });
         }
       }));
 
