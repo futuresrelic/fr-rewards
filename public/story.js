@@ -2260,57 +2260,26 @@ async function executeBlendArray(action, config) {
 
   console.log(`⚡ BLEND_ARRAY with ${config.blend_ids.length} blend options`);
 
-  // Fetch blend details from blockchain for each blend ID using public RPC
-  const rpcEndpoints = [
-    'https://wax.greymass.com',
-    'https://api.waxsweden.org',
-    'https://wax.eosphere.io',
-    'https://api.wax.alohaeos.com'
-  ];
+  // Fetch blend details from backend (which queries blockchain via RPC)
+  console.log(`📡 Fetching blend details from backend...`);
+  const blendsResponse = await fetch(`${API_URL}/api/blends/details`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blend_ids: config.blend_ids })
+  });
 
-  async function queryBlendFromChain(blendId) {
-    for (const endpoint of rpcEndpoints) {
-      try {
-        const response = await fetch(`${endpoint}/v1/chain/get_table_rows`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            json: true,
-            code: 'blenderizerx',
-            scope: 'blenderizerx',
-            table: 'blends',
-            lower_bound: blendId,
-            upper_bound: blendId,
-            limit: 1
-          })
-        });
-
-        if (!response.ok) continue; // Try next endpoint
-
-        const data = await response.json();
-        if (data.rows && data.rows.length > 0) {
-          return data.rows[0];
-        }
-        return null;
-      } catch (error) {
-        console.warn(`Failed to fetch blend ${blendId} from ${endpoint}:`, error.message);
-        continue; // Try next endpoint
-      }
-    }
-    console.error(`Failed to fetch blend ${blendId} from all endpoints`);
-    return null;
+  if (!blendsResponse.ok) {
+    throw new Error('Failed to fetch blend details from server');
   }
 
-  const blendDetails = await Promise.all(
-    config.blend_ids.map(blendId => queryBlendFromChain(blendId))
-  );
+  const blendsData = await blendsResponse.json();
 
-  // Filter out failed fetches
-  const validBlends = blendDetails.filter(b => b !== null);
-
-  if (validBlends.length === 0) {
+  if (!blendsData.success || !blendsData.blends || blendsData.blends.length === 0) {
     throw new Error('Failed to fetch blend details from blockchain');
   }
+
+  const validBlends = blendsData.blends;
+  console.log(`✅ Fetched ${validBlends.length} blend configurations`);
 
   // STEP 1: Collect all required templates across ALL blend options
   const allRequiredTemplates = [...new Set(validBlends.flatMap(blend =>

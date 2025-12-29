@@ -2357,6 +2357,84 @@ app.post('/api/asset/verify-ownership', async (req, res) => {
 });
 
 /**
+ * POST /api/blends/details
+ * Fetch blend details from blockchain for multiple blend IDs
+ * Body: { blend_ids: [id1, id2, ...] }
+ * Returns blend configurations including ingredient requirements
+ */
+app.post('/api/blends/details', async (req, res) => {
+  try {
+    const { blend_ids } = req.body;
+
+    if (!blend_ids || !Array.isArray(blend_ids)) {
+      return res.status(400).json({ error: 'blend_ids array is required' });
+    }
+
+    console.log(`📋 Fetching details for ${blend_ids.length} blends...`);
+
+    const { JsonRpc } = require('eosjs');
+
+    // RPC endpoints for blend queries
+    const rpcEndpoints = [
+      'https://api.wax.alohaeos.com',
+      'https://wax.greymass.com',
+      'https://api.waxsweden.org',
+      'https://wax.eosphere.io'
+    ];
+
+    const blendDetails = [];
+
+    // Fetch each blend sequentially to avoid rate limits
+    for (const blendId of blend_ids) {
+      let blendData = null;
+
+      // Try each RPC endpoint until one succeeds
+      for (const endpoint of rpcEndpoints) {
+        try {
+          const rpc = new JsonRpc(endpoint, { fetch });
+
+          const result = await rpc.get_table_rows({
+            json: true,
+            code: 'blenderizerx',
+            scope: 'blenderizerx',
+            table: 'blends',
+            lower_bound: blendId,
+            upper_bound: blendId,
+            limit: 1
+          });
+
+          if (result.rows && result.rows.length > 0) {
+            blendData = result.rows[0];
+            console.log(`  ✅ Fetched blend ${blendId} from ${endpoint}`);
+            break; // Success, move to next blend
+          }
+        } catch (error) {
+          console.warn(`  ⚠️ Failed to fetch blend ${blendId} from ${endpoint}:`, error.message);
+          continue; // Try next endpoint
+        }
+      }
+
+      if (blendData) {
+        blendDetails.push(blendData);
+      } else {
+        console.warn(`  ❌ Failed to fetch blend ${blendId} from all endpoints`);
+      }
+    }
+
+    console.log(`✅ Successfully fetched ${blendDetails.length}/${blend_ids.length} blends`);
+
+    res.json({
+      success: true,
+      blend_count: blendDetails.length,
+      blends: blendDetails
+    });
+  } catch (error) {
+    console.error('Error fetching blend details:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * POST /api/asset/verify-ownership-rpc
  * Verify current ownership of an asset by querying BLOCKCHAIN DIRECTLY via RPC
  * This bypasses AtomicAssets API cache and gets real-time blockchain state
