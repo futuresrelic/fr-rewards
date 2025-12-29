@@ -1482,18 +1482,73 @@ async function doUnpack(pack, action) {
   // Step 4: Claim the unpacked rolls
   console.log(`🎁 Claiming ${rollIds.length} rolls...`);
 
-  const claimResult = await transact([{
-    account: 'atomicpacksx',
-    name: 'claimunboxed',
-    authorization: [{
-      actor: currentAccount,
-      permission: 'active'
-    }],
-    data: {
-      pack_asset_id: assetId.toString(),
-      origin_roll_ids: rollIds
+  let claimResult;
+  try {
+    claimResult = await transact([{
+      account: 'atomicpacksx',
+      name: 'claimunboxed',
+      authorization: [{
+        actor: currentAccount,
+        permission: 'active'
+      }],
+      data: {
+        pack_asset_id: assetId.toString(),
+        origin_roll_ids: rollIds
+      }
+    }]);
+  } catch (error) {
+    // Handle popup blocker - prompt user to click
+    if (error.message && error.message.includes('popup')) {
+      console.log('⚠️ Popup blocked - prompting user to click...');
+
+      // Create and show a modal with a button
+      const continuePromise = new Promise((resolve, reject) => {
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;';
+        modal.innerHTML = `
+          <div style="background: #1a1a1a; padding: 30px; border-radius: 10px; text-align: center; max-width: 400px;">
+            <h3 style="margin-top: 0;">🎁 Ready to Claim!</h3>
+            <p>Pack unpacked successfully! Found ${rollIds.length} rolls.</p>
+            <p>Click below to claim your assets:</p>
+            <button id="claim-continue-btn" style="background: #4CAF50; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 5px; cursor: pointer; margin-top: 10px;">
+              Claim ${rollIds.length} NFTs
+            </button>
+          </div>
+        `;
+        document.body.appendChild(modal);
+
+        document.getElementById('claim-continue-btn').onclick = async () => {
+          try {
+            document.getElementById('claim-continue-btn').textContent = 'Claiming...';
+            document.getElementById('claim-continue-btn').disabled = true;
+
+            const result = await transact([{
+              account: 'atomicpacksx',
+              name: 'claimunboxed',
+              authorization: [{
+                actor: currentAccount,
+                permission: 'active'
+              }],
+              data: {
+                pack_asset_id: assetId.toString(),
+                origin_roll_ids: rollIds
+              }
+            }]);
+
+            document.body.removeChild(modal);
+            resolve(result);
+          } catch (err) {
+            document.body.removeChild(modal);
+            reject(err);
+          }
+        };
+      });
+
+      claimResult = await continuePromise;
+    } else {
+      throw error; // Re-throw if not a popup blocker error
     }
-  }]);
+  }
 
   showError(`Success! Claimed ${rollIds.length} NFTs from pack. TX: ${claimResult.transaction_id}`, 'success');
 
