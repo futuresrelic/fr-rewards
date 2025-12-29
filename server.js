@@ -2446,7 +2446,7 @@ app.get('/api/assets/:account', async (req, res) => {
     let assets = allAssets;
     if (template_id) {
       assets = allAssets.filter(asset =>
-        asset.template && asset.template.template_id === template_id.toString()
+        asset.template && asset.template.template_id.toString() === template_id.toString()
       );
       console.log(`  📊 Filtered: ${assets.length} assets with template ${template_id} (out of ${allAssets.length} total)`);
     }

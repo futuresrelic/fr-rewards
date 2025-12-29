@@ -1818,7 +1818,7 @@ function renderBlendAssetsGrouped(templateIds, allAssets) {
 
   templateIds.forEach((templateId, groupIndex) => {
     // Filter assets for this template
-    const groupAssets = allAssets.filter(asset => asset.template.template_id === templateId.toString());
+    const groupAssets = allAssets.filter(asset => asset.template.template_id.toString() === templateId.toString());
 
     // Create group container (even if no assets - show that it's required)
     const groupContainer = document.createElement('div');
@@ -2126,7 +2126,7 @@ async function executeBlend(action, config) {
   if (config.ingredient_templates) {
     const templateIds = config.ingredient_templates.map(t => t.toString());
     ingredientAssets = ingredientAssets.filter(asset =>
-      templateIds.includes(asset.template.template_id)
+      templateIds.includes(asset.template.template_id.toString())
     );
   }
 
