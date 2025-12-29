@@ -1587,11 +1587,18 @@ function extractAssetIdsFromTransaction(transactionResult) {
       for (const trace of traces) {
         if (trace.act && trace.act.account === 'atomicassets') {
           // logtransfer action contains asset_ids that were transferred
+          // ONLY capture transfers TO the user (claimed assets), not FROM the user
           if (trace.act.name === 'logtransfer' && trace.act.data && trace.act.data.asset_ids) {
-            assetIds.push(...trace.act.data.asset_ids.map(id => id.toString()));
+            // Filter: only get transfers TO currentAccount (the claimed NFTs)
+            // Ignore transfers FROM currentAccount (pack being unpacked) or atomicpacksx transfers
+            if (trace.act.data.to === currentAccount && trace.act.data.from !== currentAccount) {
+              console.log(`  📦 Found logtransfer TO ${currentAccount}: ${trace.act.data.asset_ids.join(', ')}`);
+              assetIds.push(...trace.act.data.asset_ids.map(id => id.toString()));
+            }
           }
           // logmint action contains the newly minted asset_id
           if (trace.act.name === 'logmint' && trace.act.data && trace.act.data.asset_id) {
+            console.log(`  🎨 Found logmint: ${trace.act.data.asset_id}`);
             assetIds.push(trace.act.data.asset_id.toString());
           }
         }
