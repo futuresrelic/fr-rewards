@@ -2430,22 +2430,34 @@ app.post('/api/asset/verify-ownership-rpc', async (req, res) => {
 app.get('/api/assets/:account', async (req, res) => {
   try {
     const { account } = req.params;
-    const { collection_name, limit } = req.query;
+    const { collection_name, template_id } = req.query;
 
     if (!account) {
       return res.status(400).json({ error: 'account parameter required', success: false });
     }
 
-    console.log(`📦 Fetching LIVE assets for ${account} in collection ${collection_name || 'all'}`);
+    console.log(`📦 Fetching LIVE assets for ${account} in collection ${collection_name || 'all'}${template_id ? ` (template ${template_id})` : ''}`);
 
     // Use getUserAssetsLive for real-time blockchain data (same as claim verification)
     // This ensures blend asset selection sees newly acquired assets immediately
-    const assets = await wax.getUserAssetsLive(account, collection_name || null, null);
+    const allAssets = await wax.getUserAssetsLive(account, collection_name || null, null);
+
+    // Filter by template if specified
+    let assets = allAssets;
+    if (template_id) {
+      assets = allAssets.filter(asset =>
+        asset.template && asset.template.template_id === template_id.toString()
+      );
+      console.log(`  📊 Filtered: ${assets.length} assets with template ${template_id} (out of ${allAssets.length} total)`);
+    }
 
     res.json({
       success: true,
       data: assets,
-      source: 'blockchain_rpc_live'
+      source: 'blockchain_rpc_live',
+      total_assets: allAssets.length,
+      filtered_assets: template_id ? assets.length : null,
+      filter: template_id ? { template_id } : null
     });
   } catch (error) {
     console.error('Error fetching user assets:', error);

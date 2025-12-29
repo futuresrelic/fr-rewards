@@ -333,6 +333,7 @@
     async function testBackendEndpoint() {
       const account = document.getElementById('test-account').value.trim();
       const collection = document.getElementById('test-collection').value.trim();
+      const templateId = document.getElementById('test-template').value.trim();
 
       if (!account) {
         alert('Please enter a WAX account to test');
@@ -358,11 +359,15 @@
       let assets = [];
       let error = null;
       let source = 'unknown';
+      let totalAssets = 0;
+      let filteredAssets = 0;
 
       try {
-        const url = collection
-          ? `${API_URL}/api/assets/${account}?collection_name=${collection}`
-          : `${API_URL}/api/assets/${account}`;
+        const params = new URLSearchParams();
+        if (collection) params.append('collection_name', collection);
+        if (templateId) params.append('template_id', templateId);
+
+        const url = `${API_URL}/api/assets/${account}${params.toString() ? '?' + params.toString() : ''}`;
 
         const response = await fetch(url);
 
@@ -373,6 +378,8 @@
         const data = await response.json();
         assets = data.data || [];
         source = data.source || 'not specified';
+        totalAssets = data.total_assets || 0;
+        filteredAssets = data.filtered_assets;
         success = true;
 
       } catch (err) {
@@ -392,16 +399,18 @@
         <div class="result-data">
           ${success ? `
             <strong>Source:</strong> ${source}<br>
-            <strong>Assets Found:</strong> ${assets.length}<br>
+            <strong>Total Assets:</strong> ${totalAssets}<br>
+            ${templateId ? `<strong>Filtered Assets (template ${templateId}):</strong> ${filteredAssets}<br>` : ''}
+            <strong>Assets Returned:</strong> ${assets.length}<br>
             ${assets.length > 0 ? `
               <strong>Sample Assets:</strong><br>
-              ${assets.slice(0, 5).map(a => `
+              ${assets.slice(0, 10).map(a => `
                 <div class="asset-card">
                   Asset ID: ${a.asset_id} | Template: ${a.template?.template_id || 'N/A'} | Collection: ${a.collection?.collection_name || 'N/A'}
                 </div>
               `).join('')}
-              ${assets.length > 5 ? `<div style="margin-top: 5px;">... and ${assets.length - 5} more</div>` : ''}
-            ` : '<div style="color: #f59e0b;">No assets found</div>'}
+              ${assets.length > 10 ? `<div style="margin-top: 5px;">... and ${assets.length - 10} more</div>` : ''}
+            ` : '<div style="color: #f59e0b;">No assets found matching criteria</div>'}
           ` : `
             <strong style="color: #ef4444;">Error:</strong> ${error}
           `}
