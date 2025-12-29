@@ -2364,7 +2364,7 @@ app.post('/api/asset/verify-ownership', async (req, res) => {
  */
 app.post('/api/blends/details', async (req, res) => {
   try {
-    const { blend_ids } = req.body;
+    const { blend_ids, refresh = false } = req.body;
 
     if (!blend_ids || !Array.isArray(blend_ids)) {
       return res.status(400).json({ error: 'blend_ids array is required' });
@@ -2372,76 +2372,115 @@ app.post('/api/blends/details', async (req, res) => {
 
     console.log(`📋 Fetching details for ${blend_ids.length} blends...`);
 
-    const { JsonRpc } = require('eosjs');
-
-    // RPC endpoints for blend queries
-    const rpcEndpoints = [
-      'https://api.wax.alohaeos.com',
-      'https://wax.greymass.com',
-      'https://api.waxsweden.org',
-      'https://wax.eosphere.io'
-    ];
-
     const blendDetails = [];
+    const blendsToFetch = [];
 
-    // Fetch each blend sequentially to avoid rate limits
-    for (const blendId of blend_ids) {
-      let blendData = null;
+    // Check cache first (unless refresh is true)
+    if (!refresh) {
+      const cachedBlends = db.blendCache.getMultiple(blend_ids);
+      console.log(`💾 Found ${cachedBlends.length}/${blend_ids.length} blends in cache`);
 
-      // Try each RPC endpoint until one succeeds
-      for (const endpoint of rpcEndpoints) {
-        try {
-          const rpc = new JsonRpc(endpoint, { fetch });
+      const cachedIds = new Set(cachedBlends.map(b => b.blend_id));
 
-          const result = await rpc.get_table_rows({
-            json: true,
-            code: 'blenderizerx',
-            scope: 'blenderizerx',
-            table: 'config',
-            lower_bound: blendId,
-            upper_bound: blendId,
-            limit: 1
-          });
+      for (const cached of cachedBlends) {
+        blendDetails.push(cached.blend_data);
+      }
 
-          if (result.rows && result.rows.length > 0) {
-            blendData = result.rows[0];
-            console.log(`  ✅ Fetched blend ${blendId} from ${endpoint}`);
-            break; // Success, move to next blend
+      // Identify which blends need to be fetched from blockchain
+      for (const blend_id of blend_ids) {
+        if (!cachedIds.has(blend_id)) {
+          blendsToFetch.push(blend_id);
+        }
+      }
+    } else {
+      console.log('🔄 Refresh requested, bypassing cache');
+      blendsToFetch.push(...blend_ids);
+    }
+
+    // Fetch missing blends from blockchain
+    if (blendsToFetch.length > 0) {
+      console.log(`🔗 Fetching ${blendsToFetch.length} blends from blockchain...`);
+
+      const { JsonRpc } = require('eosjs');
+
+      // RPC endpoints for blend queries
+      const rpcEndpoints = [
+        'https://api.wax.alohaeos.com',
+        'https://wax.greymass.com',
+        'https://api.waxsweden.org',
+        'https://wax.eosphere.io'
+      ];
+
+      const newlyFetchedBlends = [];
+
+      // Fetch each blend sequentially to avoid rate limits
+      for (const blendId of blendsToFetch) {
+        let blendData = null;
+
+        // Try each RPC endpoint until one succeeds
+        for (const endpoint of rpcEndpoints) {
+          try {
+            const rpc = new JsonRpc(endpoint, { fetch });
+
+            const result = await rpc.get_table_rows({
+              json: true,
+              code: 'blenderizerx',
+              scope: 'blenderizerx',
+              table: 'config',
+              lower_bound: blendId,
+              upper_bound: blendId,
+              limit: 1
+            });
+
+            if (result.rows && result.rows.length > 0) {
+              blendData = result.rows[0];
+              console.log(`  ✅ Fetched blend ${blendId} from ${endpoint}`);
+              break; // Success, move to next blend
+            }
+          } catch (error) {
+            console.warn(`  ⚠️ Failed to fetch blend ${blendId} from ${endpoint}:`, error.message);
+            continue; // Try next endpoint
           }
-        } catch (error) {
-          console.warn(`  ⚠️ Failed to fetch blend ${blendId} from ${endpoint}:`, error.message);
-          continue; // Try next endpoint
+        }
+
+        if (blendData) {
+          // Parse ingredients from blockchain format: [["TEMPLATE_INGREDIENT", {template_id, amount}], ...]
+          if (blendData.ingredients && Array.isArray(blendData.ingredients)) {
+            blendData.ingredients = blendData.ingredients.map(ing => {
+              if (Array.isArray(ing) && ing.length >= 2 && ing[0] === 'TEMPLATE_INGREDIENT') {
+                const data = ing[1];
+                return {
+                  template_id: data.template_id,
+                  amount: data.amount || 1
+                };
+              }
+              // If already parsed or unknown format, return as-is
+              return ing;
+            }).filter(ing => ing && ing.template_id); // Remove any invalid entries
+          }
+
+          newlyFetchedBlends.push(blendData);
+          blendDetails.push(blendData);
+        } else {
+          console.warn(`  ❌ Failed to fetch blend ${blendId} from all endpoints`);
         }
       }
 
-      if (blendData) {
-        // Parse ingredients from blockchain format: [["TEMPLATE_INGREDIENT", {template_id, amount}], ...]
-        if (blendData.ingredients && Array.isArray(blendData.ingredients)) {
-          blendData.ingredients = blendData.ingredients.map(ing => {
-            if (Array.isArray(ing) && ing.length >= 2 && ing[0] === 'TEMPLATE_INGREDIENT') {
-              const data = ing[1];
-              return {
-                template_id: data.template_id,
-                amount: data.amount || 1
-              };
-            }
-            // If already parsed or unknown format, return as-is
-            return ing;
-          }).filter(ing => ing && ing.template_id); // Remove any invalid entries
-        }
-
-        blendDetails.push(blendData);
-      } else {
-        console.warn(`  ❌ Failed to fetch blend ${blendId} from all endpoints`);
+      // Cache newly fetched blends
+      if (newlyFetchedBlends.length > 0) {
+        db.blendCache.setMultiple(newlyFetchedBlends);
+        console.log(`💾 Cached ${newlyFetchedBlends.length} new blends`);
       }
     }
 
-    console.log(`✅ Successfully fetched ${blendDetails.length}/${blend_ids.length} blends`);
+    console.log(`✅ Returning ${blendDetails.length}/${blend_ids.length} blends (${blend_ids.length - blendsToFetch.length} from cache, ${blendsToFetch.length} newly fetched)`);
 
     res.json({
       success: true,
       blend_count: blendDetails.length,
-      blends: blendDetails
+      blends: blendDetails,
+      cached_count: blend_ids.length - blendsToFetch.length,
+      fetched_count: blendsToFetch.length - (blend_ids.length - blendDetails.length)
     });
   } catch (error) {
     console.error('Error fetching blend details:', error);

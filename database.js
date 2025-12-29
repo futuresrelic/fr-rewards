@@ -337,6 +337,30 @@ function initializeTables() {
     console.warn('⚠️ Workflow migration warning:', error.message);
   }
 
+  // Migration: Create blend_cache table if it doesn't exist
+  try {
+    const blendCacheExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='blend_cache'
+    `).get();
+
+    if (!blendCacheExists) {
+      console.log('🔄 Creating blend_cache table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS blend_cache (
+          blend_id INTEGER PRIMARY KEY,
+          blend_data TEXT NOT NULL,
+          fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      console.log('✅ blend_cache table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
   // Seed default templates if they don't exist (runs every time)
   console.log('🌱 Checking default templates...');
 
@@ -846,7 +870,78 @@ const userWorkflowProgress = {
   }
 };
 
-// Story Tabs methods
+// Blend cache methods
+const blendCache = {
+  // Get cached blend data
+  get: (blend_id) => {
+    const row = db.prepare('SELECT * FROM blend_cache WHERE blend_id = ?').get(blend_id);
+    if (row) {
+      return {
+        blend_id: row.blend_id,
+        blend_data: JSON.parse(row.blend_data),
+        fetched_at: row.fetched_at
+      };
+    }
+    return null;
+  },
+
+  // Get multiple cached blends
+  getMultiple: (blend_ids) => {
+    if (!Array.isArray(blend_ids) || blend_ids.length === 0) return [];
+
+    const placeholders = blend_ids.map(() => '?').join(',');
+    const stmt = db.prepare(`SELECT * FROM blend_cache WHERE blend_id IN (${placeholders})`);
+    const rows = stmt.all(...blend_ids);
+
+    return rows.map(row => ({
+      blend_id: row.blend_id,
+      blend_data: JSON.parse(row.blend_data),
+      fetched_at: row.fetched_at
+    }));
+  },
+
+  // Set (upsert) blend data
+  set: (blend_id, blend_data) => {
+    const stmt = db.prepare(`
+      INSERT INTO blend_cache (blend_id, blend_data, fetched_at, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(blend_id) DO UPDATE SET
+        blend_data = excluded.blend_data,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+    return stmt.run(blend_id, JSON.stringify(blend_data));
+  },
+
+  // Set multiple blends at once
+  setMultiple: (blends) => {
+    const stmt = db.prepare(`
+      INSERT INTO blend_cache (blend_id, blend_data, fetched_at, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(blend_id) DO UPDATE SET
+        blend_data = excluded.blend_data,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+
+    const transaction = db.transaction((blendsToCache) => {
+      for (const blend of blendsToCache) {
+        stmt.run(blend.blend_id, JSON.stringify(blend));
+      }
+    });
+
+    transaction(blends);
+  },
+
+  // Clear specific blend from cache
+  clear: (blend_id) => {
+    return db.prepare('DELETE FROM blend_cache WHERE blend_id = ?').run(blend_id);
+  },
+
+  // Clear all cached blends
+  clearAll: () => {
+    return db.prepare('DELETE FROM blend_cache').run();
+  }
+};
+
 const storyTabs = {
   getAll: () => {
     return db.prepare('SELECT * FROM story_tabs ORDER BY tab_order ASC').all();
@@ -905,5 +1000,6 @@ module.exports = {
   workflowActions,
   workflowConditions,
   userWorkflowProgress,
+  blendCache,
   storyTabs
 };
