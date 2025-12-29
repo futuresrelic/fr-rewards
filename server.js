@@ -2423,21 +2423,37 @@ app.post('/api/blends/details', async (req, res) => {
           try {
             const rpc = new JsonRpc(endpoint, { fetch });
 
-            const result = await rpc.get_table_rows({
-              json: true,
-              code: 'blend.nefty',
-              scope: 'blend.nefty',
-              table: 'config',
-              lower_bound: blendId,
-              upper_bound: blendId,
-              limit: 1
-            });
+            // Try different scopes - NeftyBlocks often uses collection name as scope
+            const scopesToTry = [
+              'futuresrelic',  // Collection name (most likely)
+              'blend.nefty',   // Contract name
+              blendId.toString()  // Blend ID itself
+            ];
 
-            if (result.rows && result.rows.length > 0) {
-              blendData = result.rows[0];
-              console.log(`  ✅ Fetched blend ${blendId} from ${endpoint}`);
-              break; // Success, move to next blend
+            for (const scopeToTry of scopesToTry) {
+              try {
+                const result = await rpc.get_table_rows({
+                  json: true,
+                  code: 'blend.nefty',
+                  scope: scopeToTry,
+                  table: 'config',
+                  lower_bound: blendId,
+                  upper_bound: blendId,
+                  limit: 1
+                });
+
+                if (result.rows && result.rows.length > 0) {
+                  blendData = result.rows[0];
+                  console.log(`  ✅ Fetched blend ${blendId} from ${endpoint} (scope: ${scopeToTry})`);
+                  break; // Success, move to next blend
+                }
+              } catch (scopeError) {
+                // Try next scope
+                continue;
+              }
             }
+
+            if (blendData) break; // Found data, move to next endpoint
           } catch (error) {
             console.warn(`  ⚠️ Failed to fetch blend ${blendId} from ${endpoint}:`, error.message);
             continue; // Try next endpoint
