@@ -362,6 +362,107 @@ if (trace.act.name === 'logtransfer' && trace.act.data && trace.act.data.asset_i
 
 ---
 
+### BLEND MODAL MISSING INGREDIENTS - 2025-12-29
+
+**Git Commit:** `7d33c08` - Fix blend modal to show all ingredients & add blockchain fallback for newly minted assets
+
+**Problem 1: Missing First Ingredient in Blend Modal**
+- Blend requires 5 ingredients (template IDs)
+- User doesn't have any of ingredient #1
+- Blend modal only shows ingredients 2-5, skipping #1 entirely
+- User can't see what they're missing
+
+**Root Cause:**
+```javascript
+// story.js line 1720-1722 - WRONG (before fix)
+if (groupAssets.length === 0) {
+  return; // ❌ Skip empty groups - user never sees what's missing!
+}
+```
+
+**Fix Applied:**
+```javascript
+// story.js line 1739-1748 - Show all ingredients even if user has 0
+if (groupAssets.length === 0) {
+  groupHeader.innerHTML = `
+    Ingredient ${groupIndex + 1}: ${templateId}
+    <span style="color: #ff6b6b;">(0 available - you need to acquire this!)</span>
+  `;
+  groupContainer.appendChild(groupHeader);
+  blendSelectionList.appendChild(groupContainer);
+  return; // Show requirement but skip asset rendering
+}
+```
+
+**Result:**
+✅ All ingredients shown in modal, even if user has 0
+✅ Clear message when ingredient is missing
+✅ User can see complete blend requirements
+✅ No more hidden/skipped ingredients
+
+---
+
+**Problem 2: "Unknown NFT" for Newly Minted Assets**
+- After claiming pack, modal shows "Unknown NFT" with gift box icon
+- APIs return 416 errors (asset not indexed yet)
+- Asset exists on-chain but not in API cache
+
+**Root Cause:**
+```javascript
+// story.js - API fails for newly minted assets
+const response = await fetch(`${endpoint}/atomicassets/v1/assets/${assetId}`);
+// Returns 416: asset not in API index yet ❌
+
+// Old fallback:
+assets.push({ asset_id: assetId, name: 'Unknown NFT' }); // ❌ Generic name
+```
+
+**Why This Happens:**
+- AtomicAssets API has 30-120 second cache lag
+- Asset is minted on-chain instantly
+- API indexers need time to catch up
+- All API endpoints fail with 416 during this window
+
+**Fix Applied:**
+```javascript
+// story.js line 1664-1694 - Blockchain fallback
+if (!assetData) {
+  console.log(`⚠️ API failed for asset ${assetId} - querying blockchain...`);
+  const blockchainData = await queryAssetFromBlockchain(assetId);
+
+  // Query atomicassets contract directly
+  // Get asset from user's assets table on-chain
+  // Fetch template name if template_id exists
+
+  if (blockchainData) {
+    assets.push({
+      asset_id: assetId,
+      name: blockchainData.name || `Asset ${assetId}`, // ✅ Actual name!
+      template_data: blockchainData.immutable_data,
+      blockchain_only: true
+    });
+  }
+}
+```
+
+**New Function: queryAssetFromBlockchain()**
+```javascript
+// story.js line 1622-1700
+// Queries atomicassets contract on-chain:
+// 1. Get asset from 'assets' table scoped by currentAccount
+// 2. Extract template_id, collection_name
+// 3. Query 'templates' table for template name
+// 4. Return complete asset data with actual name
+```
+
+**Result:**
+✅ Newly minted assets show correct name immediately
+✅ No more "Unknown NFT" for fresh claims
+✅ Blockchain fallback when APIs lag
+✅ Complete asset data from on-chain source
+
+---
+
 ## 🚨 CRITICAL BUG FIXES
 
 ### 1. **CLAIM VERIFICATION MISMATCH** (MOST CRITICAL)
