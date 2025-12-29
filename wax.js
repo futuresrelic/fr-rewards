@@ -542,21 +542,21 @@ async function getUserAssetsLive(account, collection = null, templateFilter = nu
         const templateData = templateDataMap.get(asset.template_id);
         const immutableData = templateData?.immutable_data || {};
 
-        // Get image/video URL
-        let mediaUrl = null;
-        if (immutableData.video) {
-          mediaUrl = getIpfsUrl(immutableData.video);
-        } else if (immutableData.img) {
-          mediaUrl = getIpfsUrl(immutableData.img);
-        }
-
+        // Match AtomicAssets API structure for frontend compatibility
         return {
           asset_id: asset.asset_id,
           template: {
-            template_id: asset.template_id
+            template_id: asset.template_id,
+            immutable_data: immutableData
           },
           name: immutableData.name || `Asset #${asset.asset_id}`,
-          image_url: mediaUrl,
+          data: {
+            img: immutableData.img || null,
+            video: immutableData.video || null,
+            ...immutableData  // Include all immutable data fields
+          },
+          template_mint: null,  // Not available from blockchain RPC - would require separate API query
+          backed_tokens: asset.backed_tokens || [],
           collection: {
             collection_name: asset.collection_name
           }

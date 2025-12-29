@@ -1876,12 +1876,23 @@ function renderBlendAssetsGrouped(templateIds, allAssets) {
         text-align: center;
       `;
 
-      const imageUrl = asset.data?.img
-        ? `https://ipfs.io/ipfs/${asset.data.img}`
-        : 'https://via.placeholder.com/150?text=NFT';
+      // Prioritize video over image
+      const hasVideo = asset.data?.video;
+      const hasImage = asset.data?.img;
+
+      let mediaHtml;
+      if (hasVideo) {
+        const videoUrl = `https://ipfs.io/ipfs/${asset.data.video}`;
+        mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; margin-bottom: 6px;" autoplay loop muted playsinline></video>`;
+      } else if (hasImage) {
+        const imageUrl = `https://ipfs.io/ipfs/${asset.data.img}`;
+        mediaHtml = `<img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; margin-bottom: 6px;">`;
+      } else {
+        mediaHtml = `<div style="width: 100%; height: 100px; background: var(--bg-dark); border-radius: 4px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--text-secondary);">No Media</div>`;
+      }
 
       assetCard.innerHTML = `
-        <img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; margin-bottom: 6px;">
+        ${mediaHtml}
         <div style="font-size: 0.8rem; font-weight: bold; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${asset.name || 'Unknown'}</div>
         <div style="font-size: 0.7rem; color: var(--text-secondary);">Mint #${asset.template_mint || '?'}</div>
         <input type="radio" name="ingredient-group-${groupIndex}" value="${asset.asset_id}" data-group="${groupIndex}" style="margin-top: 6px; width: 18px; height: 18px; cursor: pointer;">
@@ -1945,12 +1956,23 @@ function renderBlendAssets(requiredCount) {
       text-align: center;
     `;
 
-    const imageUrl = asset.data?.img
-      ? `https://ipfs.io/ipfs/${asset.data.img}`
-      : 'https://via.placeholder.com/150?text=NFT';
+    // Prioritize video over image
+    const hasVideo = asset.data?.video;
+    const hasImage = asset.data?.img;
+
+    let mediaHtml;
+    if (hasVideo) {
+      const videoUrl = `https://ipfs.io/ipfs/${asset.data.video}`;
+      mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;" autoplay loop muted playsinline></video>`;
+    } else if (hasImage) {
+      const imageUrl = `https://ipfs.io/ipfs/${asset.data.img}`;
+      mediaHtml = `<img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">`;
+    } else {
+      mediaHtml = `<div style="width: 100%; height: 120px; background: var(--bg-dark); border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--text-secondary);">No Media</div>`;
+    }
 
     assetCard.innerHTML = `
-      <img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">
+      ${mediaHtml}
       <div style="font-size: 0.85rem; font-weight: bold; margin-bottom: 4px;">${asset.name || 'Unknown'}</div>
       <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px;">Mint #${asset.template_mint || '?'}</div>
       <div style="font-size: 0.7rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis;">ID: ${asset.asset_id}</div>
