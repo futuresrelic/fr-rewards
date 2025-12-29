@@ -2438,9 +2438,11 @@ app.get('/api/assets/:account', async (req, res) => {
 
     console.log(`📦 Fetching LIVE assets for ${account} in collection ${collection_name || 'all'}${template_id ? ` (template ${template_id})` : ''}`);
 
-    // Use getUserAssetsLive for real-time blockchain data (same as claim verification)
-    // This ensures blend asset selection sees newly acquired assets immediately
-    const allAssets = await wax.getUserAssetsLive(account, collection_name || null, null);
+    // Use CACHED getUserAssets for browsing/display (includes full template metadata)
+    // This is FAST and COMPLETE - AtomicAssets API returns assets with embedded template data
+    // No need to fetch hundreds of templates separately (which times out)
+    // LIVE RPC is only used for ownership VERIFICATION during actual blend execution
+    const allAssets = await wax.getUserAssets(account, collection_name || null);
 
     // Filter by template if specified
     let assets = allAssets;
@@ -2454,7 +2456,7 @@ app.get('/api/assets/:account', async (req, res) => {
     res.json({
       success: true,
       data: assets,
-      source: 'blockchain_rpc_live',
+      source: 'atomicassets_api_cached',
       total_assets: allAssets.length,
       filtered_assets: template_id ? assets.length : null,
       filter: template_id ? { template_id } : null
