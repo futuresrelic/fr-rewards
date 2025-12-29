@@ -2269,13 +2269,23 @@ async function executeBlendArray(action, config) {
   });
 
   if (!blendsResponse.ok) {
-    throw new Error('Failed to fetch blend details from server');
+    const errorText = await blendsResponse.text();
+    console.error('❌ Backend error:', blendsResponse.status, errorText);
+    throw new Error(`Failed to fetch blend details from server: ${blendsResponse.status}`);
   }
 
   const blendsData = await blendsResponse.json();
+  console.log('📦 Backend response:', blendsData);
 
   if (!blendsData.success || !blendsData.blends || blendsData.blends.length === 0) {
-    throw new Error('Failed to fetch blend details from blockchain');
+    console.error('❌ Invalid blend data:', {
+      success: blendsData.success,
+      blendCount: blendsData.blends?.length,
+      cachedCount: blendsData.cached_count,
+      fetchedCount: blendsData.fetched_count,
+      error: blendsData.error
+    });
+    throw new Error(`Failed to fetch blend details from blockchain: ${blendsData.error || 'No blends returned'}`);
   }
 
   const validBlends = blendsData.blends;
