@@ -2318,6 +2318,16 @@ async function executeBlendArray(action, config) {
     };
   });
 
+  // Wax Seals payout table for recycling Stacks of Documents
+  const PAYOUT_TABLE = {
+    'Paper Weight':    { Common: 1, Uncommon: 2,  Rare: 3,  Epic: 4,  Legendary: 5,  Mythic: 6  },
+    'Paper Clip':      { Common: 2, Uncommon: 4,  Rare: 6,  Epic: 8,  Legendary: 10, Mythic: 12 },
+    'Brass Fastener':  { Common: 3, Uncommon: 6,  Rare: 9,  Epic: 12, Legendary: 15, Mythic: 18 },
+    'Punch Ring':      { Common: 4, Uncommon: 8,  Rare: 12, Epic: 16, Legendary: 20, Mythic: 24 },
+    'Paper Clamp':     { Common: 5, Uncommon: 10, Rare: 15, Epic: 20, Legendary: 25, Mythic: 30 },
+    'File Folder':     { Common: 6, Uncommon: 12, Rare: 18, Epic: 24, Legendary: 30, Mythic: 36 }
+  };
+
   // Check which blends are possible
   const blendOptions = validBlends.map(blend => {
     // Extract ingredient template IDs from blend
@@ -2353,10 +2363,42 @@ async function executeBlendArray(action, config) {
       }
     });
 
+    // Parse display_data to extract reward name and rarity
+    let displayData = {};
+    let rewardName = '';
+    let rarity = '';
+    let payout = 0;
+
+    try {
+      if (typeof blend.display_data === 'string') {
+        displayData = JSON.parse(blend.display_data);
+      } else {
+        displayData = blend.display_data || {};
+      }
+
+      rewardName = displayData.name || `Blend #${blend.blend_id}`;
+
+      // Extract rarity from name (e.g., "Stack of Documents - Common Paper Weight")
+      const rarityMatch = rewardName.match(/(Common|Uncommon|Rare|Epic|Legendary|Mythic)\s+(.+)/i);
+      if (rarityMatch) {
+        rarity = rarityMatch[1]; // Common, Uncommon, etc.
+        const stackType = rarityMatch[2]; // Paper Weight, Paper Clip, etc.
+
+        // Look up payout from table
+        if (PAYOUT_TABLE[stackType] && PAYOUT_TABLE[stackType][rarity]) {
+          payout = PAYOUT_TABLE[stackType][rarity];
+        }
+      }
+    } catch (e) {
+      console.warn(`Failed to parse display_data for blend ${blend.blend_id}:`, e);
+    }
+
     return {
       blend_id: blend.blend_id,
-      name: blend.display_data || `Blend #${blend.blend_id}`,
-      description: blend.description || '',
+      name: rewardName,
+      description: displayData.description || '',
+      rarity: rarity,
+      payout: payout,
       ingredients: blend.ingredients,
       ingredient_templates: ingredientTemplates,
       available_assets: ingredientAssets,
@@ -2365,12 +2407,24 @@ async function executeBlendArray(action, config) {
     };
   });
 
-  // Sort: executable blends first
+  // Sort: executable blends first, then by payout (highest first)
   blendOptions.sort((a, b) => {
     if (a.can_execute && !b.can_execute) return -1;
     if (!a.can_execute && b.can_execute) return 1;
+
+    // Among executable blends, sort by payout (descending)
+    if (a.can_execute && b.can_execute) {
+      return b.payout - a.payout;
+    }
+
     return 0;
   });
+
+  // Find the recommended blend (highest payout among executable)
+  const recommendedBlend = blendOptions.find(opt => opt.can_execute && opt.payout > 0);
+  if (recommendedBlend) {
+    console.log(`🎯 RECOMMENDED: ${recommendedBlend.name} (${recommendedBlend.payout} Wax Seals)`);
+  }
 
   // Show blend options modal
   showBlendArrayOptions(action, config, blendOptions);
@@ -2383,22 +2437,28 @@ function showBlendArrayOptions(action, baseConfig, blendOptions) {
 
   blendArrayOptionsList.innerHTML = '';
 
+  // Find the recommended blend (highest payout among executable)
+  const recommendedBlend = blendOptions.find(opt => opt.can_execute && opt.payout > 0);
+
   blendOptions.forEach((option, index) => {
+    const isRecommended = recommendedBlend && option.blend_id === recommendedBlend.blend_id;
+
     const optionCard = document.createElement('div');
     optionCard.style.cssText = `
-      background: ${option.can_execute ? 'var(--bg-card)' : 'var(--bg-card-hover)'};
-      border: 2px solid ${option.can_execute ? 'var(--accent)' : 'var(--border)'};
+      background: ${option.can_execute ? (isRecommended ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(168, 85, 247, 0.1))' : 'var(--bg-card)') : 'var(--bg-card-hover)'};
+      border: 2px solid ${isRecommended ? 'gold' : (option.can_execute ? 'var(--accent)' : 'var(--border)')};
       border-radius: 12px;
       padding: 20px;
       cursor: ${option.can_execute ? 'pointer' : 'not-allowed'};
       opacity: ${option.can_execute ? '1' : '0.6'};
       transition: all 0.2s;
+      position: relative;
     `;
 
     if (option.can_execute) {
       optionCard.addEventListener('mouseenter', () => {
         optionCard.style.transform = 'translateY(-2px)';
-        optionCard.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
+        optionCard.style.boxShadow = isRecommended ? '0 4px 20px rgba(255, 215, 0, 0.4)' : '0 4px 12px rgba(139, 92, 246, 0.3)';
       });
       optionCard.addEventListener('mouseleave', () => {
         optionCard.style.transform = 'translateY(0)';
@@ -2407,18 +2467,31 @@ function showBlendArrayOptions(action, baseConfig, blendOptions) {
       optionCard.addEventListener('click', () => executeBlendArrayOption(option));
     }
 
+    // Rarity color mapping
+    const rarityColors = {
+      'Common': '#9ca3af',
+      'Uncommon': '#10b981',
+      'Rare': '#3b82f6',
+      'Epic': '#8b5cf6',
+      'Legendary': '#f59e0b',
+      'Mythic': '#ef4444'
+    };
+
     optionCard.innerHTML = `
+      ${isRecommended ? '<div style="position: absolute; top: -12px; right: 20px; background: gold; color: #000; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">⭐ RECOMMENDED</div>' : ''}
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <h3 style="margin: 0; color: var(--text-primary);">${option.name || `Blend Option ${index + 1}`}</h3>
         <span style="padding: 4px 12px; background: ${option.can_execute ? 'var(--success)' : 'var(--error)'}; border-radius: 15px; font-size: 0.85rem; color: white;">
           ${option.can_execute ? '✅ Available' : `❌ Need ${option.missing_count} more`}
         </span>
       </div>
+      ${option.rarity ? `<div style="margin: 8px 0;"><span style="padding: 3px 10px; background: ${rarityColors[option.rarity] || '#666'}; border-radius: 8px; font-size: 0.8rem; color: white; font-weight: bold;">${option.rarity}</span></div>` : ''}
+      ${option.payout > 0 ? `<div style="margin: 10px 0; padding: 8px 12px; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; display: inline-block;"><span style="font-size: 1rem; color: #fbbf24; font-weight: bold;">🪙 ${option.payout} Wax Seals</span></div>` : ''}
       ${option.description ? `<p style="margin: 10px 0; color: var(--text-secondary); font-size: 0.9rem;">${option.description}</p>` : ''}
       <div style="margin-top: 10px; padding: 10px; background: var(--bg-dark); border-radius: 6px;">
         <div style="font-size: 0.85rem; color: var(--text-secondary);">
           <strong>Blend ID:</strong> ${option.blend_id}<br>
-          <strong>Required Assets:</strong> ${option.ingredient_count || 1}<br>
+          <strong>Ingredients Required:</strong> ${option.ingredients.length}<br>
           <strong>You Have:</strong> ${option.available_assets.length}
         </div>
       </div>
