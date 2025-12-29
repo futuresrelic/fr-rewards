@@ -575,10 +575,65 @@ async function getUserAssetsLive(account, collection = null, templateFilter = nu
 
       console.log(`✅ Found ${allAssets.length} assets LIVE from blockchain`);
 
-      // Return RAW blockchain data without template metadata
+      // Fetch mint numbers from AtomicAssets API (blockchain doesn't have them)
+      if (allAssets.length > 0) {
+        const atomicEndpoints = [
+          'https://aa-wax-public1.neftyblocks.com',
+          'https://wax-aa.eosdac.io',
+          'https://atomic-wax-mainnet.wecan.dev',
+          'https://wax-atomic-api.eosphere.io'
+        ];
+
+        // Fetch in batches of 100 to avoid URL length limits
+        const batchSize = 100;
+        for (let i = 0; i < allAssets.length; i += batchSize) {
+          const batch = allAssets.slice(i, i + batchSize);
+          const assetIds = batch.map(a => a.asset_id).join(',');
+
+          let mintsFetched = false;
+          for (const atomicEndpoint of atomicEndpoints) {
+            try {
+              const response = await fetch(`${atomicEndpoint}/atomicassets/v1/assets?ids=${assetIds}&limit=${batchSize}`, {
+                timeout: 5000
+              });
+
+              if (response.ok) {
+                const apiData = await response.json();
+                const apiAssets = apiData.data;
+
+                // Map mint numbers to blockchain assets
+                const mintMap = {};
+                apiAssets.forEach(apiAsset => {
+                  mintMap[apiAsset.asset_id] = apiAsset.template_mint;
+                });
+
+                // Add mint numbers to this batch
+                batch.forEach(asset => {
+                  asset.template_mint = mintMap[asset.asset_id] || null;
+                });
+
+                const mintsFound = batch.filter(a => a.template_mint).length;
+                console.log(`✅ Fetched mint numbers for ${mintsFound}/${batch.length} assets from ${atomicEndpoint}`);
+                mintsFetched = true;
+                break;
+              }
+            } catch (err) {
+              console.warn(`Failed to fetch mints from ${atomicEndpoint}:`, err.message);
+              continue;
+            }
+          }
+
+          if (!mintsFetched) {
+            console.warn(`Could not fetch mint numbers for batch ${i / batchSize + 1}`);
+          }
+        }
+      }
+
+      // Return RAW blockchain data with mint numbers, but without template metadata
       // Frontend will enrich with template data from its cache
       const rawAssets = allAssets.map(asset => ({
         asset_id: asset.asset_id,
+        template_mint: asset.template_mint || null,
         template: {
           template_id: asset.template_id
         },

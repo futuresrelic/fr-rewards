@@ -1944,10 +1944,10 @@ function renderBlendAssetsGrouped(templateIds, allAssets) {
       let mediaHtml;
       if (hasVideo) {
         const videoUrl = `https://ipfs.io/ipfs/${asset.data.video}`;
-        mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; margin-bottom: 6px;" autoplay loop muted playsinline></video>`;
+        mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 100px; object-fit: contain; border-radius: 4px; margin-bottom: 6px; background: var(--bg-dark);" autoplay loop muted playsinline></video>`;
       } else if (hasImage) {
         const imageUrl = `https://ipfs.io/ipfs/${asset.data.img}`;
-        mediaHtml = `<img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; margin-bottom: 6px;">`;
+        mediaHtml = `<img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 100px; object-fit: contain; border-radius: 4px; margin-bottom: 6px; background: var(--bg-dark);">`;
       } else {
         mediaHtml = `<div style="width: 100%; height: 100px; background: var(--bg-dark); border-radius: 4px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--text-secondary);">No Media</div>`;
       }
@@ -2024,10 +2024,10 @@ function renderBlendAssets(requiredCount) {
     let mediaHtml;
     if (hasVideo) {
       const videoUrl = `https://ipfs.io/ipfs/${asset.data.video}`;
-      mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;" autoplay loop muted playsinline></video>`;
+      mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 120px; object-fit: contain; border-radius: 4px; margin-bottom: 8px; background: var(--bg-dark);" autoplay loop muted playsinline></video>`;
     } else if (hasImage) {
       const imageUrl = `https://ipfs.io/ipfs/${asset.data.img}`;
-      mediaHtml = `<img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">`;
+      mediaHtml = `<img src="${imageUrl}" alt="${asset.name || 'Asset'}" style="width: 100%; height: 120px; object-fit: contain; border-radius: 4px; margin-bottom: 8px; background: var(--bg-dark);">`;
     } else {
       mediaHtml = `<div style="width: 100%; height: 120px; background: var(--bg-dark); border-radius: 4px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--text-secondary);">No Media</div>`;
     }
@@ -2223,6 +2223,7 @@ async function executeBlend(action, config) {
       ...asset,
       name: templateData?.immutable_data?.name || `Asset ${asset.asset_id}`,
       data: templateData?.immutable_data || {},
+      template_mint: asset.template_mint || null, // Preserve mint number from blockchain
       template: {
         ...asset.template,
         immutable_data: templateData?.immutable_data || {}
@@ -2340,6 +2341,7 @@ async function executeBlendArray(action, config) {
       ...asset,
       name: templateData?.immutable_data?.name || `Asset ${asset.asset_id}`,
       data: templateData?.immutable_data || {},
+      template_mint: asset.template_mint || null, // Preserve mint number from blockchain
       template: {
         ...asset.template,
         immutable_data: templateData?.immutable_data || {}
