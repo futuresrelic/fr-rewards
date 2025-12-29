@@ -149,6 +149,7 @@
                   <option value="CLAIM">CLAIM - Claim NFT reward</option>
                   <option value="UNPACK">UNPACK - Unpack a pack</option>
                   <option value="BLEND">BLEND - Blend assets</option>
+                  <option value="BLEND_ARRAY">BLEND_ARRAY - Smart multi-blend (auto-detects best options)</option>
                   <option value="DROP">DROP - Drop/Airdrop</option>
                   <option value="MARKET_SCOUT">MARKET_SCOUT - Find cheap assets</option>
                 </select>
@@ -211,6 +212,20 @@
                 <div class="form-group">
                   <label>Collection Name:</label>
                   <input type="text" id="edit-blend-collection" class="form-control">
+                </div>
+              </div>
+
+              <!-- BLEND_ARRAY -->
+              <div id="edit-config-blend-array" class="config-section" style="display: none;">
+                <h4>Smart Multi-Blend Configuration</h4>
+                <div class="form-group">
+                  <label>Blend IDs (comma-separated):</label>
+                  <input type="text" id="edit-blend-array-ids" class="form-control" placeholder="15905,15906,15907,...">
+                  <small style="color: var(--text-secondary);">Enter all blend IDs separated by commas</small>
+                </div>
+                <div class="form-group">
+                  <label>Collection Name:</label>
+                  <input type="text" id="edit-blend-array-collection" class="form-control" value="futuresrelic">
                 </div>
               </div>
 
@@ -286,6 +301,7 @@
                     <option value="CLAIM">CLAIM - Claim NFT reward</option>
                     <option value="UNPACK">UNPACK - Unpack a pack</option>
                     <option value="BLEND">BLEND - Blend assets</option>
+                    <option value="BLEND_ARRAY">BLEND_ARRAY - Smart multi-blend (auto-detects best options)</option>
                     <option value="DROP">DROP - Drop/Airdrop</option>
                     <option value="MARKET_SCOUT">MARKET_SCOUT - Find cheap assets</option>
                   </select>
@@ -359,6 +375,28 @@
                     <input type="text" id="blend-collection" class="form-control" placeholder="futuresrelic" value="futuresrelic">
                     <small>WAX collection name</small>
                   </div>
+                </div>
+
+                <!-- BLEND_ARRAY fields -->
+                <div id="config-blend-array" class="config-section" style="display: none;">
+                  <h4 style="margin: 15px 0 10px 0;">Smart Multi-Blend Configuration</h4>
+                  <p style="color: var(--text-secondary); margin-bottom: 15px;">
+                    Configure multiple blend IDs. The system will automatically show users only the blends they can perform based on their current assets.
+                  </p>
+
+                  <div class="form-group">
+                    <label>Blend IDs (comma-separated):</label>
+                    <input type="text" id="blend-array-ids" class="form-control" placeholder="15905,15906,15907,15908,15909,...">
+                    <small style="color: var(--text-secondary);">Enter all blend IDs separated by commas (e.g., 15905,15906,15907)</small>
+                  </div>
+
+                  <div class="form-group">
+                    <label>Collection Name:</label>
+                    <input type="text" id="blend-array-collection" class="form-control" placeholder="futuresrelic" value="futuresrelic">
+                    <small>WAX collection name</small>
+                  </div>
+
+                  <div id="blend-array-status" style="display: none; margin-top: 10px; padding: 10px; border-radius: 4px;"></div>
                 </div>
 
                 <!-- DROP fields -->

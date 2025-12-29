@@ -48,6 +48,7 @@ function handleActionTypeChange(e) {
     'CLAIM': 'config-claim',
     'UNPACK': 'config-unpack',
     'BLEND': 'config-blend',
+    'BLEND_ARRAY': 'config-blend-array',
     'DROP': 'config-drop',
     'MARKET_SCOUT': 'config-market'
   };
@@ -89,6 +90,17 @@ function buildConfigFromFields(actionType) {
       }
       if (count) config.ingredient_count = parseInt(count);
       if (blendCollection) config.collection_name = blendCollection;
+      break;
+
+    case 'BLEND_ARRAY':
+      const blendArrayIds = document.getElementById('blend-array-ids').value;
+      const blendArrayCollection = document.getElementById('blend-array-collection').value;
+
+      if (blendArrayIds) {
+        // Parse blend IDs (stored as comma-separated string)
+        config.blend_ids = blendArrayIds.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      }
+      if (blendArrayCollection) config.collection_name = blendArrayCollection;
       break;
 
     case 'DROP':
@@ -708,6 +720,7 @@ function handleEditActionTypeChange(e) {
     'CLAIM': 'edit-config-claim',
     'UNPACK': 'edit-config-unpack',
     'BLEND': 'edit-config-blend',
+    'BLEND_ARRAY': 'edit-config-blend-array',
     'DROP': 'edit-config-drop',
     'MARKET_SCOUT': 'edit-config-market'
   };
@@ -735,6 +748,15 @@ function populateEditConfigFields(actionType, config) {
       document.getElementById('edit-blend-count').value = config.ingredient_count || '';
       document.getElementById('edit-blend-collection').value = config.collection_name || 'futuresrelic';
       document.getElementById('edit-blend-url').value = '';
+      break;
+
+    case 'BLEND_ARRAY':
+      if (config.blend_ids && Array.isArray(config.blend_ids)) {
+        document.getElementById('edit-blend-array-ids').value = config.blend_ids.join(',');
+      } else {
+        document.getElementById('edit-blend-array-ids').value = '';
+      }
+      document.getElementById('edit-blend-array-collection').value = config.collection_name || 'futuresrelic';
       break;
 
     case 'DROP':
@@ -774,6 +796,16 @@ function buildEditConfigFromFields(actionType) {
       if (ingredients) config.ingredient_templates = ingredients.split(',').map(t => parseInt(t.trim()));
       if (count) config.ingredient_count = parseInt(count);
       if (blendCollection) config.collection_name = blendCollection;
+      break;
+
+    case 'BLEND_ARRAY':
+      const editBlendArrayIds = document.getElementById('edit-blend-array-ids').value;
+      const editBlendArrayCollection = document.getElementById('edit-blend-array-collection').value;
+
+      if (editBlendArrayIds) {
+        config.blend_ids = editBlendArrayIds.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      }
+      if (editBlendArrayCollection) config.collection_name = editBlendArrayCollection;
       break;
 
     case 'DROP':
