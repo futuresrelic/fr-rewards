@@ -317,6 +317,51 @@ await showUnpackedAssetsModal(claimedAssets); // ✅ Modal shows assets!
 
 ---
 
+### WRONG ASSETS SHOWN IN MODAL - 2025-12-29
+
+**Git Commit:** `c9b2dbf` - Fix asset extraction from claim transaction: only capture transfers TO user
+
+**Problem:**
+- After claiming pack, modal showed wrong assets from different collection (farmersworld Silver Members)
+- Should show actual claimed assets (Intern Card, Contraption)
+- Extracted asset IDs: 1099974508900, 1099974508901
+- Actual asset IDs: 1099974508904, 1099974508903
+
+**Root Cause:**
+```javascript
+// story.js - extractAssetIdsFromTransaction() was capturing ALL logtransfer actions
+if (trace.act.name === 'logtransfer' && trace.act.data && trace.act.data.asset_ids) {
+  assetIds.push(...trace.act.data.asset_ids); // ❌ Gets ALL transfers!
+}
+```
+
+**Why This Happened:**
+- When claiming a pack, multiple `logtransfer` actions occur:
+  1. Pack asset being burned/transferred
+  2. Intermediate transfers by atomicpacksx contract
+  3. Claimed assets transferred TO user ← only these matter!
+- Function was capturing all transfers, including wrong ones
+
+**Fix Applied:**
+```javascript
+// story.js line 1591-1597 - Filter for only transfers TO user
+if (trace.act.name === 'logtransfer' && trace.act.data && trace.act.data.asset_ids) {
+  // ONLY capture transfers TO currentAccount (the claimed NFTs)
+  if (trace.act.data.to === currentAccount && trace.act.data.from !== currentAccount) {
+    console.log(`  📦 Found logtransfer TO ${currentAccount}: ${trace.act.data.asset_ids.join(', ')}`);
+    assetIds.push(...trace.act.data.asset_ids.map(id => id.toString()));
+  }
+}
+```
+
+**Result:**
+✅ Modal now shows correct claimed assets only
+✅ Ignores pack being burned and intermediate transfers
+✅ Only captures final transfers TO the user
+✅ Asset IDs match actual claimed NFTs
+
+---
+
 ## 🚨 CRITICAL BUG FIXES
 
 ### 1. **CLAIM VERIFICATION MISMATCH** (MOST CRITICAL)
