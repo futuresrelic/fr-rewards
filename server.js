@@ -2400,11 +2400,17 @@ app.post('/api/blends/details', async (req, res) => {
     // Fetch missing blends from blockchain
     if (blendsToFetch.length > 0) {
       console.log(`🔗 Fetching ${blendsToFetch.length} blends from blockchain...`);
-      console.log(`🎯 USING CONTRACT: blend.nefty (v1.1 fix applied)`);
+      console.log(`🎯 TRYING HTTP API + RPC METHODS`);
 
       const { JsonRpc } = require('eosjs');
 
-      // RPC endpoints for blend queries
+      // Try HTTP APIs first (faster and more reliable)
+      const httpApiEndpoints = [
+        'https://aa.neftyblocks.com/atomictools/v1/config/blend.nefty',
+        'https://wax.api.atomicassets.io/atomictools/v1/config/blend.nefty'
+      ];
+
+      // Fallback RPC endpoints
       const rpcEndpoints = [
         'https://api.wax.alohaeos.com',
         'https://wax.greymass.com',
@@ -2418,45 +2424,72 @@ app.post('/api/blends/details', async (req, res) => {
       for (const blendId of blendsToFetch) {
         let blendData = null;
 
-        // Try each RPC endpoint until one succeeds
-        for (const endpoint of rpcEndpoints) {
+        // METHOD 1: Try HTTP API endpoints first
+        for (const apiEndpoint of httpApiEndpoints) {
           try {
-            const rpc = new JsonRpc(endpoint, { fetch });
+            const url = `${apiEndpoint}/${blendId}`;
+            console.log(`  🌐 Trying HTTP API: ${url}`);
 
-            // Try different scopes - NeftyBlocks often uses collection name as scope
-            const scopesToTry = [
-              'futuresrelic',  // Collection name (most likely)
-              'blend.nefty',   // Contract name
-              blendId.toString()  // Blend ID itself
-            ];
-
-            for (const scopeToTry of scopesToTry) {
-              try {
-                const result = await rpc.get_table_rows({
-                  json: true,
-                  code: 'blend.nefty',
-                  scope: scopeToTry,
-                  table: 'config',
-                  lower_bound: blendId,
-                  upper_bound: blendId,
-                  limit: 1
-                });
-
-                if (result.rows && result.rows.length > 0) {
-                  blendData = result.rows[0];
-                  console.log(`  ✅ Fetched blend ${blendId} from ${endpoint} (scope: ${scopeToTry})`);
-                  break; // Success, move to next blend
-                }
-              } catch (scopeError) {
-                // Try next scope
-                continue;
+            const response = await fetch(url);
+            if (response.ok) {
+              const data = await response.json();
+              if (data && (data.data || data.blend_id)) {
+                blendData = data.data || data;
+                console.log(`  ✅ Fetched blend ${blendId} from HTTP API: ${apiEndpoint}`);
+                break;
               }
+            } else {
+              console.log(`  ⚠️ HTTP API returned ${response.status}`);
             }
-
-            if (blendData) break; // Found data, move to next endpoint
           } catch (error) {
-            console.warn(`  ⚠️ Failed to fetch blend ${blendId} from ${endpoint}:`, error.message);
-            continue; // Try next endpoint
+            console.log(`  ⚠️ HTTP API error: ${error.message}`);
+            continue;
+          }
+        }
+
+        // METHOD 2: If HTTP API failed, try RPC with multiple scopes
+        if (!blendData) {
+          console.log(`  🔄 Falling back to RPC for blend ${blendId}...`);
+
+          for (const endpoint of rpcEndpoints) {
+            try {
+              const rpc = new JsonRpc(endpoint, { fetch });
+
+              // Try different scopes - NeftyBlocks often uses collection name as scope
+              const scopesToTry = [
+                'futuresrelic',  // Collection name (most likely)
+                'blend.nefty',   // Contract name
+                blendId.toString()  // Blend ID itself
+              ];
+
+              for (const scopeToTry of scopesToTry) {
+                try {
+                  const result = await rpc.get_table_rows({
+                    json: true,
+                    code: 'blend.nefty',
+                    scope: scopeToTry,
+                    table: 'config',
+                    lower_bound: blendId,
+                    upper_bound: blendId,
+                    limit: 1
+                  });
+
+                  if (result.rows && result.rows.length > 0) {
+                    blendData = result.rows[0];
+                    console.log(`  ✅ Fetched blend ${blendId} from RPC ${endpoint} (scope: ${scopeToTry})`);
+                    break; // Success, move to next blend
+                  }
+                } catch (scopeError) {
+                  // Try next scope
+                  continue;
+                }
+              }
+
+              if (blendData) break; // Found data, move to next endpoint
+            } catch (error) {
+              console.warn(`  ⚠️ RPC failed for ${endpoint}:`, error.message);
+              continue; // Try next endpoint
+            }
           }
         }
 
