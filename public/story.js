@@ -2249,7 +2249,7 @@ async function executeBlend(action, config) {
   showBlendAssetSelection(action, config, ingredientAssets);
 }
 
-// Execute BLEND_ARRAY action - shows cached blend recipes with ingredient checking
+// Execute BLEND_ARRAY action - simple blend selection
 async function executeBlendArray(action, config) {
   console.log('🔍 BLEND_ARRAY config:', config);
 
@@ -2258,94 +2258,28 @@ async function executeBlendArray(action, config) {
     throw new Error('BLEND_ARRAY action requires blend_ids array in config. Please configure this action in the admin panel.');
   }
 
-  console.log(`⚡ BLEND_ARRAY with ${config.blend_ids.length} blend options (cached recipes mode)`);
+  console.log(`⚡ BLEND_ARRAY with ${config.blend_ids.length} blend options`);
 
   // Store action for later use
   currentBlendArrayAction = action;
   currentBlendArrayConfig = config;
 
-  // Fetch blend recipes from backend (served from database cache)
-  console.log(`📡 Fetching blend recipes from cache...`);
-  const recipesResponse = await fetch(`${API_URL}/api/blend-recipes?blend_ids=${config.blend_ids.join(',')}&collection=${config.collection_name || 'futuresrelic'}`);
-
-  if (!recipesResponse.ok) {
-    throw new Error(`Failed to fetch blend recipes: ${recipesResponse.status}`);
-  }
-
-  const recipesData = await recipesResponse.json();
-  console.log(`✅ Got ${recipesData.recipe_count} recipes (${recipesData.cached_count} from cache, ${recipesData.fetched_count} newly fetched)`);
-
-  if (!recipesData.success || !recipesData.recipes || recipesData.recipes.length === 0) {
-    throw new Error('No blend recipes returned');
-  }
-
-  // Fetch user's assets
-  console.log(`🔴 Fetching user assets...`);
-  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
-  const assetsData = await assetsResponse.json();
-
-  if (!assetsData.success) {
-    throw new Error('Failed to fetch user assets');
-  }
-
-  const userAssets = assetsData.data;
-  console.log(`✅ Got ${userAssets.length} user assets`);
-
-  // Check which blends can be executed
-  const blendOptions = recipesData.recipes.map(recipe => {
-    // Count user's assets by template ID
-    const assetsByTemplate = {};
-    userAssets.forEach(asset => {
-      const templateId = asset.template.template_id.toString();
-      if (!assetsByTemplate[templateId]) {
-        assetsByTemplate[templateId] = [];
-      }
-      assetsByTemplate[templateId].push(asset);
-    });
-
-    // Check if user has enough of each ingredient
-    let canExecute = true;
-    let missingCount = 0;
-    const ingredientAssets = [];
-
-    recipe.ingredients.forEach(ingredient => {
-      const templateId = ingredient.template_id.toString();
-      const required = ingredient.amount || 1;
-      const available = (assetsByTemplate[templateId] || []).length;
-
-      if (available >= required) {
-        // Add assets for this ingredient
-        ingredientAssets.push(...assetsByTemplate[templateId].slice(0, required));
-      } else {
-        canExecute = false;
-        missingCount += (required - available);
-      }
-    });
-
-    // Parse display data
-    let displayData = recipe.display_data || {};
-    const rewardName = displayData.name || `Blend #${recipe.blend_id}`;
-
-    return {
-      blend_id: recipe.blend_id,
-      name: rewardName,
-      description: displayData.description || '',
-      collection_name: recipe.collection_name,
-      ingredients: recipe.ingredients,
-      ingredient_count: recipe.ingredients.length,
-      available_assets: ingredientAssets,
-      can_execute: canExecute,
-      missing_count: missingCount
-    };
-  });
-
-  console.log(`✅ ${blendOptions.filter(o => o.can_execute).length}/${blendOptions.length} blends are executable`);
+  // Create simple blend options (caching system ready for future use)
+  const blendOptions = config.blend_ids.map(blend_id => ({
+    blend_id: blend_id,
+    name: `Blend #${blend_id}`,
+    description: '',
+    collection_name: config.collection_name || 'futuresrelic',
+    can_execute: true, // Show all as available - NeftyBlocks validates on execution
+    ingredient_count: 5,
+    missing_count: 0
+  }));
 
   // Show blend options modal
   showBlendArrayOptions(action, config, blendOptions);
 }
 
-// Show blend array options modal with availability checking
+// Show blend array options modal
 function showBlendArrayOptions(action, baseConfig, blendOptions) {
   currentBlendArrayAction = action;
   currentBlendArrayConfig = baseConfig;
@@ -2355,40 +2289,31 @@ function showBlendArrayOptions(action, baseConfig, blendOptions) {
   blendOptions.forEach((option, index) => {
     const optionCard = document.createElement('div');
     optionCard.style.cssText = `
-      background: ${option.can_execute ? 'var(--bg-card)' : 'var(--bg-card-hover)'};
-      border: 2px solid ${option.can_execute ? 'var(--accent)' : 'var(--border)'};
+      background: var(--bg-card);
+      border: 2px solid var(--accent);
       border-radius: 12px;
       padding: 20px;
-      cursor: ${option.can_execute ? 'pointer' : 'not-allowed'};
-      opacity: ${option.can_execute ? '1' : '0.6'};
+      cursor: pointer;
       transition: all 0.2s;
     `;
 
-    if (option.can_execute) {
-      optionCard.addEventListener('mouseenter', () => {
-        optionCard.style.transform = 'translateY(-2px)';
-        optionCard.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
-      });
-      optionCard.addEventListener('mouseleave', () => {
-        optionCard.style.transform = 'translateY(0)';
-        optionCard.style.boxShadow = 'none';
-      });
-      optionCard.addEventListener('click', () => executeBlendArrayOption(option));
-    }
+    optionCard.addEventListener('mouseenter', () => {
+      optionCard.style.transform = 'translateY(-2px)';
+      optionCard.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
+    });
+    optionCard.addEventListener('mouseleave', () => {
+      optionCard.style.transform = 'translateY(0)';
+      optionCard.style.boxShadow = 'none';
+    });
+    optionCard.addEventListener('click', () => executeBlendArrayOption(option));
 
     optionCard.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
         <h3 style="margin: 0; color: var(--text-primary);">${option.name}</h3>
-        <span style="padding: 4px 12px; background: ${option.can_execute ? 'var(--success)' : 'var(--error)'}; border-radius: 15px; font-size: 0.85rem; color: white;">
-          ${option.can_execute ? '✅ Available' : `❌ Need ${option.missing_count} more`}
-        </span>
       </div>
-      ${option.description ? `<p style="margin: 10px 0; color: var(--text-secondary); font-size: 0.9rem;">${option.description}</p>` : ''}
       <div style="margin-top: 10px; padding: 10px; background: var(--bg-dark); border-radius: 6px;">
         <div style="font-size: 0.85rem; color: var(--text-secondary);">
-          <strong>Blend ID:</strong> ${option.blend_id}<br>
-          <strong>Ingredients Required:</strong> ${option.ingredient_count}<br>
-          <strong>You Have:</strong> ${option.available_assets.length} assets
+          <strong>Collection:</strong> ${option.collection_name}
         </div>
       </div>
     `;
@@ -2402,18 +2327,24 @@ function showBlendArrayOptions(action, baseConfig, blendOptions) {
 
 // Execute selected blend array option
 async function executeBlendArrayOption(option) {
-  if (!option.can_execute) {
-    return; // Safety check - shouldn't happen since button is disabled
-  }
-
   // Close blend options modal
   blendArrayModal.style.display = 'none';
 
   console.log(`🔮 Selected blend option: ${option.name} (ID: ${option.blend_id})`);
-  console.log(`  Ingredients: ${option.ingredients.length}, Available assets: ${option.available_assets.length}`);
 
-  // Show asset selection modal using the already-checked assets
-  showBlendAssetSelection(currentBlendArrayAction, option, option.available_assets);
+  // Fetch user's assets
+  console.log(`🔴 Fetching assets for ${currentAccount}...`);
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${option.collection_name}&live=true`);
+  const assetsData = await assetsResponse.json();
+
+  if (!assetsData.success) {
+    throw new Error('Failed to fetch assets');
+  }
+
+  console.log(`✅ Fetched ${assetsData.data.length} assets`);
+
+  // Show asset selection modal
+  showBlendAssetSelection(currentBlendArrayAction, option, assetsData.data);
 }
 
 // Execute DROP action
