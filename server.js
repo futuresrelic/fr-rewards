@@ -2713,6 +2713,37 @@ app.get('/api/blend-recipes', async (req, res) => {
 });
 
 /**
+ * POST /api/blend-recipes/clear
+ * Clear cached blend recipes (admin only)
+ * Body: { collection: string (optional), blend_id: number (optional) }
+ */
+app.post('/api/blend-recipes/clear', authenticateAdmin, async (req, res) => {
+  try {
+    const { collection, blend_id } = req.body;
+
+    if (blend_id) {
+      // Clear specific blend
+      db.blendRecipes.clear(blend_id);
+      console.log(`🗑️ Cleared cache for blend ${blend_id}`);
+      res.json({ success: true, message: `Cleared cache for blend ${blend_id}` });
+    } else if (collection) {
+      // Clear all blends for collection
+      db.blendRecipes.clearCollection(collection);
+      console.log(`🗑️ Cleared cache for collection ${collection}`);
+      res.json({ success: true, message: `Cleared cache for collection ${collection}` });
+    } else {
+      // Clear all blends
+      db.blendRecipes.clearAll();
+      console.log(`🗑️ Cleared all blend recipe cache`);
+      res.json({ success: true, message: 'Cleared all blend recipe cache' });
+    }
+  } catch (error) {
+    console.error('Error clearing blend recipe cache:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * POST /api/asset/verify-ownership-rpc
  * Verify current ownership of an asset by querying BLOCKCHAIN DIRECTLY via RPC
  * This bypasses AtomicAssets API cache and gets real-time blockchain state
