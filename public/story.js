@@ -2249,7 +2249,7 @@ async function executeBlend(action, config) {
   showBlendAssetSelection(action, config, ingredientAssets);
 }
 
-// Execute BLEND_ARRAY action - allows choosing from multiple blend options
+// Execute BLEND_ARRAY action - allows choosing from multiple blend options (simplified - no pre-fetching)
 async function executeBlendArray(action, config) {
   console.log('🔍 BLEND_ARRAY config:', config);
 
@@ -2258,251 +2258,61 @@ async function executeBlendArray(action, config) {
     throw new Error('BLEND_ARRAY action requires blend_ids array in config. Please configure this action in the admin panel.');
   }
 
-  console.log(`⚡ BLEND_ARRAY with ${config.blend_ids.length} blend options`);
+  console.log(`⚡ BLEND_ARRAY with ${config.blend_ids.length} blend options (simplified mode - like single BLEND)`);
 
-  // Fetch blend details from backend (which queries blockchain via RPC)
-  console.log(`📡 Fetching blend details from backend...`);
-  const blendsResponse = await fetch(`${API_URL}/api/blends/details`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ blend_ids: config.blend_ids })
-  });
+  // Store action for later use
+  currentBlendArrayAction = action;
+  currentBlendArrayConfig = config;
 
-  if (!blendsResponse.ok) {
-    const errorText = await blendsResponse.text();
-    console.error('❌ Backend error:', blendsResponse.status, errorText);
-    throw new Error(`Failed to fetch blend details from server: ${blendsResponse.status}`);
-  }
-
-  const blendsData = await blendsResponse.json();
-  console.log('📦 Backend response:', blendsData);
-
-  if (!blendsData.success || !blendsData.blends || blendsData.blends.length === 0) {
-    console.error('❌ Invalid blend data:', {
-      success: blendsData.success,
-      blendCount: blendsData.blends?.length,
-      cachedCount: blendsData.cached_count,
-      fetchedCount: blendsData.fetched_count,
-      error: blendsData.error
-    });
-    throw new Error(`Failed to fetch blend details from blockchain: ${blendsData.error || 'No blends returned'}`);
-  }
-
-  const validBlends = blendsData.blends;
-  console.log(`✅ Fetched ${validBlends.length} blend configurations`);
-
-  // STEP 1: Collect all required templates across ALL blend options
-  const allRequiredTemplates = [...new Set(validBlends.flatMap(blend =>
-    blend.ingredients.map(ing => ing.template_id.toString())
-  ))];
-
-  console.log(`📋 Fetching template data for ${allRequiredTemplates.length} unique ingredient(s) across all blends...`);
-
-  // STEP 2: Fetch and cache template data for ALL blend ingredients
-  await fetchTemplateData(allRequiredTemplates, config.collection_name || 'futuresrelic');
-
-  // STEP 3: Fetch LIVE blockchain assets (raw data, no template metadata)
-  console.log(`🔴 Fetching LIVE blockchain assets for ${currentAccount}...`);
-  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${config.collection_name || 'futuresrelic'}&live=true`);
-  const assetsData = await assetsResponse.json();
-
-  if (!assetsData.success) {
-    throw new Error('Failed to fetch assets');
-  }
-
-  // STEP 4: Enrich assets with cached template data
-  console.log(`✨ Enriching ${assetsData.data.length} assets with template data...`);
-  const userAssets = assetsData.data.map(asset => {
-    const templateId = asset.template.template_id.toString();
-    const templateData = templateDataCache[templateId];
-
-    return {
-      ...asset,
-      name: templateData?.immutable_data?.name || `Asset ${asset.asset_id}`,
-      data: templateData?.immutable_data || {},
-      template_mint: asset.template_mint || null, // Preserve mint number from blockchain
-      template: {
-        ...asset.template,
-        immutable_data: templateData?.immutable_data || {}
-      }
-    };
-  });
-
-  // Wax Seals payout table for recycling Stacks of Documents
-  const PAYOUT_TABLE = {
-    'Paper Weight':    { Common: 1, Uncommon: 2,  Rare: 3,  Epic: 4,  Legendary: 5,  Mythic: 6  },
-    'Paper Clip':      { Common: 2, Uncommon: 4,  Rare: 6,  Epic: 8,  Legendary: 10, Mythic: 12 },
-    'Brass Fastener':  { Common: 3, Uncommon: 6,  Rare: 9,  Epic: 12, Legendary: 15, Mythic: 18 },
-    'Punch Ring':      { Common: 4, Uncommon: 8,  Rare: 12, Epic: 16, Legendary: 20, Mythic: 24 },
-    'Paper Clamp':     { Common: 5, Uncommon: 10, Rare: 15, Epic: 20, Legendary: 25, Mythic: 30 },
-    'File Folder':     { Common: 6, Uncommon: 12, Rare: 18, Epic: 24, Legendary: 30, Mythic: 36 }
-  };
-
-  // Check which blends are possible
-  const blendOptions = validBlends.map(blend => {
-    // Extract ingredient template IDs from blend
-    const ingredientTemplates = blend.ingredients.map(ing => ing.template_id.toString());
-
-    // Filter assets by template IDs for this blend
-    const ingredientAssets = userAssets.filter(asset =>
-      ingredientTemplates.includes(asset.template.template_id.toString())
-    );
-
-    // Group assets by template to check if we have enough of each ingredient
-    const assetsByTemplate = {};
-    ingredientAssets.forEach(asset => {
-      const templateId = asset.template.template_id;
-      if (!assetsByTemplate[templateId]) {
-        assetsByTemplate[templateId] = [];
-      }
-      assetsByTemplate[templateId].push(asset);
-    });
-
-    // Check if we have enough assets for each ingredient
-    let canExecute = true;
-    let missingCount = 0;
-
-    blend.ingredients.forEach(ingredient => {
-      const templateId = ingredient.template_id.toString();
-      const required = ingredient.amount || 1;
-      const available = (assetsByTemplate[templateId] || []).length;
-
-      if (available < required) {
-        canExecute = false;
-        missingCount += (required - available);
-      }
-    });
-
-    // Parse display_data to extract reward name and rarity
-    let displayData = {};
-    let rewardName = '';
-    let rarity = '';
-    let payout = 0;
-
-    try {
-      if (typeof blend.display_data === 'string') {
-        displayData = JSON.parse(blend.display_data);
-      } else {
-        displayData = blend.display_data || {};
-      }
-
-      rewardName = displayData.name || `Blend #${blend.blend_id}`;
-
-      // Extract rarity from name (e.g., "Stack of Documents - Common Paper Weight")
-      const rarityMatch = rewardName.match(/(Common|Uncommon|Rare|Epic|Legendary|Mythic)\s+(.+)/i);
-      if (rarityMatch) {
-        rarity = rarityMatch[1]; // Common, Uncommon, etc.
-        const stackType = rarityMatch[2]; // Paper Weight, Paper Clip, etc.
-
-        // Look up payout from table
-        if (PAYOUT_TABLE[stackType] && PAYOUT_TABLE[stackType][rarity]) {
-          payout = PAYOUT_TABLE[stackType][rarity];
-        }
-      }
-    } catch (e) {
-      console.warn(`Failed to parse display_data for blend ${blend.blend_id}:`, e);
-    }
-
-    return {
-      blend_id: blend.blend_id,
-      name: rewardName,
-      description: displayData.description || '',
-      rarity: rarity,
-      payout: payout,
-      ingredients: blend.ingredients,
-      ingredient_templates: ingredientTemplates,
-      available_assets: ingredientAssets,
-      can_execute: canExecute,
-      missing_count: missingCount
-    };
-  });
-
-  // Sort: executable blends first, then by payout (highest first)
-  blendOptions.sort((a, b) => {
-    if (a.can_execute && !b.can_execute) return -1;
-    if (!a.can_execute && b.can_execute) return 1;
-
-    // Among executable blends, sort by payout (descending)
-    if (a.can_execute && b.can_execute) {
-      return b.payout - a.payout;
-    }
-
-    return 0;
-  });
-
-  // Find the recommended blend (highest payout among executable)
-  const recommendedBlend = blendOptions.find(opt => opt.can_execute && opt.payout > 0);
-  if (recommendedBlend) {
-    console.log(`🎯 RECOMMENDED: ${recommendedBlend.name} (${recommendedBlend.payout} Wax Seals)`);
-  }
+  // Create simple blend options list (no pre-fetching or validation)
+  const blendOptions = config.blend_ids.map(blend_id => ({
+    blend_id: blend_id,
+    name: `Blend #${blend_id}`,
+    description: `Execute blend ${blend_id}`,
+    collection_name: config.collection_name || 'futuresrelic',
+    ingredient_count: config.ingredient_count || 5 // Default assumption
+  }));
 
   // Show blend options modal
   showBlendArrayOptions(action, config, blendOptions);
 }
 
-// Show blend array options modal
+// Show blend array options modal (simplified - no pre-checking)
 function showBlendArrayOptions(action, baseConfig, blendOptions) {
   currentBlendArrayAction = action;
   currentBlendArrayConfig = baseConfig;
 
   blendArrayOptionsList.innerHTML = '';
 
-  // Find the recommended blend (highest payout among executable)
-  const recommendedBlend = blendOptions.find(opt => opt.can_execute && opt.payout > 0);
-
   blendOptions.forEach((option, index) => {
-    const isRecommended = recommendedBlend && option.blend_id === recommendedBlend.blend_id;
-
     const optionCard = document.createElement('div');
     optionCard.style.cssText = `
-      background: ${option.can_execute ? (isRecommended ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(168, 85, 247, 0.1))' : 'var(--bg-card)') : 'var(--bg-card-hover)'};
-      border: 2px solid ${isRecommended ? 'gold' : (option.can_execute ? 'var(--accent)' : 'var(--border)')};
+      background: var(--bg-card);
+      border: 2px solid var(--accent);
       border-radius: 12px;
       padding: 20px;
-      cursor: ${option.can_execute ? 'pointer' : 'not-allowed'};
-      opacity: ${option.can_execute ? '1' : '0.6'};
+      cursor: pointer;
       transition: all 0.2s;
-      position: relative;
     `;
 
-    if (option.can_execute) {
-      optionCard.addEventListener('mouseenter', () => {
-        optionCard.style.transform = 'translateY(-2px)';
-        optionCard.style.boxShadow = isRecommended ? '0 4px 20px rgba(255, 215, 0, 0.4)' : '0 4px 12px rgba(139, 92, 246, 0.3)';
-      });
-      optionCard.addEventListener('mouseleave', () => {
-        optionCard.style.transform = 'translateY(0)';
-        optionCard.style.boxShadow = 'none';
-      });
-      optionCard.addEventListener('click', () => executeBlendArrayOption(option));
-    }
-
-    // Rarity color mapping
-    const rarityColors = {
-      'Common': '#9ca3af',
-      'Uncommon': '#10b981',
-      'Rare': '#3b82f6',
-      'Epic': '#8b5cf6',
-      'Legendary': '#f59e0b',
-      'Mythic': '#ef4444'
-    };
+    optionCard.addEventListener('mouseenter', () => {
+      optionCard.style.transform = 'translateY(-2px)';
+      optionCard.style.boxShadow = '0 4px 12px rgba(139, 92, 246, 0.3)';
+    });
+    optionCard.addEventListener('mouseleave', () => {
+      optionCard.style.transform = 'translateY(0)';
+      optionCard.style.boxShadow = 'none';
+    });
+    optionCard.addEventListener('click', () => executeBlendArrayOption(option));
 
     optionCard.innerHTML = `
-      ${isRecommended ? '<div style="position: absolute; top: -12px; right: 20px; background: gold; color: #000; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: bold;">⭐ RECOMMENDED</div>' : ''}
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-        <h3 style="margin: 0; color: var(--text-primary);">${option.name || `Blend Option ${index + 1}`}</h3>
-        <span style="padding: 4px 12px; background: ${option.can_execute ? 'var(--success)' : 'var(--error)'}; border-radius: 15px; font-size: 0.85rem; color: white;">
-          ${option.can_execute ? '✅ Available' : `❌ Need ${option.missing_count} more`}
-        </span>
+        <h3 style="margin: 0; color: var(--text-primary);">${option.name}</h3>
       </div>
-      ${option.rarity ? `<div style="margin: 8px 0;"><span style="padding: 3px 10px; background: ${rarityColors[option.rarity] || '#666'}; border-radius: 8px; font-size: 0.8rem; color: white; font-weight: bold;">${option.rarity}</span></div>` : ''}
-      ${option.payout > 0 ? `<div style="margin: 10px 0; padding: 8px 12px; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; display: inline-block;"><span style="font-size: 1rem; color: #fbbf24; font-weight: bold;">🪙 ${option.payout} Wax Seals</span></div>` : ''}
-      ${option.description ? `<p style="margin: 10px 0; color: var(--text-secondary); font-size: 0.9rem;">${option.description}</p>` : ''}
       <div style="margin-top: 10px; padding: 10px; background: var(--bg-dark); border-radius: 6px;">
         <div style="font-size: 0.85rem; color: var(--text-secondary);">
           <strong>Blend ID:</strong> ${option.blend_id}<br>
-          <strong>Ingredients Required:</strong> ${option.ingredients.length}<br>
-          <strong>You Have:</strong> ${option.available_assets.length}
+          <strong>Collection:</strong> ${option.collection_name}
         </div>
       </div>
     `;
@@ -2516,17 +2326,24 @@ function showBlendArrayOptions(action, baseConfig, blendOptions) {
 
 // Execute selected blend array option
 async function executeBlendArrayOption(option) {
-  if (!option.can_execute) {
-    return;
-  }
-
   // Close blend options modal
   blendArrayModal.style.display = 'none';
 
   console.log(`🔮 Selected blend option: ${option.name} (ID: ${option.blend_id})`);
 
-  // Show asset selection modal for this specific blend
-  showBlendAssetSelection(currentBlendArrayAction, option, option.available_assets);
+  // Fetch user's assets (like single BLEND does)
+  console.log(`🔴 Fetching LIVE blockchain assets for ${currentAccount}...`);
+  const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${option.collection_name}&live=true`);
+  const assetsData = await assetsResponse.json();
+
+  if (!assetsData.success) {
+    throw new Error('Failed to fetch assets');
+  }
+
+  console.log(`✅ Fetched ${assetsData.data.length} assets`);
+
+  // Show asset selection modal (let user pick any assets - NeftyBlocks will validate)
+  showBlendAssetSelection(currentBlendArrayAction, option, assetsData.data);
 }
 
 // Execute DROP action
