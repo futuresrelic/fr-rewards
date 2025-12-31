@@ -361,6 +361,33 @@ function initializeTables() {
     console.warn('⚠️ Migration warning:', error.message);
   }
 
+  // Migration: Create blend_recipes table if it doesn't exist
+  try {
+    const blendRecipesExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='blend_recipes'
+    `).get();
+
+    if (!blendRecipesExists) {
+      console.log('🔄 Creating blend_recipes table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS blend_recipes (
+          blend_id INTEGER PRIMARY KEY,
+          collection_name TEXT NOT NULL,
+          contract_name TEXT DEFAULT 'blend.nefty',
+          ingredients TEXT NOT NULL,
+          display_data TEXT,
+          fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      console.log('✅ blend_recipes table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
   // Seed default templates if they don't exist (runs every time)
   console.log('🌱 Checking default templates...');
 
@@ -989,6 +1016,97 @@ const storyTabs = {
   }
 };
 
+// Blend recipes management (cached blend configurations)
+const blendRecipes = {
+  // Get a single blend recipe by ID
+  get: (blend_id) => {
+    const row = db.prepare('SELECT * FROM blend_recipes WHERE blend_id = ?').get(blend_id);
+    if (row) {
+      return {
+        blend_id: row.blend_id,
+        collection_name: row.collection_name,
+        contract_name: row.contract_name,
+        ingredients: JSON.parse(row.ingredients),
+        display_data: row.display_data ? JSON.parse(row.display_data) : null,
+        fetched_at: row.fetched_at
+      };
+    }
+    return null;
+  },
+
+  // Get multiple blend recipes by IDs
+  getMultiple: (blend_ids) => {
+    if (!Array.isArray(blend_ids) || blend_ids.length === 0) return [];
+    const placeholders = blend_ids.map(() => '?').join(',');
+    const stmt = db.prepare(`SELECT * FROM blend_recipes WHERE blend_id IN (${placeholders})`);
+    const rows = stmt.all(...blend_ids);
+    return rows.map(row => ({
+      blend_id: row.blend_id,
+      collection_name: row.collection_name,
+      contract_name: row.contract_name,
+      ingredients: JSON.parse(row.ingredients),
+      display_data: row.display_data ? JSON.parse(row.display_data) : null,
+      fetched_at: row.fetched_at
+    }));
+  },
+
+  // Get all blend recipes for a collection
+  getByCollection: (collection_name) => {
+    const rows = db.prepare('SELECT * FROM blend_recipes WHERE collection_name = ?').all(collection_name);
+    return rows.map(row => ({
+      blend_id: row.blend_id,
+      collection_name: row.collection_name,
+      contract_name: row.contract_name,
+      ingredients: JSON.parse(row.ingredients),
+      display_data: row.display_data ? JSON.parse(row.display_data) : null,
+      fetched_at: row.fetched_at
+    }));
+  },
+
+  // Save or update blend recipes
+  setMultiple: (recipes) => {
+    const stmt = db.prepare(`
+      INSERT INTO blend_recipes (blend_id, collection_name, contract_name, ingredients, display_data, fetched_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(blend_id) DO UPDATE SET
+        collection_name = excluded.collection_name,
+        contract_name = excluded.contract_name,
+        ingredients = excluded.ingredients,
+        display_data = excluded.display_data,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+
+    const transaction = db.transaction((recipesToCache) => {
+      for (const recipe of recipesToCache) {
+        stmt.run(
+          recipe.blend_id,
+          recipe.collection_name || 'futuresrelic',
+          recipe.contract_name || 'blend.nefty',
+          JSON.stringify(recipe.ingredients),
+          recipe.display_data ? JSON.stringify(recipe.display_data) : null
+        );
+      }
+    });
+
+    transaction(recipes);
+  },
+
+  // Clear specific blend recipe
+  clear: (blend_id) => {
+    return db.prepare('DELETE FROM blend_recipes WHERE blend_id = ?').run(blend_id);
+  },
+
+  // Clear all blend recipes for a collection
+  clearCollection: (collection_name) => {
+    return db.prepare('DELETE FROM blend_recipes WHERE collection_name = ?').run(collection_name);
+  },
+
+  // Clear all blend recipes
+  clearAll: () => {
+    return db.prepare('DELETE FROM blend_recipes').run();
+  }
+};
+
 module.exports = {
   db,
   config,
@@ -1001,5 +1119,6 @@ module.exports = {
   workflowConditions,
   userWorkflowProgress,
   blendCache,
+  blendRecipes,
   storyTabs
 };

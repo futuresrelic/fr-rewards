@@ -2539,6 +2539,180 @@ app.post('/api/blends/details', async (req, res) => {
 });
 
 /**
+ * GET /api/blend-recipes
+ * Get cached blend recipes (ingredients + display data)
+ * Query params: blend_ids (comma-separated), collection (optional), refresh (optional)
+ * Returns cached blend recipes or fetches from blockchain if not cached
+ */
+app.get('/api/blend-recipes', async (req, res) => {
+  try {
+    const { blend_ids, collection = 'futuresrelic', refresh = 'false' } = req.query;
+
+    if (!blend_ids) {
+      return res.status(400).json({ error: 'blend_ids query parameter is required' });
+    }
+
+    const blendIdArray = blend_ids.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+
+    if (blendIdArray.length === 0) {
+      return res.status(400).json({ error: 'No valid blend_ids provided' });
+    }
+
+    console.log(`📋 Fetching recipes for ${blendIdArray.length} blends...`);
+
+    let recipes = [];
+    let recipesToFetch = [];
+
+    // Check cache first (unless refresh requested)
+    if (refresh !== 'true') {
+      const cachedRecipes = db.blendRecipes.getMultiple(blendIdArray);
+      console.log(`💾 Found ${cachedRecipes.length}/${blendIdArray.length} recipes in cache`);
+
+      recipes = cachedRecipes;
+
+      // Identify which recipes need fetching
+      const cachedIds = new Set(cachedRecipes.map(r => r.blend_id));
+      recipesToFetch = blendIdArray.filter(id => !cachedIds.has(id));
+    } else {
+      console.log('🔄 Refresh requested, bypassing cache');
+      recipesToFetch = blendIdArray;
+    }
+
+    // Fetch missing recipes from blockchain
+    if (recipesToFetch.length > 0) {
+      console.log(`🔗 Fetching ${recipesToFetch.length} recipes from blockchain...`);
+
+      const { JsonRpc } = require('eosjs');
+
+      // Try HTTP APIs first (faster and more reliable)
+      const httpApiEndpoints = [
+        'https://aa.neftyblocks.com/atomictools/v1/config/blend.nefty',
+        'https://wax.api.atomicassets.io/atomictools/v1/config/blend.nefty'
+      ];
+
+      // Fallback RPC endpoints
+      const rpcEndpoints = [
+        'https://api.wax.alohaeos.com',
+        'https://wax.greymass.com',
+        'https://api.waxsweden.org',
+        'https://wax.eosphere.io'
+      ];
+
+      const newlyFetchedRecipes = [];
+
+      // Fetch each blend recipe
+      for (const blendId of recipesToFetch) {
+        let recipeData = null;
+
+        // METHOD 1: Try HTTP API endpoints first
+        for (const apiEndpoint of httpApiEndpoints) {
+          try {
+            const url = `${apiEndpoint}/${blendId}`;
+            const response = await fetch(url);
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data && (data.data || data.blend_id)) {
+                recipeData = data.data || data;
+                console.log(`  ✅ Fetched recipe ${blendId} from HTTP API`);
+                break;
+              }
+            }
+          } catch (error) {
+            continue;
+          }
+        }
+
+        // METHOD 2: If HTTP API failed, try RPC
+        if (!recipeData) {
+          for (const endpoint of rpcEndpoints) {
+            try {
+              const rpc = new JsonRpc(endpoint, { fetch });
+
+              const scopesToTry = [collection, 'blend.nefty', blendId.toString()];
+
+              for (const scope of scopesToTry) {
+                try {
+                  const result = await rpc.get_table_rows({
+                    json: true,
+                    code: 'blend.nefty',
+                    scope: scope,
+                    table: 'config',
+                    lower_bound: blendId,
+                    upper_bound: blendId,
+                    limit: 1
+                  });
+
+                  if (result.rows && result.rows.length > 0) {
+                    recipeData = result.rows[0];
+                    console.log(`  ✅ Fetched recipe ${blendId} from RPC (scope: ${scope})`);
+                    break;
+                  }
+                } catch (scopeError) {
+                  continue;
+                }
+              }
+
+              if (recipeData) break;
+            } catch (error) {
+              continue;
+            }
+          }
+        }
+
+        if (recipeData) {
+          // Parse ingredients from blockchain format
+          let ingredients = recipeData.ingredients || [];
+          if (Array.isArray(ingredients)) {
+            ingredients = ingredients.map(ing => {
+              if (Array.isArray(ing) && ing.length >= 2 && ing[0] === 'TEMPLATE_INGREDIENT') {
+                return {
+                  template_id: ing[1].template_id,
+                  amount: ing[1].amount || 1
+                };
+              }
+              return ing;
+            }).filter(ing => ing && ing.template_id);
+          }
+
+          const recipe = {
+            blend_id: blendId,
+            collection_name: collection,
+            contract_name: 'blend.nefty',
+            ingredients: ingredients,
+            display_data: recipeData.display_data || null
+          };
+
+          newlyFetchedRecipes.push(recipe);
+          recipes.push(recipe);
+        } else {
+          console.warn(`  ❌ Failed to fetch recipe ${blendId}`);
+        }
+      }
+
+      // Cache newly fetched recipes
+      if (newlyFetchedRecipes.length > 0) {
+        db.blendRecipes.setMultiple(newlyFetchedRecipes);
+        console.log(`💾 Cached ${newlyFetchedRecipes.length} new recipes`);
+      }
+    }
+
+    console.log(`✅ Returning ${recipes.length}/${blendIdArray.length} recipes`);
+
+    res.json({
+      success: true,
+      recipe_count: recipes.length,
+      recipes: recipes,
+      cached_count: blendIdArray.length - recipesToFetch.length,
+      fetched_count: recipes.length - (blendIdArray.length - recipesToFetch.length)
+    });
+  } catch (error) {
+    console.error('Error fetching blend recipes:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * POST /api/asset/verify-ownership-rpc
  * Verify current ownership of an asset by querying BLOCKCHAIN DIRECTLY via RPC
  * This bypasses AtomicAssets API cache and gets real-time blockchain state
