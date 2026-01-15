@@ -2743,6 +2743,509 @@ app.post('/api/blend-recipes/clear', authenticateAdmin, async (req, res) => {
   }
 });
 
+// ==========================================
+// FACTORY / CRAFTING ENDPOINTS
+// ==========================================
+
+/**
+ * GET /api/factory/recipes
+ * Get all enabled recipes with user's crafting ability
+ * Query params: wallet (optional)
+ */
+app.get('/api/factory/recipes', async (req, res) => {
+  try {
+    const { wallet } = req.query;
+    const recipes = db.craftRecipes.getEnabled();
+
+    // If no wallet provided, just return recipes without user data
+    if (!wallet) {
+      return res.json({ success: true, recipes });
+    }
+
+    // Fetch user's assets to check crafting ability
+    const userAssets = await wax.getUserAssetsLive(wallet, 'futuresrelic');
+
+    // Count assets by template ID
+    const templateCounts = {};
+    userAssets.forEach(asset => {
+      const templateId = asset.template.template_id.toString();
+      templateCounts[templateId] = (templateCounts[templateId] || 0) + 1;
+    });
+
+    // Enrich recipes with user's crafting ability
+    const enrichedRecipes = recipes.map(recipe => {
+      // Check how many times user can craft this recipe
+      let maxCrafts = Infinity;
+      let missingIngredients = [];
+
+      recipe.ingredients.forEach(ing => {
+        const templateId = ing.template_id.toString();
+        const owned = templateCounts[templateId] || 0;
+        const needed = ing.amount;
+
+        if (owned < needed) {
+          missingIngredients.push({
+            template_id: templateId,
+            needed: needed,
+            owned: owned
+          });
+          maxCrafts = 0;
+        } else {
+          const possibleCrafts = Math.floor(owned / needed);
+          maxCrafts = Math.min(maxCrafts, possibleCrafts);
+        }
+      });
+
+      // Cap by max_batch_multiplier
+      if (maxCrafts !== Infinity) {
+        maxCrafts = Math.min(maxCrafts, recipe.max_batch_multiplier);
+      } else {
+        maxCrafts = 0;
+      }
+
+      // Check cooldown
+      let cooldownRemaining = 0;
+      if (recipe.cooldown_enabled && recipe.cooldown_hours) {
+        const lastCraft = db.craftHistory.getLastCraft(wallet, recipe.id);
+        if (lastCraft) {
+          const hoursSince = (Date.now() - new Date(lastCraft.crafted_at).getTime()) / 3600000;
+          if (hoursSince < recipe.cooldown_hours) {
+            cooldownRemaining = recipe.cooldown_hours - hoursSince;
+            maxCrafts = 0;
+          }
+        }
+      }
+
+      return {
+        ...recipe,
+        user_can_craft: maxCrafts,
+        missing_ingredients: missingIngredients,
+        cooldown_remaining: cooldownRemaining,
+        ingredients_enriched: recipe.ingredients.map(ing => ({
+          ...ing,
+          owned: templateCounts[ing.template_id.toString()] || 0
+        }))
+      };
+    });
+
+    res.json({ success: true, recipes: enrichedRecipes });
+  } catch (error) {
+    console.error('Error fetching factory recipes:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/factory/craft
+ * Execute a craft: verify transfer, then mint results
+ * Body: {
+ *   recipe_id: number,
+ *   batch_count: number,
+ *   transfer_transaction_id: string,
+ *   asset_ids: string[],
+ *   user_wallet: string
+ * }
+ */
+app.post('/api/factory/craft', async (req, res) => {
+  try {
+    const { recipe_id, batch_count, transfer_transaction_id, asset_ids, user_wallet } = req.body;
+
+    console.log('🏭 FACTORY CRAFT REQUEST');
+    console.log(`   Recipe ID: ${recipe_id}`);
+    console.log(`   Batch Count: ${batch_count}`);
+    console.log(`   User: ${user_wallet}`);
+    console.log(`   Transfer TX: ${transfer_transaction_id}`);
+
+    // 1. Validate inputs
+    if (!recipe_id || !batch_count || !transfer_transaction_id || !asset_ids || !user_wallet) {
+      return res.status(400).json({ error: 'Missing required fields', success: false });
+    }
+
+    // 2. Get recipe
+    const recipe = db.craftRecipes.getById(recipe_id);
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found', success: false });
+    }
+
+    if (!recipe.enabled) {
+      return res.status(400).json({ error: 'Recipe is disabled', success: false });
+    }
+
+    // 3. Validate batch count
+    if (batch_count < 1 || batch_count > recipe.max_batch_multiplier) {
+      return res.status(400).json({
+        error: `Invalid batch count. Must be between 1 and ${recipe.max_batch_multiplier}`,
+        success: false
+      });
+    }
+
+    // 4. Check cooldown
+    if (recipe.cooldown_enabled && recipe.cooldown_hours) {
+      const lastCraft = db.craftHistory.getLastCraft(user_wallet, recipe_id);
+      if (lastCraft) {
+        const hoursSince = (Date.now() - new Date(lastCraft.crafted_at).getTime()) / 3600000;
+        if (hoursSince < recipe.cooldown_hours) {
+          const remaining = (recipe.cooldown_hours - hoursSince).toFixed(1);
+          return res.status(429).json({
+            error: `Cooldown active. ${remaining} hours remaining`,
+            cooldown_remaining: remaining,
+            success: false
+          });
+        }
+      }
+    }
+
+    // 5. Check for duplicate transaction (idempotency)
+    const existingCraft = db.craftHistory.getByTransactionId(transfer_transaction_id);
+    if (existingCraft) {
+      if (existingCraft.status === 'completed') {
+        console.log('✅ Transaction already processed, returning cached result');
+        return res.json({
+          success: true,
+          already_processed: true,
+          mint_transaction_id: existingCraft.mint_transaction_id,
+          craft_id: existingCraft.id,
+          results: existingCraft.result_info
+        });
+      } else if (existingCraft.status === 'failed') {
+        return res.status(400).json({
+          error: 'This transaction previously failed: ' + existingCraft.error_message,
+          success: false
+        });
+      }
+    }
+
+    // 6. Verify transaction on blockchain
+    console.log('🔍 Verifying transfer transaction on blockchain...');
+    const rpc = new JsonRpc('https://api.waxsweden.org', { fetch: require('node-fetch') });
+
+    let txData;
+    try {
+      txData = await rpc.history_get_transaction(transfer_transaction_id);
+    } catch (txError) {
+      return res.status(400).json({
+        error: 'Transfer transaction not found on blockchain',
+        success: false
+      });
+    }
+
+    // 7. Extract and verify transfers
+    console.log('🔍 Extracting transfer actions from transaction...');
+    const transfers = [];
+
+    if (txData.traces) {
+      for (const trace of txData.traces) {
+        if (trace.act && trace.act.account === 'atomicassets' && trace.act.name === 'transfer') {
+          const data = trace.act.data;
+          transfers.push({
+            from: data.from,
+            to: data.to,
+            asset_ids: data.asset_ids,
+            memo: data.memo
+          });
+        }
+      }
+    }
+
+    console.log(`   Found ${transfers.length} transfer action(s)`);
+
+    // 8. Verify transfers
+    if (transfers.length === 0) {
+      return res.status(400).json({
+        error: 'No transfer actions found in transaction',
+        success: false
+      });
+    }
+
+    // Verify recipient is futuresrelic
+    const futuresrelicTransfer = transfers.find(t => t.to === 'futuresrelic');
+    if (!futuresrelicTransfer) {
+      return res.status(400).json({
+        error: 'Assets not transferred to futuresrelic wallet',
+        success: false
+      });
+    }
+
+    // Verify sender is user
+    if (futuresrelicTransfer.from !== user_wallet) {
+      return res.status(400).json({
+        error: `Transfer sender mismatch. Expected ${user_wallet}, got ${futuresrelicTransfer.from}`,
+        success: false
+      });
+    }
+
+    // Verify asset IDs match
+    const transferredAssetIds = futuresrelicTransfer.asset_ids;
+    const expectedCount = recipe.ingredients.reduce((sum, ing) => sum + ing.amount, 0) * batch_count;
+
+    if (transferredAssetIds.length !== expectedCount) {
+      return res.status(400).json({
+        error: `Asset count mismatch. Expected ${expectedCount}, got ${transferredAssetIds.length}`,
+        success: false
+      });
+    }
+
+    // Verify all asset IDs match what user submitted
+    const missingAssets = asset_ids.filter(id => !transferredAssetIds.includes(id));
+    if (missingAssets.length > 0) {
+      return res.status(400).json({
+        error: 'Some assets were not transferred',
+        missing_assets: missingAssets,
+        success: false
+      });
+    }
+
+    console.log('✅ Transfer verification passed!');
+
+    // 9. Create craft record
+    const craftId = db.craftHistory.create({
+      recipe_id: recipe_id,
+      user_wallet: user_wallet,
+      batch_count: batch_count,
+      transfer_transaction_id: transfer_transaction_id,
+      ingredient_asset_ids: asset_ids,
+      status: 'pending_mint'
+    });
+
+    console.log(`📝 Created craft record #${craftId}`);
+
+    // 10. Mint results
+    console.log('🔨 Minting results...');
+    const mintTransactions = [];
+
+    try {
+      for (const result of recipe.results) {
+        const mintCount = result.amount * batch_count;
+        console.log(`   Minting ${mintCount}x Template ${result.template_id}...`);
+
+        for (let i = 0; i < mintCount; i++) {
+          const mintResult = await wax.mintNFT(
+            user_wallet,
+            'futuresrelic',
+            result.template_id
+          );
+          mintTransactions.push(mintResult.transaction_id);
+        }
+      }
+
+      console.log('✅ All results minted successfully!');
+
+      // 11. Update craft record as completed
+      db.craftHistory.update(craftId, {
+        mint_transaction_id: mintTransactions[0], // Store first mint tx
+        result_info: recipe.results,
+        status: 'completed'
+      });
+
+      res.json({
+        success: true,
+        craft_id: craftId,
+        mint_transaction_id: mintTransactions[0],
+        all_mint_transactions: mintTransactions,
+        results: recipe.results.map(r => ({
+          template_id: r.template_id,
+          amount: r.amount * batch_count
+        }))
+      });
+
+    } catch (mintError) {
+      console.error('❌ Mint failed:', mintError);
+
+      // Update craft record as failed
+      db.craftHistory.update(craftId, {
+        status: 'failed',
+        error_message: mintError.message
+      });
+
+      return res.status(500).json({
+        error: 'Mint failed: ' + mintError.message,
+        craft_id: craftId,
+        success: false,
+        note: 'Assets have been transferred to futuresrelic. Contact admin for manual refund.'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error executing craft:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/factory/history/:wallet
+ * Get craft history for a user
+ */
+app.get('/api/factory/history/:wallet', async (req, res) => {
+  try {
+    const { wallet } = req.params;
+    const history = db.craftHistory.getByUser(wallet, 50);
+
+    res.json({ success: true, history });
+  } catch (error) {
+    console.error('Error fetching craft history:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+// ==========================================
+// ADMIN FACTORY ENDPOINTS
+// ==========================================
+
+/**
+ * GET /api/admin/factory/recipes
+ * Get all recipes (admin)
+ */
+app.get('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
+  try {
+    const recipes = db.craftRecipes.getAll();
+
+    // Add stats for each recipe
+    const recipesWithStats = recipes.map(recipe => {
+      const stats = db.craftRecipes.getStats(recipe.id);
+      return {
+        ...recipe,
+        ingredients: JSON.parse(recipe.ingredients),
+        results: JSON.parse(recipe.results),
+        stats: stats
+      };
+    });
+
+    res.json({ success: true, recipes: recipesWithStats });
+  } catch (error) {
+    console.error('Error fetching admin recipes:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/admin/factory/recipes
+ * Create new recipe (admin)
+ */
+app.post('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, description, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled } = req.body;
+
+    // Validate inputs
+    if (!name || !ingredients || !results) {
+      return res.status(400).json({ error: 'Missing required fields', success: false });
+    }
+
+    if (!Array.isArray(ingredients) || ingredients.length === 0) {
+      return res.status(400).json({ error: 'Ingredients must be a non-empty array', success: false });
+    }
+
+    if (!Array.isArray(results) || results.length === 0) {
+      return res.status(400).json({ error: 'Results must be a non-empty array', success: false });
+    }
+
+    const recipeId = db.craftRecipes.create({
+      name,
+      description,
+      ingredients,
+      results,
+      max_batch_multiplier: max_batch_multiplier || 1,
+      cooldown_hours: cooldown_hours || null,
+      cooldown_enabled: cooldown_enabled || false,
+      enabled: enabled !== false // Default to true
+    });
+
+    console.log(`✅ Created recipe #${recipeId}: ${name}`);
+
+    res.json({ success: true, recipe_id: recipeId });
+  } catch (error) {
+    console.error('Error creating recipe:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * PUT /api/admin/factory/recipes/:id
+ * Update recipe (admin)
+ */
+app.put('/api/admin/factory/recipes/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled } = req.body;
+
+    const existing = db.craftRecipes.getById(parseInt(id));
+    if (!existing) {
+      return res.status(404).json({ error: 'Recipe not found', success: false });
+    }
+
+    db.craftRecipes.update(parseInt(id), {
+      name,
+      description,
+      ingredients,
+      results,
+      max_batch_multiplier,
+      cooldown_hours,
+      cooldown_enabled,
+      enabled
+    });
+
+    console.log(`✅ Updated recipe #${id}: ${name}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating recipe:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * DELETE /api/admin/factory/recipes/:id
+ * Delete recipe (admin)
+ */
+app.delete('/api/admin/factory/recipes/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const existing = db.craftRecipes.getById(parseInt(id));
+    if (!existing) {
+      return res.status(404).json({ error: 'Recipe not found', success: false });
+    }
+
+    db.craftRecipes.delete(parseInt(id));
+
+    console.log(`✅ Deleted recipe #${id}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting recipe:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/admin/factory/history
+ * Get all craft history (admin)
+ */
+app.get('/api/admin/factory/history', authenticateAdmin, async (req, res) => {
+  try {
+    const history = db.craftHistory.getAll(200);
+
+    res.json({ success: true, history });
+  } catch (error) {
+    console.error('Error fetching admin history:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/admin/factory/failed
+ * Get failed crafts (for manual refunds)
+ */
+app.get('/api/admin/factory/failed', authenticateAdmin, async (req, res) => {
+  try {
+    const failed = db.craftHistory.getFailed(100);
+
+    res.json({ success: true, failed });
+  } catch (error) {
+    console.error('Error fetching failed crafts:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
 /**
  * POST /api/asset/verify-ownership-rpc
  * Verify current ownership of an asset by querying BLOCKCHAIN DIRECTLY via RPC

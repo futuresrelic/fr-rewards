@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Factory Admin - NFT Rewards</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🏭 Factory Configuration</h1>
+      <p class="subtitle">Configure craft recipes and manage crafting system</p>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <a href="admin.html" class="nav-tab">⚙️ Main Admin</a>
+      <a href="admin-workflow.html" class="nav-tab">📖 Story Workflow</a>
+      <a href="admin-factory.html" class="nav-tab active">🏭 Factory</a>
+      <a href="admin-blend-recipes.html" class="nav-tab">🧪 Blend Recipes</a>
+    </nav>
+
+    <!-- Login Section -->
+    <div id="admin-login" class="card">
+      <h2>Admin Authentication</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="admin-password">Admin Password:</label>
+          <input type="password" id="admin-password" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+      <div id="login-error" class="alert alert-error" style="display: none;"></div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="admin-dashboard" style="display: none;">
+      <div class="user-header">
+        <div class="user-info">
+          <span class="label">Factory Admin</span>
+        </div>
+        <button id="admin-logout" class="btn btn-secondary btn-sm">Logout</button>
+      </div>
+
+      <!-- Quick Guide -->
+      <div class="card">
+        <h2>📚 Factory System Overview</h2>
+        <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px;">
+          <p style="margin: 0 0 10px 0;"><strong>How Factory Works:</strong></p>
+          <ol style="margin: 0; padding-left: 20px;">
+            <li>Configure craft recipes with ingredient requirements and results</li>
+            <li>Users transfer ingredient assets to futuresrelic wallet</li>
+            <li>Server verifies transfer, then mints result assets</li>
+            <li>Safe transfer-first approach (assets held, can refund if mint fails)</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- Create Recipe Section -->
+      <div class="card">
+        <h2>➕ Create New Recipe</h2>
+        <button id="show-create-form-btn" class="btn btn-primary">Create New Recipe</button>
+
+        <div id="create-recipe-form" style="display: none; margin-top: 20px; background: var(--bg-dark); padding: 20px; border-radius: 8px;">
+          <h3>Recipe Configuration</h3>
+
+          <div class="form-group">
+            <label for="recipe-name">Recipe Name:</label>
+            <input type="text" id="recipe-name" class="form-control" placeholder="Forge Steel Blade" required>
+          </div>
+
+          <div class="form-group">
+            <label for="recipe-description">Description:</label>
+            <textarea id="recipe-description" class="form-control" rows="2" placeholder="Combine iron and coal to create a blade..."></textarea>
+          </div>
+
+          <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
+
+          <h4>Ingredients (Required)</h4>
+          <div id="ingredients-list">
+            <!-- Ingredient rows will be added here -->
+          </div>
+          <button type="button" id="add-ingredient-btn" class="btn btn-secondary btn-sm">+ Add Ingredient</button>
+
+          <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
+
+          <h4>Results (What Gets Minted)</h4>
+          <div id="results-list">
+            <!-- Result rows will be added here -->
+          </div>
+          <button type="button" id="add-result-btn" class="btn btn-secondary btn-sm">+ Add Result</button>
+
+          <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
+
+          <h4>Settings</h4>
+
+          <div class="form-group">
+            <label for="max-batch">Max Batch Multiplier:</label>
+            <input type="number" id="max-batch" class="form-control" min="1" max="100" value="5" style="max-width: 150px;">
+            <small>Maximum times this recipe can be crafted in one transaction</small>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="cooldown-enabled"> Enable Cooldown
+            </label>
+          </div>
+
+          <div class="form-group" id="cooldown-hours-group" style="display: none;">
+            <label for="cooldown-hours">Cooldown Hours:</label>
+            <input type="number" id="cooldown-hours" class="form-control" min="1" max="8760" placeholder="24" style="max-width: 150px;">
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="recipe-enabled" checked> Enabled (visible to users)
+            </label>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button id="save-recipe-btn" class="btn btn-primary">Save Recipe</button>
+            <button id="cancel-create-btn" class="btn btn-secondary">Cancel</button>
+          </div>
+        </div>
+
+        <div id="create-status" class="alert" style="display: none; margin-top: 15px;"></div>
+      </div>
+
+      <!-- Recipes List -->
+      <div class="card">
+        <h2>📋 Craft Recipes</h2>
+        <div id="recipes-list" style="margin-top: 15px;">
+          <p style="color: var(--text-secondary);">Loading...</p>
+        </div>
+      </div>
+
+      <!-- Craft History -->
+      <div class="card">
+        <h2>📊 Recent Crafts</h2>
+        <button id="load-history-btn" class="btn btn-secondary">Load Craft History</button>
+        <div id="history-list" style="margin-top: 15px;"></div>
+      </div>
+
+      <!-- Failed Crafts -->
+      <div class="card">
+        <h2>⚠️ Failed Crafts (Pending Refunds)</h2>
+        <button id="load-failed-btn" class="btn btn-secondary">Load Failed Crafts</button>
+        <div id="failed-list" style="margin-top: 15px;"></div>
+      </div>
+    </div>
+
+    <!-- Edit Recipe Modal -->
+    <div id="edit-recipe-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; overflow-y: auto; padding: 20px;">
+      <div class="card" style="max-width: 800px; margin: 40px auto; position: relative;">
+        <button id="close-edit-modal" style="position: absolute; top: 20px; right: 20px; background: var(--bg-card-hover); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem;">×</button>
+
+        <h2>✏️ Edit Recipe</h2>
+
+        <div id="edit-recipe-form">
+          <!-- Form will be populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin-factory.js"></script>
+</body>
+</html>

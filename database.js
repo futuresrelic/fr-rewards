@@ -388,6 +388,73 @@ function initializeTables() {
     console.warn('⚠️ Migration warning:', error.message);
   }
 
+  // Migration: Create craft_recipes table if it doesn't exist
+  try {
+    const craftRecipesExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='craft_recipes'
+    `).get();
+
+    if (!craftRecipesExists) {
+      console.log('🔄 Creating craft_recipes table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS craft_recipes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT,
+          ingredients TEXT NOT NULL,
+          results TEXT NOT NULL,
+          max_batch_multiplier INTEGER DEFAULT 1,
+          cooldown_hours INTEGER,
+          cooldown_enabled INTEGER DEFAULT 0,
+          enabled INTEGER DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      console.log('✅ craft_recipes table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Create craft_history table if it doesn't exist
+  try {
+    const craftHistoryExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='craft_history'
+    `).get();
+
+    if (!craftHistoryExists) {
+      console.log('🔄 Creating craft_history table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS craft_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          recipe_id INTEGER NOT NULL,
+          user_wallet TEXT NOT NULL,
+          batch_count INTEGER DEFAULT 1,
+          transfer_transaction_id TEXT NOT NULL UNIQUE,
+          mint_transaction_id TEXT,
+          ingredient_asset_ids TEXT NOT NULL,
+          result_info TEXT,
+          status TEXT DEFAULT 'pending_mint',
+          crafted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          error_message TEXT,
+          FOREIGN KEY (recipe_id) REFERENCES craft_recipes(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_craft_history_user ON craft_history(user_wallet);
+        CREATE INDEX IF NOT EXISTS idx_craft_history_recipe ON craft_history(recipe_id);
+        CREATE INDEX IF NOT EXISTS idx_craft_history_transfer_tx ON craft_history(transfer_transaction_id);
+      `);
+
+      console.log('✅ craft_history table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
   // Seed default templates if they don't exist (runs every time)
   console.log('🌱 Checking default templates...');
 
@@ -1107,6 +1174,247 @@ const blendRecipes = {
   }
 };
 
+// Craft recipes management
+const craftRecipes = {
+  // Get all recipes
+  getAll: () => {
+    return db.prepare(`
+      SELECT * FROM craft_recipes ORDER BY id ASC
+    `).all();
+  },
+
+  // Get single recipe by ID
+  getById: (id) => {
+    const recipe = db.prepare('SELECT * FROM craft_recipes WHERE id = ?').get(id);
+    if (recipe) {
+      recipe.ingredients = JSON.parse(recipe.ingredients);
+      recipe.results = JSON.parse(recipe.results);
+    }
+    return recipe;
+  },
+
+  // Get enabled recipes only
+  getEnabled: () => {
+    const recipes = db.prepare('SELECT * FROM craft_recipes WHERE enabled = 1 ORDER BY id ASC').all();
+    return recipes.map(recipe => ({
+      ...recipe,
+      ingredients: JSON.parse(recipe.ingredients),
+      results: JSON.parse(recipe.results)
+    }));
+  },
+
+  // Create new recipe
+  create: (data) => {
+    const stmt = db.prepare(`
+      INSERT INTO craft_recipes
+      (name, description, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      data.name,
+      data.description || null,
+      JSON.stringify(data.ingredients),
+      JSON.stringify(data.results),
+      data.max_batch_multiplier || 1,
+      data.cooldown_hours || null,
+      data.cooldown_enabled ? 1 : 0,
+      data.enabled ? 1 : 0
+    );
+
+    return result.lastInsertRowid;
+  },
+
+  // Update recipe
+  update: (id, data) => {
+    const stmt = db.prepare(`
+      UPDATE craft_recipes
+      SET name = ?,
+          description = ?,
+          ingredients = ?,
+          results = ?,
+          max_batch_multiplier = ?,
+          cooldown_hours = ?,
+          cooldown_enabled = ?,
+          enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+
+    return stmt.run(
+      data.name,
+      data.description || null,
+      JSON.stringify(data.ingredients),
+      JSON.stringify(data.results),
+      data.max_batch_multiplier || 1,
+      data.cooldown_hours || null,
+      data.cooldown_enabled ? 1 : 0,
+      data.enabled ? 1 : 0,
+      id
+    );
+  },
+
+  // Delete recipe
+  delete: (id) => {
+    return db.prepare('DELETE FROM craft_recipes WHERE id = ?').run(id);
+  },
+
+  // Get recipe stats (total crafts)
+  getStats: (id) => {
+    const stats = db.prepare(`
+      SELECT
+        COUNT(*) as total_crafts,
+        SUM(batch_count) as total_items_crafted,
+        COUNT(DISTINCT user_wallet) as unique_crafters
+      FROM craft_history
+      WHERE recipe_id = ? AND status = 'completed'
+    `).get(id);
+
+    return stats;
+  }
+};
+
+// Craft history management
+const craftHistory = {
+  // Get all history
+  getAll: (limit = 100) => {
+    return db.prepare(`
+      SELECT
+        ch.*,
+        cr.name as recipe_name
+      FROM craft_history ch
+      LEFT JOIN craft_recipes cr ON ch.recipe_id = cr.id
+      ORDER BY ch.crafted_at DESC
+      LIMIT ?
+    `).all(limit);
+  },
+
+  // Get history for specific user
+  getByUser: (wallet, limit = 50) => {
+    const history = db.prepare(`
+      SELECT
+        ch.*,
+        cr.name as recipe_name,
+        cr.description as recipe_description
+      FROM craft_history ch
+      LEFT JOIN craft_recipes cr ON ch.recipe_id = cr.id
+      WHERE ch.user_wallet = ?
+      ORDER BY ch.crafted_at DESC
+      LIMIT ?
+    `).all(wallet, limit);
+
+    return history.map(record => ({
+      ...record,
+      ingredient_asset_ids: JSON.parse(record.ingredient_asset_ids),
+      result_info: record.result_info ? JSON.parse(record.result_info) : null
+    }));
+  },
+
+  // Get by transaction ID
+  getByTransactionId: (transfer_tx_id) => {
+    const record = db.prepare(`
+      SELECT * FROM craft_history WHERE transfer_transaction_id = ?
+    `).get(transfer_tx_id);
+
+    if (record) {
+      record.ingredient_asset_ids = JSON.parse(record.ingredient_asset_ids);
+      record.result_info = record.result_info ? JSON.parse(record.result_info) : null;
+    }
+
+    return record;
+  },
+
+  // Get last craft for user + recipe (for cooldown check)
+  getLastCraft: (wallet, recipe_id) => {
+    return db.prepare(`
+      SELECT * FROM craft_history
+      WHERE user_wallet = ? AND recipe_id = ? AND status = 'completed'
+      ORDER BY crafted_at DESC
+      LIMIT 1
+    `).get(wallet, recipe_id);
+  },
+
+  // Create craft record
+  create: (data) => {
+    const stmt = db.prepare(`
+      INSERT INTO craft_history
+      (recipe_id, user_wallet, batch_count, transfer_transaction_id, ingredient_asset_ids, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      data.recipe_id,
+      data.user_wallet,
+      data.batch_count || 1,
+      data.transfer_transaction_id,
+      JSON.stringify(data.ingredient_asset_ids),
+      data.status || 'pending_mint'
+    );
+
+    return result.lastInsertRowid;
+  },
+
+  // Update craft record
+  update: (id, data) => {
+    const updates = [];
+    const values = [];
+
+    if (data.mint_transaction_id !== undefined) {
+      updates.push('mint_transaction_id = ?');
+      values.push(data.mint_transaction_id);
+    }
+
+    if (data.result_info !== undefined) {
+      updates.push('result_info = ?');
+      values.push(JSON.stringify(data.result_info));
+    }
+
+    if (data.status !== undefined) {
+      updates.push('status = ?');
+      values.push(data.status);
+    }
+
+    if (data.error_message !== undefined) {
+      updates.push('error_message = ?');
+      values.push(data.error_message);
+    }
+
+    if (updates.length === 0) return null;
+
+    values.push(id);
+    const stmt = db.prepare(`
+      UPDATE craft_history SET ${updates.join(', ')} WHERE id = ?
+    `);
+
+    return stmt.run(...values);
+  },
+
+  // Get failed crafts (for admin refund management)
+  getFailed: (limit = 50) => {
+    const failed = db.prepare(`
+      SELECT
+        ch.*,
+        cr.name as recipe_name
+      FROM craft_history ch
+      LEFT JOIN craft_recipes cr ON ch.recipe_id = cr.id
+      WHERE ch.status = 'failed'
+      ORDER BY ch.crafted_at DESC
+      LIMIT ?
+    `).all(limit);
+
+    return failed.map(record => ({
+      ...record,
+      ingredient_asset_ids: JSON.parse(record.ingredient_asset_ids),
+      result_info: record.result_info ? JSON.parse(record.result_info) : null
+    }));
+  },
+
+  // Delete craft record
+  delete: (id) => {
+    return db.prepare('DELETE FROM craft_history WHERE id = ?').run(id);
+  }
+};
+
 module.exports = {
   db,
   config,
@@ -1120,5 +1428,7 @@ module.exports = {
   userWorkflowProgress,
   blendCache,
   blendRecipes,
-  storyTabs
+  storyTabs,
+  craftRecipes,
+  craftHistory
 };
