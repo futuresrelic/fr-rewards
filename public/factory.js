@@ -259,71 +259,22 @@ async function startCraft(recipe, batchCount) {
   currentBatchCount = batchCount;
 
   // Show processing modal
-  showProcessingModal('Loading Assets', 'Fetching your assets from blockchain...<br><small style="color: var(--text-secondary);">This may take a moment</small>');
+  showProcessingModal('Loading Assets', 'Fetching relevant assets...<br><small style="color: var(--text-secondary);">Only loading what you need!</small>');
 
   try {
-    // Fetch user's assets
-    const response = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=futuresrelic&live=true`);
+    // Use new optimized endpoint - only fetches & enriches assets for THIS recipe!
+    const response = await fetch(`${API_URL}/api/factory/recipe-assets?wallet=${currentAccount}&recipe_id=${recipe.id}`);
     const data = await response.json();
 
     if (!response.ok) {
       throw new Error(data.error || 'Failed to fetch assets');
     }
 
-    const userAssets = data.data || [];
+    // Assets are already filtered AND enriched with mint data from server!
+    const enrichedAssets = data.assets || [];
+    console.log(`✅ Received ${enrichedAssets.length} pre-enriched assets for recipe`);
 
-    // FILTER FIRST: Only get assets matching recipe templates (before enriching!)
-    const requiredTemplateIds = new Set(recipe.ingredients.map(ing => ing.template_id.toString()));
-    const relevantAssets = userAssets.filter(asset =>
-      asset.template && requiredTemplateIds.has(asset.template.template_id.toString())
-    );
-
-    console.log(`Filtered ${userAssets.length} assets down to ${relevantAssets.length} relevant for recipe`);
-
-    // Enrich only the relevant assets (much smaller set!)
-    let enrichedAssets = relevantAssets;
-
-    if (relevantAssets.length > 0) {
-      showProcessingModal('Loading Assets', `Enriching ${relevantAssets.length} assets with mint data...<br><small style="color: var(--text-secondary);">Almost there!</small>`);
-
-      // Fetch in batches of 100 to avoid URL length limits
-      const batchSize = 100;
-      const enrichedBatches = [];
-
-      for (let i = 0; i < relevantAssets.length; i += batchSize) {
-        const batch = relevantAssets.slice(i, i + batchSize);
-        const assetIds = batch.map(a => a.asset_id).join(',');
-
-        try {
-          const atomicResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets?ids=${assetIds}`);
-          const atomicData = await atomicResponse.json();
-
-          if (atomicData.data) {
-            const enrichedBatch = batch.map(asset => {
-              const atomicAsset = atomicData.data.find(a => a.asset_id === asset.asset_id);
-              if (atomicAsset) {
-                return {
-                  ...asset,
-                  template: atomicAsset.template,
-                  data: atomicAsset.data,
-                  template_mint: atomicAsset.template_mint
-                };
-              }
-              return asset;
-            });
-            enrichedBatches.push(...enrichedBatch);
-          }
-        } catch (err) {
-          console.warn(`Failed to enrich batch ${i / batchSize + 1}:`, err);
-          enrichedBatches.push(...batch); // Use unenriched if fetch fails
-        }
-      }
-
-      enrichedAssets = enrichedBatches;
-      console.log(`✅ Enriched ${enrichedAssets.length} assets with mint data`);
-    }
-
-    // Filter and group assets by template
+    // Group assets by template
     const groupedAssets = {};
     recipe.ingredients.forEach(ing => {
       const templateId = ing.template_id.toString();

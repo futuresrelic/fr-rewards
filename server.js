@@ -2927,6 +2927,50 @@ app.get('/api/factory/templates', async (req, res) => {
 });
 
 /**
+ * GET /api/factory/recipe-assets
+ * Fetch user's assets filtered by recipe templates, with mint numbers
+ * Query params: wallet, recipe_id
+ * This is MUCH faster than fetching all assets - only enriches what's needed!
+ */
+app.get('/api/factory/recipe-assets', async (req, res) => {
+  try {
+    const { wallet, recipe_id } = req.query;
+
+    if (!wallet || !recipe_id) {
+      return res.status(400).json({ error: 'wallet and recipe_id required', success: false });
+    }
+
+    // Get recipe to know which templates we need
+    const recipe = db.craftRecipes.getById(parseInt(recipe_id));
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found', success: false });
+    }
+
+    const templateIds = recipe.ingredients.map(ing => ing.template_id.toString());
+    console.log(`📦 Fetching assets for recipe ${recipe_id}, templates: [${templateIds.join(', ')}]`);
+
+    // Fetch ALL user's assets (basic data, no mint numbers yet)
+    const allAssets = await wax.getUserAssetsLive(wallet, 'futuresrelic');
+    console.log(`   Found ${allAssets.length} total assets`);
+
+    // Filter to only assets matching recipe templates
+    const relevantAssets = allAssets.filter(asset =>
+      asset.template && templateIds.includes(asset.template.template_id.toString())
+    );
+    console.log(`   Filtered to ${relevantAssets.length} relevant assets`);
+
+    // Now enrich ONLY the relevant assets with mint numbers
+    const enrichedAssets = await wax.enrichAssetsWithMints(relevantAssets);
+    console.log(`   ✅ Enriched ${enrichedAssets.length} assets with mint data`);
+
+    res.json({ success: true, assets: enrichedAssets });
+  } catch (error) {
+    console.error('Error fetching recipe assets:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * POST /api/factory/craft
  * Execute a craft: verify transfer, then mint results
  * Body: {
