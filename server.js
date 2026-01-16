@@ -2917,7 +2917,8 @@ app.post('/api/factory/craft', async (req, res) => {
 
     // 6. Verify transaction on blockchain
     console.log('🔍 Verifying transfer transaction on blockchain...');
-    const rpc = new JsonRpc('https://api.waxsweden.org', { fetch: require('node-fetch') });
+    const { JsonRpc } = require('eosjs');
+    const rpc = new JsonRpc('https://api.waxsweden.org', { fetch });
 
     let txData;
     try {
