@@ -2748,14 +2748,52 @@ app.post('/api/blend-recipes/clear', authenticateAdmin, async (req, res) => {
 // ==========================================
 
 /**
+ * GET /api/factory/categories
+ * Get all recipe categories (lightweight - no asset checking!)
+ */
+app.get('/api/factory/categories', async (req, res) => {
+  try {
+    const recipes = db.craftRecipes.getEnabled();
+
+    // Group recipes by category
+    const categories = {};
+    recipes.forEach(recipe => {
+      const category = recipe.category || 'Uncategorized';
+      if (!categories[category]) {
+        categories[category] = {
+          name: category,
+          recipeCount: 0,
+          recipeIds: []
+        };
+      }
+      categories[category].recipeCount++;
+      categories[category].recipeIds.push(recipe.id);
+    });
+
+    // Convert to array
+    const categoriesArray = Object.values(categories);
+
+    res.json({ success: true, categories: categoriesArray });
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * GET /api/factory/recipes
  * Get all enabled recipes with user's crafting ability
- * Query params: wallet (optional)
+ * Query params: wallet (optional), category (optional)
  */
 app.get('/api/factory/recipes', async (req, res) => {
   try {
-    const { wallet } = req.query;
-    const recipes = db.craftRecipes.getEnabled();
+    const { wallet, category } = req.query;
+    let recipes = db.craftRecipes.getEnabled();
+
+    // Filter by category if specified
+    if (category) {
+      recipes = recipes.filter(r => (r.category || 'Uncategorized') === category);
+    }
 
     // If no wallet provided, just return recipes without user data
     if (!wallet) {

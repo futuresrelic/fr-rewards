@@ -402,6 +402,7 @@ function initializeTables() {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           description TEXT,
+          category TEXT DEFAULT 'Uncategorized',
           ingredients TEXT NOT NULL,
           results TEXT NOT NULL,
           max_batch_multiplier INTEGER DEFAULT 1,
@@ -414,6 +415,21 @@ function initializeTables() {
       `);
 
       console.log('✅ craft_recipes table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Add category column to craft_recipes if it doesn't exist
+  try {
+    const hasCategory = db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('craft_recipes') WHERE name='category'
+    `).get();
+
+    if (hasCategory.count === 0) {
+      console.log('🔄 Adding category column to craft_recipes...');
+      db.exec(`ALTER TABLE craft_recipes ADD COLUMN category TEXT DEFAULT 'Uncategorized'`);
+      console.log('✅ category column added');
     }
   } catch (error) {
     console.warn('⚠️ Migration warning:', error.message);
