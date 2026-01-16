@@ -2857,35 +2857,65 @@ app.get('/api/factory/templates', async (req, res) => {
     const fetch = require('node-fetch');
     const templateCache = {};
 
-    // Batch fetch (max 100 per request)
-    const batchSize = 100;
+    // Multiple API endpoints as fallbacks
+    const apiEndpoints = [
+      'https://aa-wax-public1.neftyblocks.com',
+      'https://wax.api.atomicassets.io',
+      'https://atomic-wax-mainnet.wecan.dev'
+    ];
+
+    // Batch fetch (max 50 per request for reliability)
+    const batchSize = 50;
     for (let i = 0; i < templateIds.length; i += batchSize) {
       const batch = templateIds.slice(i, i + batchSize);
       const idsParam = batch.join(',');
 
-      try {
-        const response = await fetch(
-          `https://wax.api.atomicassets.io/atomicassets/v1/templates?ids=${idsParam}&collection_name=futuresrelic`
-        );
+      let fetchSucceeded = false;
 
-        if (!response.ok) {
-          console.warn(`Failed to fetch template batch: ${response.status}`);
-          continue;
+      // Try each API endpoint until one succeeds
+      for (const apiUrl of apiEndpoints) {
+        if (fetchSucceeded) break;
+
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+          const response = await fetch(
+            `${apiUrl}/atomicassets/v1/templates?ids=${idsParam}&collection_name=futuresrelic`,
+            { signal: controller.signal }
+          );
+
+          clearTimeout(timeout);
+
+          if (!response.ok) {
+            console.warn(`Failed to fetch from ${apiUrl}: ${response.status}`);
+            continue;
+          }
+
+          const data = await response.json();
+
+          if (data.data) {
+            data.data.forEach(template => {
+              templateCache[template.template_id] = {
+                name: template.immutable_data?.name || template.name || `Template ${template.template_id}`,
+                img: template.immutable_data?.img || template.immutable_data?.image,
+                video: template.immutable_data?.video
+              };
+            });
+            console.log(`✅ Fetched ${data.data.length} templates from ${apiUrl}`);
+            fetchSucceeded = true;
+          }
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            console.warn(`Timeout fetching from ${apiUrl}`);
+          } else {
+            console.warn(`Failed to fetch from ${apiUrl}:`, error.message);
+          }
         }
+      }
 
-        const data = await response.json();
-
-        if (data.data) {
-          data.data.forEach(template => {
-            templateCache[template.template_id] = {
-              name: template.immutable_data?.name || template.name || `Template ${template.template_id}`,
-              img: template.immutable_data?.img || template.immutable_data?.image,
-              video: template.immutable_data?.video
-            };
-          });
-        }
-      } catch (error) {
-        console.warn('Failed to fetch template batch:', error.message);
+      if (!fetchSucceeded) {
+        console.error(`Failed to fetch batch ${i / batchSize + 1} from all API endpoints`);
       }
     }
 
