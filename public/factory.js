@@ -272,31 +272,55 @@ async function startCraft(recipe, batchCount) {
 
     const userAssets = data.data || [];
 
-    // Fetch template data for user's assets (for mint numbers and images)
-    const assetIds = userAssets.map(a => a.asset_id).join(',');
-    let enrichedAssets = userAssets;
+    // FILTER FIRST: Only get assets matching recipe templates (before enriching!)
+    const requiredTemplateIds = new Set(recipe.ingredients.map(ing => ing.template_id.toString()));
+    const relevantAssets = userAssets.filter(asset =>
+      asset.template && requiredTemplateIds.has(asset.template.template_id.toString())
+    );
 
-    try {
-      const atomicResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets?ids=${assetIds}&limit=1000`);
-      const atomicData = await atomicResponse.json();
+    console.log(`Filtered ${userAssets.length} assets down to ${relevantAssets.length} relevant for recipe`);
 
-      if (atomicData.data) {
-        // Merge template data with blockchain assets
-        enrichedAssets = userAssets.map(asset => {
-          const atomicAsset = atomicData.data.find(a => a.asset_id === asset.asset_id);
-          if (atomicAsset) {
-            return {
-              ...asset,
-              template: atomicAsset.template,
-              data: atomicAsset.data,
-              template_mint: atomicAsset.template_mint
-            };
+    // Enrich only the relevant assets (much smaller set!)
+    let enrichedAssets = relevantAssets;
+
+    if (relevantAssets.length > 0) {
+      showProcessingModal('Loading Assets', `Enriching ${relevantAssets.length} assets with mint data...<br><small style="color: var(--text-secondary);">Almost there!</small>`);
+
+      // Fetch in batches of 100 to avoid URL length limits
+      const batchSize = 100;
+      const enrichedBatches = [];
+
+      for (let i = 0; i < relevantAssets.length; i += batchSize) {
+        const batch = relevantAssets.slice(i, i + batchSize);
+        const assetIds = batch.map(a => a.asset_id).join(',');
+
+        try {
+          const atomicResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets?ids=${assetIds}`);
+          const atomicData = await atomicResponse.json();
+
+          if (atomicData.data) {
+            const enrichedBatch = batch.map(asset => {
+              const atomicAsset = atomicData.data.find(a => a.asset_id === asset.asset_id);
+              if (atomicAsset) {
+                return {
+                  ...asset,
+                  template: atomicAsset.template,
+                  data: atomicAsset.data,
+                  template_mint: atomicAsset.template_mint
+                };
+              }
+              return asset;
+            });
+            enrichedBatches.push(...enrichedBatch);
           }
-          return asset;
-        });
+        } catch (err) {
+          console.warn(`Failed to enrich batch ${i / batchSize + 1}:`, err);
+          enrichedBatches.push(...batch); // Use unenriched if fetch fails
+        }
       }
-    } catch (err) {
-      console.warn('Failed to enrich assets with template data:', err);
+
+      enrichedAssets = enrichedBatches;
+      console.log(`✅ Enriched ${enrichedAssets.length} assets with mint data`);
     }
 
     // Filter and group assets by template
