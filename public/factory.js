@@ -53,30 +53,21 @@ document.getElementById('disconnect-btn').addEventListener('click', () => {
   document.getElementById('factory-content').style.display = 'none';
 });
 
-// Load recipes
+// Load categories (lightweight - no asset checking!)
 async function loadRecipes() {
   const loadingEl = document.getElementById('loading-recipes');
   loadingEl.style.display = 'block';
-  loadingEl.innerHTML = '<p>⏳ Loading recipes...</p><div style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem;">Checking your assets on blockchain...</div>';
+  loadingEl.innerHTML = '<p>⏳ Loading recipe categories...</p>';
 
   document.getElementById('recipes-container').style.display = 'none';
   document.getElementById('no-recipes').style.display = 'none';
 
   try {
-    const response = await fetch(`${API_URL}/api/factory/recipes?wallet=${currentAccount}`);
+    const response = await fetch(`${API_URL}/api/factory/categories`);
     const data = await response.json();
 
-    if (response.ok && data.recipes.length > 0) {
-      // Update loading message
-      loadingEl.innerHTML = '<p>⏳ Loading template data...</p><div style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem;">Fetching images and metadata...</div>';
-
-      // Fetch template data for all unique template IDs
-      await fetchTemplateData(data.recipes);
-
-      // Final update
-      loadingEl.innerHTML = '<p>✅ Ready!</p>';
-
-      displayRecipes(data.recipes);
+    if (response.ok && data.categories.length > 0) {
+      displayCategories(data.categories);
       document.getElementById('loading-recipes').style.display = 'none';
       document.getElementById('recipes-container').style.display = 'block';
     } else {
@@ -85,6 +76,92 @@ async function loadRecipes() {
     }
   } catch (error) {
     document.getElementById('loading-recipes').innerHTML = `<p style="color: #f87171;">❌ Error: ${error.message}</p>`;
+  }
+}
+
+// Display categories as collapsible cards
+function displayCategories(categories) {
+  const container = document.getElementById('recipes-container');
+
+  const html = categories.map(category => `
+    <div class="card" style="margin-bottom: 20px;">
+      <div
+        style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 20px;"
+        onclick="toggleCategory('${category.name}')"
+      >
+        <div>
+          <h3 style="margin: 0; font-size: 1.3rem;">${category.name}</h3>
+          <p style="margin: 5px 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
+            ${category.recipeCount} recipe${category.recipeCount !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div id="category-icon-${category.name.replace(/\s+/g, '-')}" style="font-size: 1.5rem;">▶</div>
+      </div>
+
+      <div id="category-${category.name.replace(/\s+/g, '-')}" style="display: none; padding: 0 20px 20px 20px; border-top: 1px solid var(--border);">
+        <p style="text-align: center; padding: 20px; color: var(--text-secondary);">
+          ⏳ Click to load recipes...
+        </p>
+      </div>
+    </div>
+  `).join('');
+
+  container.innerHTML = html;
+}
+
+// Toggle category expansion
+const loadedCategories = new Set();
+
+async function toggleCategory(categoryName) {
+  const categoryId = categoryName.replace(/\s+/g, '-');
+  const categoryEl = document.getElementById(`category-${categoryId}`);
+  const iconEl = document.getElementById(`category-icon-${categoryId}`);
+
+  if (categoryEl.style.display === 'none') {
+    // Expand category
+    categoryEl.style.display = 'block';
+    iconEl.textContent = '▼';
+
+    // Load recipes if not already loaded
+    if (!loadedCategories.has(categoryName)) {
+      await loadCategoryRecipes(categoryName, categoryEl);
+      loadedCategories.add(categoryName);
+    }
+  } else {
+    // Collapse category
+    categoryEl.style.display = 'none';
+    iconEl.textContent = '▶';
+  }
+}
+
+// Load recipes for a specific category
+async function loadCategoryRecipes(categoryName, containerEl) {
+  // Show loading state
+  containerEl.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">⏳ Loading recipes and checking assets...</p>';
+
+  try {
+    // Fetch recipes for this category with asset checking
+    const response = await fetch(`${API_URL}/api/factory/recipes?wallet=${currentAccount}&category=${encodeURIComponent(categoryName)}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to fetch recipes');
+    }
+
+    const recipes = data.recipes || [];
+
+    if (recipes.length === 0) {
+      containerEl.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">No recipes found in this category.</p>';
+      return;
+    }
+
+    // Fetch template data for images and names
+    await fetchTemplateData(recipes);
+
+    // Render recipes in this category container
+    displayRecipesInContainer(recipes, containerEl);
+  } catch (error) {
+    containerEl.innerHTML = `<p style="text-align: center; padding: 20px; color: #f87171;">❌ Error: ${error.message}</p>`;
   }
 }
 
@@ -144,9 +221,8 @@ function getTemplateInfo(templateId) {
   };
 }
 
-// Display recipes
-function displayRecipes(recipes) {
-  const container = document.getElementById('recipes-container');
+// Display recipes in a specific container element
+function displayRecipesInContainer(recipes, containerEl) {
   let html = '';
 
   recipes.forEach(recipe => {
@@ -240,10 +316,10 @@ function displayRecipes(recipes) {
     `;
   });
 
-  container.innerHTML = html;
+  containerEl.innerHTML = html;
 
   // Add craft button listeners
-  document.querySelectorAll('.craft-btn').forEach(btn => {
+  containerEl.querySelectorAll('.craft-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const recipeId = parseInt(btn.dataset.recipeId);
       const batchCount = parseInt(btn.dataset.batch);
@@ -251,6 +327,12 @@ function displayRecipes(recipes) {
       startCraft(recipe, batchCount);
     });
   });
+}
+
+// Legacy display function for backward compatibility
+function displayRecipes(recipes) {
+  const container = document.getElementById('recipes-container');
+  displayRecipesInContainer(recipes, container);
 }
 
 // Start craft
