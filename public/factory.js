@@ -7,12 +7,35 @@ let currentAccount = null;
 let currentRecipe = null;
 let currentBatchCount = 1;
 let selectedAssets = [];
+let templateCache = {}; // Cache template data
+
+// Check for saved login on page load
+window.addEventListener('DOMContentLoaded', async () => {
+  const savedAccount = localStorage.getItem('factory_account');
+  if (savedAccount) {
+    try {
+      // Try auto-login
+      const userAccount = await wax.login();
+      if (userAccount === savedAccount) {
+        currentAccount = userAccount;
+        document.getElementById('connected-wallet').textContent = userAccount;
+        document.getElementById('login-section').style.display = 'none';
+        document.getElementById('factory-content').style.display = 'block';
+        loadRecipes();
+      }
+    } catch (error) {
+      // Auto-login failed, clear saved account
+      localStorage.removeItem('factory_account');
+    }
+  }
+});
 
 // Login
 document.getElementById('login-btn').addEventListener('click', async () => {
   try {
     const userAccount = await wax.login();
     currentAccount = userAccount;
+    localStorage.setItem('factory_account', userAccount); // Save login
     document.getElementById('connected-wallet').textContent = userAccount;
     document.getElementById('login-section').style.display = 'none';
     document.getElementById('factory-content').style.display = 'block';
@@ -25,13 +48,17 @@ document.getElementById('login-btn').addEventListener('click', async () => {
 // Disconnect
 document.getElementById('disconnect-btn').addEventListener('click', () => {
   currentAccount = null;
+  localStorage.removeItem('factory_account'); // Clear saved login
   document.getElementById('login-section').style.display = 'block';
   document.getElementById('factory-content').style.display = 'none';
 });
 
 // Load recipes
 async function loadRecipes() {
-  document.getElementById('loading-recipes').style.display = 'block';
+  const loadingEl = document.getElementById('loading-recipes');
+  loadingEl.style.display = 'block';
+  loadingEl.innerHTML = '<p>Loading recipes...</p><div style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem;">Checking your assets on blockchain...</div>';
+
   document.getElementById('recipes-container').style.display = 'none';
   document.getElementById('no-recipes').style.display = 'none';
 
@@ -40,6 +67,9 @@ async function loadRecipes() {
     const data = await response.json();
 
     if (response.ok && data.recipes.length > 0) {
+      // Fetch template data for all unique template IDs
+      await fetchTemplateData(data.recipes);
+
       displayRecipes(data.recipes);
       document.getElementById('loading-recipes').style.display = 'none';
       document.getElementById('recipes-container').style.display = 'block';
@@ -50,6 +80,67 @@ async function loadRecipes() {
   } catch (error) {
     document.getElementById('loading-recipes').innerHTML = `<p style="color: #f87171;">Error: ${error.message}</p>`;
   }
+}
+
+// Fetch template data for images and names
+async function fetchTemplateData(recipes) {
+  const templateIds = new Set();
+
+  // Collect all unique template IDs
+  recipes.forEach(recipe => {
+    recipe.ingredients_enriched.forEach(ing => templateIds.add(ing.template_id));
+    recipe.results.forEach(res => templateIds.add(res.template_id));
+  });
+
+  // Fetch in batches
+  const idsArray = Array.from(templateIds);
+  const batchSize = 100;
+
+  for (let i = 0; i < idsArray.length; i += batchSize) {
+    const batch = idsArray.slice(i, i + batchSize);
+    const ids = batch.join(',');
+
+    try {
+      const response = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/templates?ids=${ids}&collection_name=futuresrelic`);
+      const data = await response.json();
+
+      if (data.data) {
+        data.data.forEach(template => {
+          templateCache[template.template_id] = {
+            name: template.immutable_data?.name || template.name || `Template ${template.template_id}`,
+            img: template.immutable_data?.img || template.immutable_data?.image,
+            video: template.immutable_data?.video
+          };
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to fetch template batch:', error);
+    }
+  }
+}
+
+// Get IPFS URL
+function getIpfsUrl(hash) {
+  if (!hash) return null;
+  const cleanHash = hash.replace('ipfs://', '');
+  return `https://ipfs.io/ipfs/${cleanHash}`;
+}
+
+// Get template info
+function getTemplateInfo(templateId) {
+  const cached = templateCache[templateId];
+  if (cached) {
+    return {
+      name: cached.name,
+      media: cached.video ? getIpfsUrl(cached.video) : (cached.img ? getIpfsUrl(cached.img) : null),
+      isVideo: !!cached.video
+    };
+  }
+  return {
+    name: `Template ${templateId}`,
+    media: null,
+    isVideo: false
+  };
 }
 
 // Display recipes
@@ -77,10 +168,22 @@ function displayRecipes(recipes) {
             <h3 style="margin: 0 0 10px 0;">Ingredients Required:</h3>
             ${recipe.ingredients_enriched.map(ing => {
               const hasEnough = ing.owned >= ing.amount;
+              const templateInfo = getTemplateInfo(ing.template_id);
               return `
-                <div style="display: flex; justify-content: space-between; padding: 8px; background: var(--bg-dark); border-radius: 6px; margin-bottom: 5px;">
-                  <span>Template ${ing.template_id} x${ing.amount}</span>
-                  <span style="color: ${hasEnough ? '#4ade80' : '#f87171'};">${hasEnough ? '✅' : '❌'} You have: ${ing.owned}</span>
+                <div style="display: flex; gap: 10px; padding: 10px; background: var(--bg-dark); border-radius: 6px; margin-bottom: 8px;">
+                  ${templateInfo.media ? `
+                    ${templateInfo.isVideo ?
+                      `<video src="${templateInfo.media}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;" muted autoplay loop></video>` :
+                      `<img src="${templateInfo.media}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;" alt="${templateInfo.name}">`
+                    }
+                  ` : `
+                    <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.1); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem;">No Media</div>
+                  `}
+                  <div style="flex: 1;">
+                    <strong>${templateInfo.name}</strong>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">Template ${ing.template_id} x${ing.amount}</div>
+                    <div style="font-size: 0.85rem; color: ${hasEnough ? '#4ade80' : '#f87171'};">${hasEnough ? '✅' : '❌'} You have: ${ing.owned}</div>
+                  </div>
                 </div>
               `;
             }).join('')}
@@ -88,11 +191,25 @@ function displayRecipes(recipes) {
 
           <div>
             <h3 style="margin: 0 0 10px 0;">Results:</h3>
-            ${recipe.results.map(res => `
-              <div style="padding: 8px; background: var(--bg-dark); border-radius: 6px; margin-bottom: 5px;">
-                Template ${res.template_id} x${res.amount}${res.name_override ? ` (${res.name_override})` : ''}
-              </div>
-            `).join('')}
+            ${recipe.results.map(res => {
+              const templateInfo = getTemplateInfo(res.template_id);
+              return `
+                <div style="display: flex; gap: 10px; padding: 10px; background: var(--bg-dark); border-radius: 6px; margin-bottom: 8px;">
+                  ${templateInfo.media ? `
+                    ${templateInfo.isVideo ?
+                      `<video src="${templateInfo.media}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;" muted autoplay loop></video>` :
+                      `<img src="${templateInfo.media}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;" alt="${templateInfo.name}">`
+                    }
+                  ` : `
+                    <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.1); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem;">No Media</div>
+                  `}
+                  <div style="flex: 1;">
+                    <strong>${res.name_override || templateInfo.name}</strong>
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">Template ${res.template_id} x${res.amount}</div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
           </div>
         </div>
 
@@ -141,7 +258,7 @@ async function startCraft(recipe, batchCount) {
   currentBatchCount = batchCount;
 
   // Show processing modal
-  showProcessingModal('Loading Assets', 'Fetching your assets...');
+  showProcessingModal('Loading Assets', 'Fetching your assets from blockchain...<br><small style="color: var(--text-secondary);">This may take a moment</small>');
 
   try {
     // Fetch user's assets
@@ -154,13 +271,48 @@ async function startCraft(recipe, batchCount) {
 
     const userAssets = data.data || [];
 
+    // Fetch template data for user's assets (for mint numbers and images)
+    const assetIds = userAssets.map(a => a.asset_id).join(',');
+    let enrichedAssets = userAssets;
+
+    try {
+      const atomicResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets?ids=${assetIds}&limit=1000`);
+      const atomicData = await atomicResponse.json();
+
+      if (atomicData.data) {
+        // Merge template data with blockchain assets
+        enrichedAssets = userAssets.map(asset => {
+          const atomicAsset = atomicData.data.find(a => a.asset_id === asset.asset_id);
+          if (atomicAsset) {
+            return {
+              ...asset,
+              template: atomicAsset.template,
+              data: atomicAsset.data,
+              template_mint: atomicAsset.template_mint
+            };
+          }
+          return asset;
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to enrich assets with template data:', err);
+    }
+
     // Filter and group assets by template
     const groupedAssets = {};
     recipe.ingredients.forEach(ing => {
       const templateId = ing.template_id.toString();
-      const matching = userAssets.filter(asset =>
+      const matching = enrichedAssets.filter(asset =>
         asset.template && asset.template.template_id.toString() === templateId
       );
+
+      // Sort by mint number (HIGHEST first - save low mints!)
+      matching.sort((a, b) => {
+        const mintA = a.template_mint || 0;
+        const mintB = b.template_mint || 0;
+        return mintB - mintA; // Descending order
+      });
+
       groupedAssets[templateId] = {
         template_id: templateId,
         needed: ing.amount * batchCount,
@@ -185,17 +337,31 @@ function showAssetSelectionModal(groupedAssets) {
 
   let html = '<div style="margin-bottom: 20px;">';
   html += `<p><strong>Total assets needed:</strong> ${Object.values(groupedAssets).reduce((sum, g) => sum + g.needed, 0)}</p>`;
+  html += '<p style="font-size: 0.9rem; color: var(--text-secondary);">💡 Highest mint numbers are pre-selected to save your low mints!</p>';
   html += '</div>';
 
   // Display grouped assets
   for (const [templateId, group] of Object.entries(groupedAssets)) {
+    const templateInfo = getTemplateInfo(templateId);
+
     html += `
       <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-dark); border-radius: 8px;">
-        <h3 style="margin: 0 0 10px 0;">Template ${templateId} (Need ${group.needed})</h3>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+          ${templateInfo.media ? `
+            ${templateInfo.isVideo ?
+              `<video src="${templateInfo.media}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;" muted autoplay loop></video>` :
+              `<img src="${templateInfo.media}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;" alt="${templateInfo.name}">`
+            }
+          ` : ''}
+          <div>
+            <h3 style="margin: 0;">${templateInfo.name}</h3>
+            <small style="color: var(--text-secondary);">Template ${templateId} - Need ${group.needed}</small>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px;">
     `;
 
-    group.assets.slice(0, group.needed * 2).forEach((asset, idx) => {
+    group.assets.slice(0, Math.max(group.needed * 2, 10)).forEach((asset, idx) => {
       const assetId = asset.asset_id;
       const isAutoSelected = idx < group.needed;
 
@@ -203,8 +369,8 @@ function showAssetSelectionModal(groupedAssets) {
         <div class="asset-checkbox" style="padding: 10px; background: rgba(255,255,255,0.05); border-radius: 6px; cursor: pointer; border: 2px solid ${isAutoSelected ? 'var(--primary)' : 'transparent'};" data-asset-id="${assetId}" data-template-id="${templateId}">
           <label style="cursor: pointer; display: block;">
             <input type="checkbox" class="asset-select" data-asset-id="${assetId}" data-template-id="${templateId}" ${isAutoSelected ? 'checked' : ''} style="margin-right: 5px;">
-            Asset #${assetId}
-            <br><small>Mint: #${asset.template_mint || 'N/A'}</small>
+            <strong>Asset #${assetId}</strong>
+            <br><small style="color: ${isAutoSelected ? '#4ade80' : 'var(--text-secondary)'};">Mint: #${asset.template_mint || 'N/A'}</small>
           </label>
         </div>
       `;
@@ -218,12 +384,12 @@ function showAssetSelectionModal(groupedAssets) {
   }
 
   html += `
-    <div style="margin-top: 20px; padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid var(--primary);">
-      <strong>⚠️ Important:</strong> Selected assets will be transferred to futuresrelic wallet and cannot be recovered.
+    <div style="margin-top: 20px; padding: 15px; background: rgba(248, 113, 113, 0.1); border-radius: 6px; border-left: 3px solid #f87171;">
+      <strong>⚠️ Important:</strong> Selected assets will be transferred to futuresrelic wallet. This action cannot be undone automatically.
     </div>
 
     <div style="display: flex; gap: 10px; margin-top: 20px;">
-      <button id="confirm-craft-btn" class="btn btn-primary">Transfer & Craft</button>
+      <button id="confirm-craft-btn" class="btn btn-primary btn-lg">Transfer & Craft</button>
       <button id="cancel-craft-btn" class="btn btn-secondary">Cancel</button>
     </div>
   `;
@@ -283,12 +449,12 @@ async function executeCraft() {
     const transferTxId = result.transaction_id;
 
     // Update processing
-    showProcessingModal('Step 2: Verifying Transfer', 'Checking blockchain...');
+    showProcessingModal('Step 2: Verifying Transfer', 'Checking blockchain...<br><small style="color: var(--text-secondary);">Waiting for confirmation</small>');
 
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for blockchain confirmation
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for blockchain confirmation
 
     // Call backend to verify + mint
-    showProcessingModal('Step 3: Minting Results', 'Creating your new assets...');
+    showProcessingModal('Step 3: Minting Results', 'Creating your new assets...<br><small style="color: var(--text-secondary);">Using futuresrelic wallet</small>');
 
     const craftResponse = await fetch(`${API_URL}/api/factory/craft`, {
       method: 'POST',
@@ -306,11 +472,16 @@ async function executeCraft() {
 
     if (craftResponse.ok) {
       // Success!
+      const resultsList = craftData.results.map(r => {
+        const templateInfo = getTemplateInfo(r.template_id);
+        return `${templateInfo.name} (Template ${r.template_id}) x${r.amount}`;
+      }).join('<br>');
+
       showProcessingModal('✅ Craft Complete!', `
-        <p style="margin: 15px 0;">Successfully crafted ${currentRecipe.name} x${currentBatchCount}!</p>
-        <div style="margin: 15px 0; padding: 15px; background: var(--bg-dark); border-radius: 6px;">
+        <p style="margin: 15px 0; color: #4ade80;">Successfully crafted ${currentRecipe.name} x${currentBatchCount}!</p>
+        <div style="margin: 15px 0; padding: 15px; background: var(--bg-dark); border-radius: 6px; text-align: left;">
           <strong>Results:</strong><br>
-          ${craftData.results.map(r => `Template ${r.template_id} x${r.amount}`).join('<br>')}
+          ${resultsList}
         </div>
         <p style="font-size: 0.85rem;">
           Mint TX: <a href="https://waxblock.io/transaction/${craftData.mint_transaction_id}" target="_blank" style="color: var(--primary);">${craftData.mint_transaction_id.substr(0, 16)}...</a>
