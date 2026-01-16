@@ -136,6 +136,7 @@ document.getElementById('save-recipe-btn').addEventListener('click', async () =>
     // Collect data
     const name = document.getElementById('recipe-name').value.trim();
     const description = document.getElementById('recipe-description').value.trim();
+    const category = document.getElementById('recipe-category').value.trim() || 'Uncategorized';
     const maxBatch = parseInt(document.getElementById('max-batch').value);
     const cooldownEnabled = document.getElementById('cooldown-enabled').checked;
     const cooldownHours = cooldownEnabled ? parseInt(document.getElementById('cooldown-hours').value) || null : null;
@@ -191,6 +192,7 @@ document.getElementById('save-recipe-btn').addEventListener('click', async () =>
       body: JSON.stringify({
         name,
         description,
+        category,
         ingredients,
         results,
         max_batch_multiplier: maxBatch,
@@ -221,6 +223,7 @@ document.getElementById('save-recipe-btn').addEventListener('click', async () =>
 function resetCreateForm() {
   document.getElementById('recipe-name').value = '';
   document.getElementById('recipe-description').value = '';
+  document.getElementById('recipe-category').value = 'Uncategorized';
   document.getElementById('max-batch').value = '5';
   document.getElementById('cooldown-enabled').checked = false;
   document.getElementById('cooldown-hours').value = '';
@@ -269,12 +272,15 @@ function displayRecipes(recipes) {
       ? `${recipe.cooldown_hours}h cooldown`
       : 'No cooldown';
 
+    const categoryBadge = `<span style="background: rgba(139, 92, 246, 0.2); color: #a78bfa; padding: 2px 8px; border-radius: 4px; font-size: 0.85rem;">📁 ${recipe.category || 'Uncategorized'}</span>`;
+
     html += `
       <div class="recipe-card" style="background: var(--bg-dark); padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1);">
         <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
           <div>
             <h3 style="margin: 0; color: var(--primary);">${recipe.name}</h3>
             ${recipe.description ? `<p style="margin: 5px 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">${recipe.description}</p>` : ''}
+            <div style="margin-top: 8px;">${categoryBadge}</div>
           </div>
           <div style="text-align: right;">
             ${statusBadge}
@@ -362,6 +368,12 @@ async function editRecipe(recipeId) {
       <div class="form-group">
         <label>Description:</label>
         <textarea id="edit-recipe-description" class="form-control" rows="2">${recipe.description || ''}</textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Category:</label>
+        <input type="text" id="edit-recipe-category" class="form-control" value="${recipe.category || 'Uncategorized'}">
+        <small style="color: var(--text-secondary);">Group related recipes together for easier navigation</small>
       </div>
 
       <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
@@ -473,6 +485,7 @@ async function updateRecipe() {
   try {
     const name = document.getElementById('edit-recipe-name').value.trim();
     const description = document.getElementById('edit-recipe-description').value.trim();
+    const category = document.getElementById('edit-recipe-category').value.trim() || 'Uncategorized';
     const maxBatch = parseInt(document.getElementById('edit-max-batch').value);
     const cooldownEnabled = document.getElementById('edit-cooldown-enabled').checked;
     const cooldownHours = cooldownEnabled ? parseInt(document.getElementById('edit-cooldown-hours').value) || null : null;
@@ -512,6 +525,7 @@ async function updateRecipe() {
       body: JSON.stringify({
         name,
         description,
+        category,
         ingredients,
         results,
         max_batch_multiplier: maxBatch,
