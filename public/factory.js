@@ -57,7 +57,7 @@ document.getElementById('disconnect-btn').addEventListener('click', () => {
 async function loadRecipes() {
   const loadingEl = document.getElementById('loading-recipes');
   loadingEl.style.display = 'block';
-  loadingEl.innerHTML = '<p>Loading recipes...</p><div style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem;">Checking your assets on blockchain...</div>';
+  loadingEl.innerHTML = '<p>⏳ Loading recipes...</p><div style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem;">Checking your assets on blockchain...</div>';
 
   document.getElementById('recipes-container').style.display = 'none';
   document.getElementById('no-recipes').style.display = 'none';
@@ -67,8 +67,14 @@ async function loadRecipes() {
     const data = await response.json();
 
     if (response.ok && data.recipes.length > 0) {
+      // Update loading message
+      loadingEl.innerHTML = '<p>⏳ Loading template data...</p><div style="margin-top: 10px; color: var(--text-secondary); font-size: 0.9rem;">Fetching images and metadata...</div>';
+
       // Fetch template data for all unique template IDs
       await fetchTemplateData(data.recipes);
+
+      // Final update
+      loadingEl.innerHTML = '<p>✅ Ready!</p>';
 
       displayRecipes(data.recipes);
       document.getElementById('loading-recipes').style.display = 'none';
@@ -78,7 +84,7 @@ async function loadRecipes() {
       document.getElementById('no-recipes').style.display = 'block';
     }
   } catch (error) {
-    document.getElementById('loading-recipes').innerHTML = `<p style="color: #f87171;">Error: ${error.message}</p>`;
+    document.getElementById('loading-recipes').innerHTML = `<p style="color: #f87171;">❌ Error: ${error.message}</p>`;
   }
 }
 
@@ -92,30 +98,25 @@ async function fetchTemplateData(recipes) {
     recipe.results.forEach(res => templateIds.add(res.template_id));
   });
 
-  // Fetch in batches
+  if (templateIds.size === 0) {
+    return;
+  }
+
+  // Fetch all template data from backend (to avoid CORS)
   const idsArray = Array.from(templateIds);
-  const batchSize = 100;
+  const ids = idsArray.join(',');
 
-  for (let i = 0; i < idsArray.length; i += batchSize) {
-    const batch = idsArray.slice(i, i + batchSize);
-    const ids = batch.join(',');
+  try {
+    const response = await fetch(`/api/factory/templates?ids=${ids}`);
+    const data = await response.json();
 
-    try {
-      const response = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/templates?ids=${ids}&collection_name=futuresrelic`);
-      const data = await response.json();
-
-      if (data.data) {
-        data.data.forEach(template => {
-          templateCache[template.template_id] = {
-            name: template.immutable_data?.name || template.name || `Template ${template.template_id}`,
-            img: template.immutable_data?.img || template.immutable_data?.image,
-            video: template.immutable_data?.video
-          };
-        });
-      }
-    } catch (error) {
-      console.warn('Failed to fetch template batch:', error);
+    if (data.success && data.templates) {
+      // Merge into template cache
+      Object.assign(templateCache, data.templates);
+      console.log(`✅ Loaded data for ${Object.keys(data.templates).length} templates`);
     }
+  } catch (error) {
+    console.warn('Failed to fetch template data:', error);
   }
 }
 

@@ -2836,6 +2836,67 @@ app.get('/api/factory/recipes', async (req, res) => {
 });
 
 /**
+ * GET /api/factory/templates
+ * Fetch template data from AtomicAssets API (server-side to avoid CORS)
+ * Query params: ids (comma-separated template IDs)
+ */
+app.get('/api/factory/templates', async (req, res) => {
+  try {
+    const { ids } = req.query;
+
+    if (!ids) {
+      return res.status(400).json({ error: 'Template IDs required', success: false });
+    }
+
+    const templateIds = ids.split(',').filter(id => id.trim());
+    if (templateIds.length === 0) {
+      return res.json({ success: true, templates: {} });
+    }
+
+    // Fetch template data from AtomicAssets API
+    const fetch = require('node-fetch');
+    const templateCache = {};
+
+    // Batch fetch (max 100 per request)
+    const batchSize = 100;
+    for (let i = 0; i < templateIds.length; i += batchSize) {
+      const batch = templateIds.slice(i, i + batchSize);
+      const idsParam = batch.join(',');
+
+      try {
+        const response = await fetch(
+          `https://wax.api.atomicassets.io/atomicassets/v1/templates?ids=${idsParam}&collection_name=futuresrelic`
+        );
+
+        if (!response.ok) {
+          console.warn(`Failed to fetch template batch: ${response.status}`);
+          continue;
+        }
+
+        const data = await response.json();
+
+        if (data.data) {
+          data.data.forEach(template => {
+            templateCache[template.template_id] = {
+              name: template.immutable_data?.name || template.name || `Template ${template.template_id}`,
+              img: template.immutable_data?.img || template.immutable_data?.image,
+              video: template.immutable_data?.video
+            };
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to fetch template batch:', error.message);
+      }
+    }
+
+    res.json({ success: true, templates: templateCache });
+  } catch (error) {
+    console.error('Error fetching templates:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * POST /api/factory/craft
  * Execute a craft: verify transfer, then mint results
  * Body: {
