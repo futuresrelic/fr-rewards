@@ -2946,22 +2946,12 @@ app.get('/api/factory/recipe-assets', async (req, res) => {
       return res.status(404).json({ error: 'Recipe not found', success: false });
     }
 
-    const templateIds = recipe.ingredients.map(ing => ing.template_id.toString());
+    const templateIds = recipe.ingredients.map(ing => parseInt(ing.template_id));
     console.log(`📦 Fetching assets for recipe ${recipe_id}, templates: [${templateIds.join(', ')}]`);
 
-    // Fetch ALL user's assets (basic data, no mint numbers yet)
-    const allAssets = await wax.getUserAssetsLive(wallet, 'futuresrelic');
-    console.log(`   Found ${allAssets.length} total assets`);
-
-    // Filter to only assets matching recipe templates
-    const relevantAssets = allAssets.filter(asset =>
-      asset.template && templateIds.includes(asset.template.template_id.toString())
-    );
-    console.log(`   Filtered to ${relevantAssets.length} relevant assets`);
-
-    // Now enrich ONLY the relevant assets with mint numbers
-    const enrichedAssets = await wax.enrichAssetsWithMints(relevantAssets);
-    console.log(`   ✅ Enriched ${enrichedAssets.length} assets with mint data`);
+    // getUserAssetsLive filters by template AND enriches with mints automatically!
+    const enrichedAssets = await wax.getUserAssetsLive(wallet, 'futuresrelic', templateIds);
+    console.log(`   ✅ Found and enriched ${enrichedAssets.length} assets`);
 
     res.json({ success: true, assets: enrichedAssets });
   } catch (error) {
