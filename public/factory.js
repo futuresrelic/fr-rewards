@@ -336,7 +336,7 @@ document.getElementById('close-modal').addEventListener('click', closeModal);
 function showProcessingModal(title, content) {
   document.getElementById('processing-title').textContent = title;
   document.getElementById('processing-content').innerHTML = content;
-  document.getElementById('processing-modal').style.display = 'flex';
+  document.getElementById('processing-modal').style.display = 'block';
 }
 
 function hideProcessingModal() {
