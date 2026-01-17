@@ -130,6 +130,36 @@
             </label>
           </div>
 
+          <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
+
+          <h4>🔄 Pool/Swap Mode (Optional)</h4>
+          <p style="color: var(--text-secondary); margin: 0 0 15px 0; font-size: 0.9rem;">
+            Enable this to allow users to swap assets from a pool instead of minting new ones. Great for circular economy!
+          </p>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="pool-mode-enabled"> Enable Pool/Swap Mode
+            </label>
+          </div>
+
+          <div id="pool-config-section" style="display: none; background: var(--bg-dark); padding: 15px; border-radius: 8px; margin-top: 10px;">
+            <div class="form-group">
+              <label for="pool-wallet">Pool Wallet:</label>
+              <input type="text" id="pool-wallet" class="form-control" placeholder="e.g., pool.fr">
+              <small style="color: var(--text-secondary);">Wallet containing assets available for swapping</small>
+            </div>
+
+            <h5 style="margin: 15px 0 10px 0;">Pool Ingredients (Cheaper Option)</h5>
+            <p style="color: var(--text-secondary); margin: 0 0 10px 0; font-size: 0.85rem;">
+              Define ingredients for swap mode. Example: 3x Seals for swap vs 4x Seals for mint
+            </p>
+            <div id="pool-ingredients-list">
+              <!-- Pool ingredient rows will be added here -->
+            </div>
+            <button type="button" id="add-pool-ingredient-btn" class="btn btn-secondary btn-sm">+ Add Pool Ingredient</button>
+          </div>
+
           <div style="display: flex; gap: 10px; margin-top: 20px;">
             <button id="save-recipe-btn" class="btn btn-primary">Save Recipe</button>
             <button id="cancel-create-btn" class="btn btn-secondary">Cancel</button>

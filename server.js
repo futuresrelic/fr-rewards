@@ -3012,28 +3012,35 @@ app.get('/api/factory/recipe-assets', async (req, res) => {
 
 /**
  * POST /api/factory/craft
- * Execute a craft: verify transfer, then mint results
+ * Execute a craft: verify transfer, then mint results OR swap from pool
  * Body: {
  *   recipe_id: number,
  *   batch_count: number,
  *   transfer_transaction_id: string,
  *   asset_ids: string[],
- *   user_wallet: string
+ *   user_wallet: string,
+ *   mode: 'mint' | 'swap' (optional, defaults to 'mint')
  * }
  */
 app.post('/api/factory/craft', async (req, res) => {
   try {
-    const { recipe_id, batch_count, transfer_transaction_id, asset_ids, user_wallet } = req.body;
+    const { recipe_id, batch_count, transfer_transaction_id, asset_ids, user_wallet, mode = 'mint' } = req.body;
 
     console.log('🏭 FACTORY CRAFT REQUEST');
     console.log(`   Recipe ID: ${recipe_id}`);
     console.log(`   Batch Count: ${batch_count}`);
+    console.log(`   Mode: ${mode}`);
     console.log(`   User: ${user_wallet}`);
     console.log(`   Transfer TX: ${transfer_transaction_id}`);
 
     // 1. Validate inputs
     if (!recipe_id || !batch_count || !transfer_transaction_id || !asset_ids || !user_wallet) {
       return res.status(400).json({ error: 'Missing required fields', success: false });
+    }
+
+    // Validate mode
+    if (mode !== 'mint' && mode !== 'swap') {
+      return res.status(400).json({ error: 'Invalid mode. Must be "mint" or "swap"', success: false });
     }
 
     // 2. Get recipe
@@ -3044,6 +3051,16 @@ app.post('/api/factory/craft', async (req, res) => {
 
     if (!recipe.enabled) {
       return res.status(400).json({ error: 'Recipe is disabled', success: false });
+    }
+
+    // Validate swap mode requirements
+    if (mode === 'swap') {
+      if (!recipe.pool_mode_enabled) {
+        return res.status(400).json({ error: 'Pool/swap mode not enabled for this recipe', success: false });
+      }
+      if (!recipe.pool_wallet || !recipe.pool_ingredients) {
+        return res.status(400).json({ error: 'Recipe pool configuration incomplete', success: false });
+      }
     }
 
     // 3. Validate batch count
@@ -3184,9 +3201,10 @@ app.post('/api/factory/craft', async (req, res) => {
       });
     }
 
-    // Verify asset IDs match
+    // Verify asset IDs match (use pool_ingredients for swap mode, regular ingredients for mint mode)
     const transferredAssetIds = validTransfer.asset_ids;
-    const expectedCount = recipe.ingredients.reduce((sum, ing) => sum + ing.amount, 0) * batch_count;
+    const ingredientsToCheck = mode === 'swap' ? recipe.pool_ingredients : recipe.ingredients;
+    const expectedCount = ingredientsToCheck.reduce((sum, ing) => sum + ing.amount, 0) * batch_count;
 
     if (transferredAssetIds.length !== expectedCount) {
       db.craftHistory.update(craftId, {
@@ -3217,37 +3235,96 @@ app.post('/api/factory/craft', async (req, res) => {
 
     console.log('✅ Transfer verification passed!');
 
-    // 9. Update craft record status to pending_mint
+    // 9. Update craft record status
     db.craftHistory.update(craftId, {
-      status: 'pending_mint'
+      status: mode === 'swap' ? 'pending_swap' : 'pending_mint'
     });
 
-    console.log(`📝 Craft record #${craftId} verified, ready for minting`);
+    console.log(`📝 Craft record #${craftId} verified, ready for ${mode}`);
 
-    // 10. Mint results
-    console.log('🔨 Minting results...');
-    const mintTransactions = [];
+    // 10. Execute craft based on mode
+    const transactions = [];
 
     try {
-      for (const result of recipe.results) {
-        const mintCount = result.amount * batch_count;
-        console.log(`   Minting ${mintCount}x Template ${result.template_id}...`);
+      if (mode === 'mint') {
+        // MINT MODE: Mint new assets to user
+        console.log('🔨 Minting results...');
 
-        for (let i = 0; i < mintCount; i++) {
-          const mintResult = await wax.mintNFT(
-            user_wallet,
-            'futuresrelic',
-            result.template_id
-          );
-          mintTransactions.push(mintResult.transaction_id);
+        for (const result of recipe.results) {
+          const mintCount = result.amount * batch_count;
+          console.log(`   Minting ${mintCount}x Template ${result.template_id}...`);
+
+          for (let i = 0; i < mintCount; i++) {
+            const mintResult = await wax.mintNFT(
+              user_wallet,
+              'futuresrelic',
+              result.template_id
+            );
+            transactions.push(mintResult.transaction_id);
+          }
         }
-      }
 
-      console.log('✅ All results minted successfully!');
+        console.log('✅ All results minted successfully!');
+
+      } else {
+        // SWAP MODE: Transfer existing assets from pool to user
+        console.log('🔄 Swapping from pool...');
+
+        // Get pool private key from environment
+        const poolPrivateKey = process.env.POOL_FR_PRIVATE_KEY;
+        if (!poolPrivateKey) {
+          throw new Error('POOL_FR_PRIVATE_KEY not configured in environment');
+        }
+
+        // Get pool wallet name
+        const poolWallet = recipe.pool_wallet;
+        console.log(`   Pool wallet: ${poolWallet}`);
+
+        // Fetch pool assets
+        const resultTemplateIds = recipe.results.map(r => parseInt(r.template_id));
+        const poolAssets = await wax.getUserAssetsLive(poolWallet, 'futuresrelic', resultTemplateIds);
+
+        console.log(`   Found ${poolAssets.length} asset(s) in pool`);
+
+        // Select assets to transfer
+        const assetsToTransfer = [];
+        for (const result of recipe.results) {
+          const templateId = parseInt(result.template_id);
+          const neededCount = result.amount * batch_count;
+
+          const availableAssets = poolAssets.filter(a =>
+            parseInt(a.template.template_id) === templateId &&
+            !assetsToTransfer.includes(a.asset_id)
+          );
+
+          if (availableAssets.length < neededCount) {
+            throw new Error(`Insufficient pool inventory for template ${templateId}. Need ${neededCount}, have ${availableAssets.length}`);
+          }
+
+          // Take the first N assets
+          for (let i = 0; i < neededCount; i++) {
+            assetsToTransfer.push(availableAssets[i].asset_id);
+          }
+        }
+
+        console.log(`   Transferring ${assetsToTransfer.length} asset(s) from pool to user...`);
+
+        // Transfer assets from pool to user
+        const transferResult = await wax.transferNFTs(
+          poolWallet,
+          user_wallet,
+          assetsToTransfer,
+          `Crafted via recipe: ${recipe.name}`,
+          poolPrivateKey
+        );
+
+        transactions.push(transferResult.transaction_id);
+        console.log(`✅ Swap completed! TX: ${transferResult.transaction_id}`);
+      }
 
       // 11. Update craft record as completed
       db.craftHistory.update(craftId, {
-        mint_transaction_id: mintTransactions[0], // Store first mint tx
+        mint_transaction_id: transactions[0], // Store first tx (mint or swap)
         result_info: recipe.results,
         status: 'completed'
       });
@@ -3255,25 +3332,26 @@ app.post('/api/factory/craft', async (req, res) => {
       res.json({
         success: true,
         craft_id: craftId,
-        mint_transaction_id: mintTransactions[0],
-        all_mint_transactions: mintTransactions,
+        mode: mode,
+        transaction_id: transactions[0],
+        all_transactions: transactions,
         results: recipe.results.map(r => ({
           template_id: r.template_id,
           amount: r.amount * batch_count
         }))
       });
 
-    } catch (mintError) {
-      console.error('❌ Mint failed:', mintError);
+    } catch (executionError) {
+      console.error(`❌ ${mode} failed:`, executionError);
 
       // Update craft record as failed
       db.craftHistory.update(craftId, {
         status: 'failed',
-        error_message: mintError.message
+        error_message: executionError.message
       });
 
       return res.status(500).json({
-        error: 'Mint failed: ' + mintError.message,
+        error: `${mode} failed: ` + executionError.message,
         craft_id: craftId,
         success: false,
         note: `Assets have been transferred to ${expectedRecipient}. Contact admin for manual refund.`
@@ -3521,7 +3599,7 @@ app.get('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
  */
 app.post('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
   try {
-    const { name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled } = req.body;
+    const { name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled, pool_mode_enabled, pool_wallet, pool_ingredients } = req.body;
 
     // Validate inputs
     if (!name || !ingredients || !results) {
@@ -3536,6 +3614,16 @@ app.post('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Results must be a non-empty array', success: false });
     }
 
+    // Validate pool mode settings if enabled
+    if (pool_mode_enabled) {
+      if (!pool_wallet) {
+        return res.status(400).json({ error: 'pool_wallet required when pool mode enabled', success: false });
+      }
+      if (!pool_ingredients || !Array.isArray(pool_ingredients) || pool_ingredients.length === 0) {
+        return res.status(400).json({ error: 'pool_ingredients required when pool mode enabled', success: false });
+      }
+    }
+
     const recipeId = db.craftRecipes.create({
       name,
       description,
@@ -3546,10 +3634,13 @@ app.post('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
       max_batch_multiplier: max_batch_multiplier || 1,
       cooldown_hours: cooldown_hours || null,
       cooldown_enabled: cooldown_enabled || false,
-      enabled: enabled !== false // Default to true
+      enabled: enabled !== false, // Default to true
+      pool_mode_enabled: pool_mode_enabled || false,
+      pool_wallet: pool_wallet || null,
+      pool_ingredients: pool_ingredients || null
     });
 
-    console.log(`✅ Created recipe #${recipeId}: ${name}`);
+    console.log(`✅ Created recipe #${recipeId}: ${name}${pool_mode_enabled ? ' (Pool Mode)' : ''}`);
 
     res.json({ success: true, recipe_id: recipeId });
   } catch (error) {
@@ -3565,11 +3656,21 @@ app.post('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
 app.put('/api/admin/factory/recipes/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled } = req.body;
+    const { name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled, pool_mode_enabled, pool_wallet, pool_ingredients } = req.body;
 
     const existing = db.craftRecipes.getById(parseInt(id));
     if (!existing) {
       return res.status(404).json({ error: 'Recipe not found', success: false });
+    }
+
+    // Validate pool mode settings if enabled
+    if (pool_mode_enabled) {
+      if (!pool_wallet) {
+        return res.status(400).json({ error: 'pool_wallet required when pool mode enabled', success: false });
+      }
+      if (!pool_ingredients || !Array.isArray(pool_ingredients) || pool_ingredients.length === 0) {
+        return res.status(400).json({ error: 'pool_ingredients required when pool mode enabled', success: false });
+      }
     }
 
     db.craftRecipes.update(parseInt(id), {
@@ -3582,10 +3683,13 @@ app.put('/api/admin/factory/recipes/:id', authenticateAdmin, async (req, res) =>
       max_batch_multiplier,
       cooldown_hours,
       cooldown_enabled,
-      enabled
+      enabled,
+      pool_mode_enabled: pool_mode_enabled || false,
+      pool_wallet: pool_wallet || null,
+      pool_ingredients: pool_ingredients || null
     });
 
-    console.log(`✅ Updated recipe #${id}: ${name}`);
+    console.log(`✅ Updated recipe #${id}: ${name}${pool_mode_enabled ? ' (Pool Mode)' : ''}`);
 
     res.json({ success: true });
   } catch (error) {
@@ -3614,6 +3718,85 @@ app.delete('/api/admin/factory/recipes/:id', authenticateAdmin, async (req, res)
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting recipe:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/factory/pool-inventory/:recipe_id
+ * Check pool wallet inventory for swap availability
+ */
+app.get('/api/factory/pool-inventory/:recipe_id', async (req, res) => {
+  try {
+    const { recipe_id } = req.params;
+    const { batch_count = 1 } = req.query;
+
+    const recipe = db.craftRecipes.getById(parseInt(recipe_id));
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found', success: false });
+    }
+
+    // If pool mode not enabled, swap not available
+    if (!recipe.pool_mode_enabled) {
+      return res.json({
+        success: true,
+        swap_available: false,
+        reason: 'Pool mode not enabled for this recipe'
+      });
+    }
+
+    // Check pool wallet for result assets
+    const poolWallet = recipe.pool_wallet;
+    const collection = 'futuresrelic';
+
+    // Collect template IDs from results
+    const resultTemplateIds = recipe.results.map(r => parseInt(r.template_id));
+
+    console.log(`🔍 Checking pool inventory for recipe #${recipe_id} (wallet: ${poolWallet})`);
+    console.log(`   Looking for templates: [${resultTemplateIds.join(', ')}]`);
+
+    // Fetch pool wallet assets filtered by result templates
+    const poolAssets = await wax.getUserAssetsLive(poolWallet, collection, resultTemplateIds);
+
+    console.log(`   Found ${poolAssets.length} asset(s) in pool`);
+
+    // Check if pool has enough of each result
+    const availability = {};
+    let allAvailable = true;
+
+    for (const result of recipe.results) {
+      const templateId = parseInt(result.template_id);
+      const requiredCount = result.count * parseInt(batch_count);
+
+      // Count how many of this template are in the pool
+      const available = poolAssets.filter(a => parseInt(a.template.template_id) === templateId);
+      const availableCount = available.length;
+
+      availability[templateId] = {
+        template_id: templateId,
+        template_name: available[0]?.template?.name || `Template ${templateId}`,
+        required: requiredCount,
+        available: availableCount,
+        has_enough: availableCount >= requiredCount
+      };
+
+      if (availableCount < requiredCount) {
+        allAvailable = false;
+      }
+    }
+
+    console.log(`   Swap available: ${allAvailable}`);
+
+    res.json({
+      success: true,
+      swap_available: allAvailable,
+      pool_wallet: poolWallet,
+      availability: Object.values(availability),
+      batch_count: parseInt(batch_count)
+    });
+
+  } catch (error) {
+    console.error('Error checking pool inventory:', error);
     res.status(500).json({ error: error.message, success: false });
   }
 });

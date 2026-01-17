@@ -410,6 +410,9 @@ function initializeTables() {
           cooldown_hours INTEGER,
           cooldown_enabled INTEGER DEFAULT 0,
           enabled INTEGER DEFAULT 1,
+          pool_mode_enabled INTEGER DEFAULT 0,
+          pool_wallet TEXT,
+          pool_ingredients TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -446,6 +449,25 @@ function initializeTables() {
       console.log('🔄 Adding transfer_to_wallet column to craft_recipes...');
       db.exec(`ALTER TABLE craft_recipes ADD COLUMN transfer_to_wallet TEXT DEFAULT 'futuresrelic'`);
       console.log('✅ transfer_to_wallet column added');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Add pool mode columns to craft_recipes if they don't exist
+  try {
+    const hasPoolMode = db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('craft_recipes') WHERE name='pool_mode_enabled'
+    `).get();
+
+    if (hasPoolMode.count === 0) {
+      console.log('🔄 Adding pool mode columns to craft_recipes...');
+      db.exec(`
+        ALTER TABLE craft_recipes ADD COLUMN pool_mode_enabled INTEGER DEFAULT 0;
+        ALTER TABLE craft_recipes ADD COLUMN pool_wallet TEXT;
+        ALTER TABLE craft_recipes ADD COLUMN pool_ingredients TEXT;
+      `);
+      console.log('✅ Pool mode columns added');
     }
   } catch (error) {
     console.warn('⚠️ Migration warning:', error.message);
@@ -1221,6 +1243,7 @@ const craftRecipes = {
     if (recipe) {
       recipe.ingredients = JSON.parse(recipe.ingredients);
       recipe.results = JSON.parse(recipe.results);
+      recipe.pool_ingredients = recipe.pool_ingredients ? JSON.parse(recipe.pool_ingredients) : null;
     }
     return recipe;
   },
@@ -1231,7 +1254,8 @@ const craftRecipes = {
     return recipes.map(recipe => ({
       ...recipe,
       ingredients: JSON.parse(recipe.ingredients),
-      results: JSON.parse(recipe.results)
+      results: JSON.parse(recipe.results),
+      pool_ingredients: recipe.pool_ingredients ? JSON.parse(recipe.pool_ingredients) : null
     }));
   },
 
@@ -1239,8 +1263,8 @@ const craftRecipes = {
   create: (data) => {
     const stmt = db.prepare(`
       INSERT INTO craft_recipes
-      (name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled, pool_mode_enabled, pool_wallet, pool_ingredients)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
@@ -1253,7 +1277,10 @@ const craftRecipes = {
       data.max_batch_multiplier || 1,
       data.cooldown_hours || null,
       data.cooldown_enabled ? 1 : 0,
-      data.enabled ? 1 : 0
+      data.enabled ? 1 : 0,
+      data.pool_mode_enabled ? 1 : 0,
+      data.pool_wallet || null,
+      data.pool_ingredients ? JSON.stringify(data.pool_ingredients) : null
     );
 
     return result.lastInsertRowid;
@@ -1273,6 +1300,9 @@ const craftRecipes = {
           cooldown_hours = ?,
           cooldown_enabled = ?,
           enabled = ?,
+          pool_mode_enabled = ?,
+          pool_wallet = ?,
+          pool_ingredients = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
@@ -1288,6 +1318,9 @@ const craftRecipes = {
       data.cooldown_hours || null,
       data.cooldown_enabled ? 1 : 0,
       data.enabled ? 1 : 0,
+      data.pool_mode_enabled ? 1 : 0,
+      data.pool_wallet || null,
+      data.pool_ingredients ? JSON.stringify(data.pool_ingredients) : null,
       id
     );
   },

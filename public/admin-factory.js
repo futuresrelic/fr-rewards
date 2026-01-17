@@ -89,6 +89,11 @@ document.getElementById('cooldown-enabled').addEventListener('change', (e) => {
   document.getElementById('cooldown-hours-group').style.display = e.target.checked ? 'block' : 'none';
 });
 
+// Pool mode checkbox handler
+document.getElementById('pool-mode-enabled').addEventListener('change', (e) => {
+  document.getElementById('pool-config-section').style.display = e.target.checked ? 'block' : 'none';
+});
+
 // Add ingredient row
 document.getElementById('add-ingredient-btn').addEventListener('click', addIngredientRow);
 
@@ -130,6 +135,26 @@ function addResultRow() {
   container.appendChild(row);
 }
 
+// Add pool ingredient row
+document.getElementById('add-pool-ingredient-btn').addEventListener('click', addPoolIngredientRow);
+
+function addPoolIngredientRow() {
+  const container = document.getElementById('pool-ingredients-list');
+  const row = document.createElement('div');
+  row.className = 'pool-ingredient-row';
+  row.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px; align-items: center;';
+
+  row.innerHTML = `
+    <input type="number" class="form-control pool-ingredient-template" placeholder="Template ID" style="flex: 1;" required>
+    <input type="number" class="form-control pool-ingredient-amount" placeholder="Amount" min="1" value="1" style="width: 100px;" required>
+    <button type="button" class="btn btn-danger btn-sm remove-pool-ingredient" style="width: 32px; height: 32px;">×</button>
+  `;
+
+  row.querySelector('.remove-pool-ingredient').addEventListener('click', () => row.remove());
+
+  container.appendChild(row);
+}
+
 // Save recipe
 document.getElementById('save-recipe-btn').addEventListener('click', async () => {
   try {
@@ -142,6 +167,33 @@ document.getElementById('save-recipe-btn').addEventListener('click', async () =>
     const cooldownEnabled = document.getElementById('cooldown-enabled').checked;
     const cooldownHours = cooldownEnabled ? parseInt(document.getElementById('cooldown-hours').value) || null : null;
     const enabled = document.getElementById('recipe-enabled').checked;
+
+    // Collect pool mode settings
+    const poolModeEnabled = document.getElementById('pool-mode-enabled').checked;
+    const poolWallet = document.getElementById('pool-wallet').value.trim() || null;
+    let poolIngredients = null;
+
+    if (poolModeEnabled) {
+      if (!poolWallet) {
+        showStatus('create-status', 'Pool wallet is required when pool mode is enabled', 'error');
+        return;
+      }
+
+      // Collect pool ingredients
+      poolIngredients = [];
+      document.querySelectorAll('.pool-ingredient-row').forEach(row => {
+        const templateId = parseInt(row.querySelector('.pool-ingredient-template').value);
+        const amount = parseInt(row.querySelector('.pool-ingredient-amount').value);
+        if (templateId && amount) {
+          poolIngredients.push({ template_id: templateId, amount: amount });
+        }
+      });
+
+      if (poolIngredients.length === 0) {
+        showStatus('create-status', 'At least one pool ingredient is required when pool mode is enabled', 'error');
+        return;
+      }
+    }
 
     if (!name) {
       showStatus('create-status', 'Recipe name is required', 'error');
@@ -200,7 +252,10 @@ document.getElementById('save-recipe-btn').addEventListener('click', async () =>
         max_batch_multiplier: maxBatch,
         cooldown_hours: cooldownHours,
         cooldown_enabled: cooldownEnabled,
-        enabled
+        enabled,
+        pool_mode_enabled: poolModeEnabled,
+        pool_wallet: poolWallet,
+        pool_ingredients: poolIngredients
       })
     });
 
@@ -232,8 +287,12 @@ function resetCreateForm() {
   document.getElementById('cooldown-hours').value = '';
   document.getElementById('recipe-enabled').checked = true;
   document.getElementById('cooldown-hours-group').style.display = 'none';
+  document.getElementById('pool-mode-enabled').checked = false;
+  document.getElementById('pool-wallet').value = '';
+  document.getElementById('pool-config-section').style.display = 'none';
   document.getElementById('ingredients-list').innerHTML = '';
   document.getElementById('results-list').innerHTML = '';
+  document.getElementById('pool-ingredients-list').innerHTML = '';
   document.getElementById('create-status').style.display = 'none';
 }
 
@@ -423,6 +482,31 @@ async function editRecipe(recipeId) {
         </label>
       </div>
 
+      <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
+
+      <h4>🔄 Pool/Swap Mode (Optional)</h4>
+      <p style="color: var(--text-secondary); margin: 0 0 15px 0; font-size: 0.9rem;">
+        Enable this to allow users to swap assets from a pool instead of minting new ones.
+      </p>
+
+      <div class="form-group">
+        <label>
+          <input type="checkbox" id="edit-pool-mode-enabled" ${recipe.pool_mode_enabled ? 'checked' : ''}> Enable Pool/Swap Mode
+        </label>
+      </div>
+
+      <div id="edit-pool-config-section" style="display: ${recipe.pool_mode_enabled ? 'block' : 'none'}; background: var(--bg-dark); padding: 15px; border-radius: 8px; margin-top: 10px;">
+        <div class="form-group">
+          <label>Pool Wallet:</label>
+          <input type="text" id="edit-pool-wallet" class="form-control" value="${recipe.pool_wallet || ''}" placeholder="e.g., pool.fr">
+          <small style="color: var(--text-secondary);">Wallet containing assets available for swapping</small>
+        </div>
+
+        <h5 style="margin: 15px 0 10px 0;">Pool Ingredients (Cheaper Option)</h5>
+        <div id="edit-pool-ingredients-list"></div>
+        <button type="button" id="edit-add-pool-ingredient-btn" class="btn btn-secondary btn-sm">+ Add Pool Ingredient</button>
+      </div>
+
       <div style="display: flex; gap: 10px; margin-top: 20px;">
         <button id="update-recipe-btn" class="btn btn-primary">Update Recipe</button>
         <button id="cancel-edit-btn" class="btn btn-secondary">Cancel</button>
@@ -439,12 +523,24 @@ async function editRecipe(recipeId) {
       addEditResultRow(res.template_id, res.amount, res.name_override);
     });
 
+    // Add existing pool ingredients
+    if (recipe.pool_ingredients && Array.isArray(recipe.pool_ingredients)) {
+      recipe.pool_ingredients.forEach(ing => {
+        addEditPoolIngredientRow(ing.template_id, ing.amount);
+      });
+    }
+
     // Event listeners
     document.getElementById('edit-add-ingredient-btn').addEventListener('click', () => addEditIngredientRow());
     document.getElementById('edit-add-result-btn').addEventListener('click', () => addEditResultRow());
+    document.getElementById('edit-add-pool-ingredient-btn').addEventListener('click', () => addEditPoolIngredientRow());
 
     document.getElementById('edit-cooldown-enabled').addEventListener('change', (e) => {
       document.getElementById('edit-cooldown-hours-group').style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('edit-pool-mode-enabled').addEventListener('change', (e) => {
+      document.getElementById('edit-pool-config-section').style.display = e.target.checked ? 'block' : 'none';
     });
 
     document.getElementById('update-recipe-btn').addEventListener('click', updateRecipe);
@@ -490,6 +586,22 @@ function addEditResultRow(templateId = '', amount = 1, nameOverride = '') {
   container.appendChild(row);
 }
 
+function addEditPoolIngredientRow(templateId = '', amount = 1) {
+  const container = document.getElementById('edit-pool-ingredients-list');
+  const row = document.createElement('div');
+  row.className = 'pool-ingredient-row';
+  row.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px; align-items: center;';
+
+  row.innerHTML = `
+    <input type="number" class="form-control pool-ingredient-template" placeholder="Template ID" value="${templateId}" style="flex: 1;" required>
+    <input type="number" class="form-control pool-ingredient-amount" placeholder="Amount" min="1" value="${amount}" style="width: 100px;" required>
+    <button type="button" class="btn btn-danger btn-sm remove-pool-ingredient" style="width: 32px; height: 32px;">×</button>
+  `;
+
+  row.querySelector('.remove-pool-ingredient').addEventListener('click', () => row.remove());
+  container.appendChild(row);
+}
+
 async function updateRecipe() {
   try {
     const name = document.getElementById('edit-recipe-name').value.trim();
@@ -500,6 +612,32 @@ async function updateRecipe() {
     const cooldownEnabled = document.getElementById('edit-cooldown-enabled').checked;
     const cooldownHours = cooldownEnabled ? parseInt(document.getElementById('edit-cooldown-hours').value) || null : null;
     const enabled = document.getElementById('edit-recipe-enabled').checked;
+
+    // Collect pool mode settings
+    const poolModeEnabled = document.getElementById('edit-pool-mode-enabled').checked;
+    const poolWallet = document.getElementById('edit-pool-wallet').value.trim() || null;
+    let poolIngredients = null;
+
+    if (poolModeEnabled) {
+      if (!poolWallet) {
+        alert('Pool wallet is required when pool mode is enabled');
+        return;
+      }
+
+      poolIngredients = [];
+      document.querySelectorAll('#edit-pool-ingredients-list .pool-ingredient-row').forEach(row => {
+        const templateId = parseInt(row.querySelector('.pool-ingredient-template').value);
+        const amount = parseInt(row.querySelector('.pool-ingredient-amount').value);
+        if (templateId && amount) {
+          poolIngredients.push({ template_id: templateId, amount: amount });
+        }
+      });
+
+      if (poolIngredients.length === 0) {
+        alert('At least one pool ingredient is required when pool mode is enabled');
+        return;
+      }
+    }
 
     // Collect ingredients
     const ingredients = [];
@@ -542,7 +680,10 @@ async function updateRecipe() {
         max_batch_multiplier: maxBatch,
         cooldown_hours: cooldownHours,
         cooldown_enabled: cooldownEnabled,
-        enabled
+        enabled,
+        pool_mode_enabled: poolModeEnabled,
+        pool_wallet: poolWallet,
+        pool_ingredients: poolIngredients
       })
     });
 

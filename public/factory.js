@@ -223,6 +223,9 @@ function getTemplateInfo(templateId) {
 
 // Display recipes in a specific container element
 function displayRecipesInContainer(recipes, containerEl) {
+  // Store recipes globally for button listeners
+  currentDisplayedRecipes = recipes;
+
   let html = '';
 
   recipes.forEach(recipe => {
@@ -298,14 +301,23 @@ function displayRecipesInContainer(recipes, containerEl) {
 
         ${canCraft ? `
           <div style="margin-top: 15px;">
-            <p style="margin: 0 0 10px 0; color: var(--text-secondary);">You can craft up to ${recipe.user_can_craft}x at once!</p>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              ${Array.from({ length: recipe.user_can_craft }, (_, i) => i + 1).map(count => `
-                <button class="btn btn-primary craft-btn" data-recipe-id="${recipe.id}" data-batch="${count}">
-                  Craft ${count}x
-                </button>
-              `).join('')}
-            </div>
+            ${recipe.pool_mode_enabled ? `
+              <p style="margin: 0 0 10px 0; color: var(--text-secondary); font-weight: 600;">🔄 Pool/Swap Mode Available!</p>
+              <div class="pool-status-container" data-recipe-id="${recipe.id}" data-max-batch="${recipe.user_can_craft}" style="margin-bottom: 15px;">
+                <p style="margin: 5px 0; color: var(--text-secondary); font-size: 0.9rem;">
+                  Checking pool availability...
+                </p>
+              </div>
+            ` : `
+              <p style="margin: 0 0 10px 0; color: var(--text-secondary);">You can craft up to ${recipe.user_can_craft}x at once!</p>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                ${Array.from({ length: recipe.user_can_craft }, (_, i) => i + 1).map(count => `
+                  <button class="btn btn-primary craft-btn" data-recipe-id="${recipe.id}" data-batch="${count}" data-mode="mint">
+                    Craft ${count}x
+                  </button>
+                `).join('')}
+              </div>
+            `}
           </div>
         ` : recipe.missing_ingredients.length > 0 ? `
           <div style="margin-top: 15px; padding: 10px; background: rgba(248, 113, 113, 0.1); border-radius: 6px; border-left: 3px solid #f87171;">
@@ -318,13 +330,129 @@ function displayRecipesInContainer(recipes, containerEl) {
 
   containerEl.innerHTML = html;
 
+  // Check pool inventory for pool-enabled recipes
+  recipes.forEach(async (recipe) => {
+    if (recipe.pool_mode_enabled && recipe.user_can_craft > 0 && recipe.cooldown_remaining === 0) {
+      const poolContainer = containerEl.querySelector(`.pool-status-container[data-recipe-id="${recipe.id}"]`);
+      if (poolContainer) {
+        await checkAndDisplayPoolOptions(recipe, poolContainer);
+      }
+    }
+  });
+
   // Add craft button listeners
   containerEl.querySelectorAll('.craft-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const recipeId = parseInt(btn.dataset.recipeId);
       const batchCount = parseInt(btn.dataset.batch);
+      const mode = btn.dataset.mode || 'mint';
       const recipe = recipes.find(r => r.id === recipeId);
-      startCraft(recipe, batchCount);
+      startCraft(recipe, batchCount, mode);
+    });
+  });
+}
+
+// Check pool inventory and display swap/mint options
+async function checkAndDisplayPoolOptions(recipe, container) {
+  try {
+    const maxBatch = parseInt(container.dataset.maxBatch);
+
+    // Check pool inventory for batch size 1
+    const response = await fetch(`${API_URL}/api/factory/pool-inventory/${recipe.id}?batch_count=1`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      container.innerHTML = `
+        <p style="color: #f87171; margin: 5px 0; font-size: 0.9rem;">
+          ⚠️ Error checking pool: ${data.error}
+        </p>
+        <p style="margin: 5px 0 10px 0; color: var(--text-secondary);">You can still mint:</p>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          ${Array.from({ length: maxBatch }, (_, i) => i + 1).map(count => `
+            <button class="btn btn-primary craft-btn" data-recipe-id="${recipe.id}" data-batch="${count}" data-mode="mint">
+              Mint ${count}x
+            </button>
+          `).join('')}
+        </div>
+      `;
+      attachCraftButtonListeners(container);
+      return;
+    }
+
+    const swapAvailable = data.swap_available;
+
+    if (swapAvailable) {
+      // Pool has inventory! Show swap option
+      container.innerHTML = `
+        <div style="background: rgba(74, 222, 128, 0.1); padding: 12px; border-radius: 6px; border-left: 3px solid #4ade80; margin-bottom: 10px;">
+          <strong style="color: #4ade80;">✅ Pool has assets available!</strong>
+          <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">
+            Swap uses fewer ingredients (cheaper!) or mint new ones.
+          </p>
+        </div>
+        <div style="margin-bottom: 15px;">
+          <h4 style="margin: 0 0 8px 0; font-size: 0.95rem;">🔄 Swap from Pool (Cheaper):</h4>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            ${Array.from({ length: maxBatch }, (_, i) => i + 1).map(count => `
+              <button class="btn btn-success craft-btn" data-recipe-id="${recipe.id}" data-batch="${count}" data-mode="swap">
+                Swap ${count}x
+              </button>
+            `).join('')}
+          </div>
+        </div>
+        <div>
+          <h4 style="margin: 0 0 8px 0; font-size: 0.95rem;">🔨 Mint New:</h4>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            ${Array.from({ length: maxBatch }, (_, i) => i + 1).map(count => `
+              <button class="btn btn-primary craft-btn" data-recipe-id="${recipe.id}" data-batch="${count}" data-mode="mint">
+                Mint ${count}x
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      // Pool doesn't have inventory, only show mint option
+      container.innerHTML = `
+        <div style="background: rgba(251, 191, 36, 0.1); padding: 10px; border-radius: 6px; border-left: 3px solid #fbbf24; margin-bottom: 10px;">
+          <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">
+            ℹ️ Pool currently empty. You can mint new assets:
+          </p>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          ${Array.from({ length: maxBatch }, (_, i) => i + 1).map(count => `
+            <button class="btn btn-primary craft-btn" data-recipe-id="${recipe.id}" data-batch="${count}" data-mode="mint">
+              Mint ${count}x
+            </button>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    attachCraftButtonListeners(container);
+
+  } catch (error) {
+    console.error('Error checking pool inventory:', error);
+    container.innerHTML = `
+      <p style="color: #f87171; margin: 5px 0;">⚠️ Error checking pool availability</p>
+    `;
+  }
+}
+
+// Store currently displayed recipes globally for button listeners
+let currentDisplayedRecipes = [];
+
+// Helper to attach craft button listeners to a container
+function attachCraftButtonListeners(container) {
+  container.querySelectorAll('.craft-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const recipeId = parseInt(btn.dataset.recipeId);
+      const batchCount = parseInt(btn.dataset.batch);
+      const mode = btn.dataset.mode || 'mint';
+      const recipe = currentDisplayedRecipes.find(r => r.id === recipeId);
+      if (recipe) {
+        startCraft(recipe, batchCount, mode);
+      }
     });
   });
 }
@@ -336,9 +464,12 @@ function displayRecipes(recipes) {
 }
 
 // Start craft
-async function startCraft(recipe, batchCount) {
+async function startCraft(recipe, batchCount, mode = 'mint') {
   currentRecipe = recipe;
   currentBatchCount = batchCount;
+  window.currentCraftMode = mode; // Store mode globally for executeCraft
+
+  console.log(`🏭 Starting craft in ${mode} mode`);
 
   // Show processing modal
   showProcessingModal('Loading Assets', 'Fetching relevant assets...<br><small style="color: var(--text-secondary);">Only loading what you need!</small>');
@@ -356,9 +487,14 @@ async function startCraft(recipe, batchCount) {
     const enrichedAssets = data.assets || [];
     console.log(`✅ Received ${enrichedAssets.length} pre-enriched assets for recipe`);
 
+    // Use pool_ingredients for swap mode, regular ingredients for mint mode
+    const ingredientsToUse = (mode === 'swap' && recipe.pool_ingredients) ? recipe.pool_ingredients : recipe.ingredients;
+
+    console.log(`📋 Using ingredients for ${mode} mode:`, ingredientsToUse);
+
     // Group assets by template
     const groupedAssets = {};
-    recipe.ingredients.forEach(ing => {
+    ingredientsToUse.forEach(ing => {
       const templateId = ing.template_id.toString();
       const matching = enrichedAssets.filter(asset =>
         asset.template && asset.template.template_id.toString() === templateId
@@ -512,8 +648,11 @@ async function executeCraft() {
 
     await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for blockchain confirmation
 
-    // Call backend to verify + mint
-    showProcessingModal('Step 3: Minting Results', `Creating your new assets...<br><small style="color: var(--text-secondary);">Using ${transferWallet} wallet</small>`);
+    // Call backend to verify + mint/swap
+    const craftMode = window.currentCraftMode || 'mint';
+    const modeLabel = craftMode === 'swap' ? 'Swapping from Pool' : 'Minting Results';
+    const modeDesc = craftMode === 'swap' ? 'Transferring assets from pool...' : 'Creating your new assets...';
+    showProcessingModal(`Step 3: ${modeLabel}`, `${modeDesc}<br><small style="color: var(--text-secondary);">Using ${transferWallet} wallet</small>`);
 
     const craftResponse = await fetch(`${API_URL}/api/factory/craft`, {
       method: 'POST',
@@ -523,7 +662,8 @@ async function executeCraft() {
         batch_count: currentBatchCount,
         transfer_transaction_id: transferTxId,
         asset_ids: selectedAssets,
-        user_wallet: currentAccount
+        user_wallet: currentAccount,
+        mode: window.currentCraftMode || 'mint'
       })
     });
 
