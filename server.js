@@ -12,6 +12,7 @@ require('dotenv').config();
 const db = require('./database');
 const wax = require('./wax');
 const validators = require('./validators');
+const scheduler = require('./scheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -3839,6 +3840,176 @@ app.get('/api/admin/factory/failed', authenticateAdmin, async (req, res) => {
   }
 });
 
+// ========================================
+// Scheduled Actions API
+// ========================================
+
+/**
+ * GET /api/admin/scheduler/actions
+ * Get all scheduled actions
+ */
+app.get('/api/admin/scheduler/actions', authenticateAdmin, async (req, res) => {
+  try {
+    const actions = db.scheduledActions.getAll();
+    res.json({ success: true, actions });
+  } catch (error) {
+    console.error('Error fetching scheduled actions:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/admin/scheduler/actions/:id
+ * Get a specific scheduled action
+ */
+app.get('/api/admin/scheduler/actions/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const action = db.scheduledActions.getById(parseInt(id));
+
+    if (!action) {
+      return res.status(404).json({ error: 'Action not found', success: false });
+    }
+
+    res.json({ success: true, action });
+  } catch (error) {
+    console.error('Error fetching action:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/admin/scheduler/actions
+ * Create a new scheduled action
+ */
+app.post('/api/admin/scheduler/actions', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, action_type, action_params, execution_time, created_by } = req.body;
+
+    // Validate inputs
+    if (!name || !action_type || !action_params || !execution_time) {
+      return res.status(400).json({ error: 'Missing required fields', success: false });
+    }
+
+    // Validate action_type
+    const validTypes = ['mint', 'transfer', 'drop', 'burn'];
+    if (!validTypes.includes(action_type)) {
+      return res.status(400).json({ error: `Invalid action_type. Must be one of: ${validTypes.join(', ')}`, success: false });
+    }
+
+    // Validate execution_time is in the future
+    const execTime = new Date(execution_time);
+    if (execTime <= new Date()) {
+      return res.status(400).json({ error: 'execution_time must be in the future', success: false });
+    }
+
+    // Validate action_params based on type
+    if (action_type === 'mint') {
+      if (!action_params.to_wallet || !action_params.template_id) {
+        return res.status(400).json({ error: 'Mint action requires: to_wallet, template_id', success: false });
+      }
+    } else if (action_type === 'transfer') {
+      if (!action_params.from_wallet || !action_params.to_wallet) {
+        return res.status(400).json({ error: 'Transfer action requires: from_wallet, to_wallet', success: false });
+      }
+      if (!action_params.template_id && !action_params.asset_ids) {
+        return res.status(400).json({ error: 'Transfer action requires either: template_id or asset_ids', success: false });
+      }
+    }
+
+    const actionId = db.scheduledActions.create({
+      name,
+      action_type,
+      action_params,
+      execution_time: execTime.toISOString(),
+      created_by: created_by || 'admin'
+    });
+
+    console.log(`✅ Created scheduled action #${actionId}: ${name} (${action_type}) at ${execution_time}`);
+
+    res.json({ success: true, action_id: actionId });
+  } catch (error) {
+    console.error('Error creating scheduled action:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * PUT /api/admin/scheduler/actions/:id/cancel
+ * Cancel a pending scheduled action
+ */
+app.put('/api/admin/scheduler/actions/:id/cancel', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = db.scheduledActions.cancel(parseInt(id));
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Action not found or already executed/cancelled', success: false });
+    }
+
+    console.log(`🚫 Cancelled scheduled action #${id}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error cancelling action:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * DELETE /api/admin/scheduler/actions/:id
+ * Delete a scheduled action
+ */
+app.delete('/api/admin/scheduler/actions/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    db.scheduledActions.delete(parseInt(id));
+
+    console.log(`🗑️ Deleted scheduled action #${id}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting action:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/admin/scheduler/executions
+ * Get execution history
+ */
+app.get('/api/admin/scheduler/executions', authenticateAdmin, async (req, res) => {
+  try {
+    const executions = db.actionExecutions.getAll();
+    res.json({ success: true, executions });
+  } catch (error) {
+    console.error('Error fetching executions:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/admin/scheduler/run-now
+ * Manually trigger the scheduler to check and execute pending actions
+ */
+app.post('/api/admin/scheduler/run-now', authenticateAdmin, async (req, res) => {
+  try {
+    console.log('🔄 Manual scheduler trigger requested');
+
+    // Run scheduler asynchronously
+    scheduler.checkAndExecuteActions().catch(err => {
+      console.error('Error in manual scheduler run:', err);
+    });
+
+    res.json({ success: true, message: 'Scheduler triggered' });
+  } catch (error) {
+    console.error('Error triggering scheduler:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
 /**
  * POST /api/asset/verify-ownership-rpc
  * Verify current ownership of an asset by querying BLOCKCHAIN DIRECTLY via RPC
@@ -4315,6 +4486,10 @@ app.listen(PORT, () => {
   } catch (error) {
     console.log(`\n⚠️  Configuration not loaded yet (database initializing...)`);
   }
+
+  // Start the action scheduler
+  console.log();
+  scheduler.startScheduler();
   console.log();
 });
 

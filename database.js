@@ -509,6 +509,72 @@ function initializeTables() {
     console.warn('⚠️ Migration warning:', error.message);
   }
 
+  // Create scheduled_actions table
+  try {
+    const scheduledActionsExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='scheduled_actions'
+    `).get();
+
+    if (!scheduledActionsExists) {
+      console.log('🔄 Creating scheduled_actions table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS scheduled_actions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          action_type TEXT NOT NULL,
+          action_params TEXT NOT NULL,
+          execution_time TIMESTAMP NOT NULL,
+          status TEXT DEFAULT 'pending',
+          created_by TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          executed_at TIMESTAMP,
+          error_message TEXT,
+          CONSTRAINT check_action_type CHECK (action_type IN ('mint', 'transfer', 'drop', 'burn'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_scheduled_actions_status ON scheduled_actions(status);
+        CREATE INDEX IF NOT EXISTS idx_scheduled_actions_execution_time ON scheduled_actions(execution_time);
+        CREATE INDEX IF NOT EXISTS idx_scheduled_actions_type ON scheduled_actions(action_type);
+      `);
+
+      console.log('✅ scheduled_actions table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Create action_executions table (history log)
+  try {
+    const actionExecutionsExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='action_executions'
+    `).get();
+
+    if (!actionExecutionsExists) {
+      console.log('🔄 Creating action_executions table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS action_executions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          action_id INTEGER NOT NULL,
+          status TEXT NOT NULL,
+          transaction_id TEXT,
+          result_data TEXT,
+          error_message TEXT,
+          executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (action_id) REFERENCES scheduled_actions(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_action_executions_action ON action_executions(action_id);
+        CREATE INDEX IF NOT EXISTS idx_action_executions_status ON action_executions(status);
+      `);
+
+      console.log('✅ action_executions table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
   // Seed default templates if they don't exist (runs every time)
   console.log('🌱 Checking default templates...');
 
@@ -1486,6 +1552,190 @@ const craftHistory = {
   }
 };
 
+// ========================================
+// Scheduled Actions
+// ========================================
+
+const scheduledActions = {
+  // Get all scheduled actions
+  getAll: (limit = 100) => {
+    const actions = db.prepare(`
+      SELECT * FROM scheduled_actions
+      ORDER BY execution_time ASC
+      LIMIT ?
+    `).all(limit);
+
+    return actions.map(action => ({
+      ...action,
+      action_params: JSON.parse(action.action_params)
+    }));
+  },
+
+  // Get pending actions (ready to execute)
+  getPending: () => {
+    const now = new Date().toISOString();
+    const actions = db.prepare(`
+      SELECT * FROM scheduled_actions
+      WHERE status = 'pending' AND execution_time <= ?
+      ORDER BY execution_time ASC
+    `).all(now);
+
+    return actions.map(action => ({
+      ...action,
+      action_params: JSON.parse(action.action_params)
+    }));
+  },
+
+  // Get by ID
+  getById: (id) => {
+    const action = db.prepare('SELECT * FROM scheduled_actions WHERE id = ?').get(id);
+    if (action) {
+      action.action_params = JSON.parse(action.action_params);
+    }
+    return action;
+  },
+
+  // Get by status
+  getByStatus: (status, limit = 50) => {
+    const actions = db.prepare(`
+      SELECT * FROM scheduled_actions
+      WHERE status = ?
+      ORDER BY execution_time DESC
+      LIMIT ?
+    `).all(status, limit);
+
+    return actions.map(action => ({
+      ...action,
+      action_params: JSON.parse(action.action_params)
+    }));
+  },
+
+  // Create scheduled action
+  create: (data) => {
+    const stmt = db.prepare(`
+      INSERT INTO scheduled_actions
+      (name, action_type, action_params, execution_time, created_by, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      data.name,
+      data.action_type,
+      JSON.stringify(data.action_params),
+      data.execution_time,
+      data.created_by || null,
+      data.status || 'pending'
+    );
+
+    return result.lastInsertRowid;
+  },
+
+  // Update action
+  update: (id, data) => {
+    const updates = [];
+    const values = [];
+
+    if (data.status !== undefined) {
+      updates.push('status = ?');
+      values.push(data.status);
+    }
+
+    if (data.executed_at !== undefined) {
+      updates.push('executed_at = ?');
+      values.push(data.executed_at);
+    }
+
+    if (data.error_message !== undefined) {
+      updates.push('error_message = ?');
+      values.push(data.error_message);
+    }
+
+    if (updates.length === 0) return null;
+
+    values.push(id);
+    const stmt = db.prepare(`
+      UPDATE scheduled_actions SET ${updates.join(', ')} WHERE id = ?
+    `);
+
+    return stmt.run(...values);
+  },
+
+  // Cancel action
+  cancel: (id) => {
+    return db.prepare(`
+      UPDATE scheduled_actions SET status = 'cancelled' WHERE id = ? AND status = 'pending'
+    `).run(id);
+  },
+
+  // Delete action
+  delete: (id) => {
+    return db.prepare('DELETE FROM scheduled_actions WHERE id = ?').run(id);
+  }
+};
+
+// ========================================
+// Action Executions (History Log)
+// ========================================
+
+const actionExecutions = {
+  // Get execution history for action
+  getByAction: (action_id) => {
+    const executions = db.prepare(`
+      SELECT * FROM action_executions
+      WHERE action_id = ?
+      ORDER BY executed_at DESC
+    `).all(action_id);
+
+    return executions.map(exec => ({
+      ...exec,
+      result_data: exec.result_data ? JSON.parse(exec.result_data) : null
+    }));
+  },
+
+  // Get all executions
+  getAll: (limit = 100) => {
+    const executions = db.prepare(`
+      SELECT
+        ae.*,
+        sa.name as action_name,
+        sa.action_type
+      FROM action_executions ae
+      LEFT JOIN scheduled_actions sa ON ae.action_id = sa.id
+      ORDER BY ae.executed_at DESC
+      LIMIT ?
+    `).all(limit);
+
+    return executions.map(exec => ({
+      ...exec,
+      result_data: exec.result_data ? JSON.parse(exec.result_data) : null
+    }));
+  },
+
+  // Create execution log
+  create: (data) => {
+    const stmt = db.prepare(`
+      INSERT INTO action_executions
+      (action_id, status, transaction_id, result_data, error_message)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      data.action_id,
+      data.status,
+      data.transaction_id || null,
+      data.result_data ? JSON.stringify(data.result_data) : null,
+      data.error_message || null
+    );
+
+    return result.lastInsertRowid;
+  },
+
+  // Delete execution log
+  delete: (id) => {
+    return db.prepare('DELETE FROM action_executions WHERE id = ?').run(id);
+  }
+};
+
 module.exports = {
   db,
   config,
@@ -1501,5 +1751,7 @@ module.exports = {
   blendRecipes,
   storyTabs,
   craftRecipes,
-  craftHistory
+  craftHistory,
+  scheduledActions,
+  actionExecutions
 };
