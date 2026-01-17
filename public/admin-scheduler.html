@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduler Admin - WAX NFT System</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-dark: #0a0e1a;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: var(--bg-secondary);
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .card {
+      background: var(--bg-secondary);
+      padding: 25px;
+      border-radius: 12px;
+      margin-bottom: 25px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: all 0.2s;
+      color: white;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-success {
+      background: var(--success);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+    }
+
+    .btn-secondary {
+      background: #475569;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 0.875rem;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 12px;
+      background: var(--bg-dark);
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 1rem;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    textarea {
+      min-height: 120px;
+      font-family: 'Courier New', monospace;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #334155;
+    }
+
+    th {
+      background: var(--bg-dark);
+      font-weight: 600;
+    }
+
+    tr:hover {
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .status-pending {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+    }
+
+    .status-completed {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .status-failed {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .status-cancelled {
+      background: rgba(148, 163, 184, 0.2);
+      color: #94a3b8;
+    }
+
+    .alert {
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .alert-success {
+      background: rgba(16, 185, 129, 0.2);
+      border-left: 4px solid #10b981;
+      color: #10b981;
+    }
+
+    .alert-error {
+      background: rgba(239, 68, 68, 0.2);
+      border-left: 4px solid #ef4444;
+      color: #ef4444;
+    }
+
+    #create-form {
+      display: none;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      background: var(--bg-dark);
+      border: none;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    small {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    .time-presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .preset-btn {
+      padding: 6px 12px;
+      background: var(--bg-dark);
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>⏰ Scheduled Actions</h1>
+        <p class="subtitle">Automate mints, transfers, and more with time-triggered actions</p>
+      </div>
+      <div>
+        <button id="logout-btn" class="btn btn-secondary">Logout</button>
+      </div>
+    </header>
+
+    <!-- Login Section -->
+    <div id="login-section" style="display: none;">
+      <div class="card" style="max-width: 400px; margin: 100px auto;">
+        <h2 style="margin-bottom: 20px;">Admin Login</h2>
+        <form id="login-form">
+          <div class="form-group">
+            <label>Password:</label>
+            <input type="password" id="admin-password" required>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+        </form>
+        <div id="login-error" class="alert alert-error" style="display: none; margin-top: 15px;"></div>
+      </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard" style="display: none;">
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-tab="actions">📅 Scheduled Actions</button>
+        <button class="tab" data-tab="executions">📊 Execution History</button>
+      </div>
+
+      <!-- Actions Tab -->
+      <div id="actions-tab" class="tab-content active">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2>Scheduled Actions</h2>
+            <div style="display: flex; gap: 10px;">
+              <button id="refresh-btn" class="btn btn-secondary">🔄 Refresh</button>
+              <button id="run-now-btn" class="btn btn-success">▶️ Run Now</button>
+              <button id="show-create-btn" class="btn btn-primary">+ Create Action</button>
+            </div>
+          </div>
+
+          <!-- Create Form -->
+          <div id="create-form" class="card" style="background: var(--bg-dark); margin-bottom: 20px;">
+            <h3 style="margin-bottom: 20px;">Create Scheduled Action</h3>
+
+            <div class="form-group">
+              <label>Action Name:</label>
+              <input type="text" id="action-name" placeholder="e.g., Daily Login Reward">
+            </div>
+
+            <div class="form-group">
+              <label>Action Type:</label>
+              <select id="action-type">
+                <option value="mint">🔨 Mint NFTs</option>
+                <option value="transfer" disabled>📤 Transfer NFTs (Coming Soon)</option>
+                <option value="drop" disabled>🎁 Create Drop (Coming Soon)</option>
+                <option value="burn" disabled>🔥 Burn NFTs (Coming Soon)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Execution Time:</label>
+              <input type="datetime-local" id="execution-time">
+              <div class="time-presets">
+                <button class="preset-btn" data-minutes="5">+5min</button>
+                <button class="preset-btn" data-minutes="30">+30min</button>
+                <button class="preset-btn" data-hours="1">+1hr</button>
+                <button class="preset-btn" data-hours="24">+24hr</button>
+                <button class="preset-btn" data-days="7">+7days</button>
+              </div>
+            </div>
+
+            <div id="mint-params">
+              <h4 style="margin: 20px 0 10px 0;">Mint Parameters</h4>
+
+              <div class="form-group">
+                <label>To Wallet:</label>
+                <input type="text" id="mint-to-wallet" placeholder="e.g., czkua.wam">
+                <small>Wallet that will receive the minted NFTs</small>
+              </div>
+
+              <div class="form-group">
+                <label>Template ID:</label>
+                <input type="number" id="mint-template-id" placeholder="e.g., 391378">
+                <small>Template to mint</small>
+              </div>
+
+              <div class="form-group">
+                <label>Quantity:</label>
+                <input type="number" id="mint-quantity" value="1" min="1">
+                <small>Number of NFTs to mint</small>
+              </div>
+
+              <div class="form-group">
+                <label>Authorized Minter (Optional):</label>
+                <input type="text" id="mint-authorized-minter" value="futuresrelic">
+                <small>Wallet authorized to mint (uses FUTURESRELIC_PRIVATE_KEY)</small>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+              <button id="save-action-btn" class="btn btn-success">Save Action</button>
+              <button id="cancel-create-btn" class="btn btn-secondary">Cancel</button>
+            </div>
+
+            <div id="create-status" class="alert" style="display: none; margin-top: 15px;"></div>
+          </div>
+
+          <!-- Actions List -->
+          <div id="actions-list">
+            <p style="color: var(--text-secondary);">Loading...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Executions Tab -->
+      <div id="executions-tab" class="tab-content">
+        <div class="card">
+          <h2>Execution History</h2>
+          <div id="executions-list" style="margin-top: 20px;">
+            <p style="color: var(--text-secondary);">Loading...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin-scheduler.js"></script>
+</body>
+</html>
