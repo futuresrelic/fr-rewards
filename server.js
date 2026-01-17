@@ -3073,10 +3073,23 @@ app.post('/api/factory/craft', async (req, res) => {
       } else if (existingCraft.status === 'failed') {
         return res.status(400).json({
           error: 'This transaction previously failed: ' + existingCraft.error_message,
-          success: false
+          success: false,
+          craft_id: existingCraft.id
         });
       }
     }
+
+    // 5b. Create craft record EARLY (so failed attempts get saved for retry)
+    const craftId = db.craftHistory.create({
+      recipe_id: recipe_id,
+      user_wallet: user_wallet,
+      batch_count: batch_count,
+      transfer_transaction_id: transfer_transaction_id,
+      ingredient_asset_ids: asset_ids,
+      status: 'pending_verification'
+    });
+
+    console.log(`📝 Created craft record #${craftId} (pending verification)`);
 
     // 6. Verify transaction on blockchain
     console.log('🔍 Verifying transfer transaction on blockchain...');
@@ -3087,9 +3100,14 @@ app.post('/api/factory/craft', async (req, res) => {
     try {
       txData = await rpc.history_get_transaction(transfer_transaction_id);
     } catch (txError) {
+      db.craftHistory.update(craftId, {
+        status: 'failed',
+        error_message: 'Transfer transaction not found on blockchain'
+      });
       return res.status(400).json({
         error: 'Transfer transaction not found on blockchain',
-        success: false
+        success: false,
+        craft_id: craftId
       });
     }
 
@@ -3115,9 +3133,14 @@ app.post('/api/factory/craft', async (req, res) => {
 
     // 8. Verify transfers
     if (transfers.length === 0) {
+      db.craftHistory.update(craftId, {
+        status: 'failed',
+        error_message: 'No transfer actions found in transaction'
+      });
       return res.status(400).json({
         error: 'No transfer actions found in transaction',
-        success: false
+        success: false,
+        craft_id: craftId
       });
     }
 
@@ -3125,17 +3148,27 @@ app.post('/api/factory/craft', async (req, res) => {
     const expectedRecipient = recipe.transfer_to_wallet || 'futuresrelic';
     const validTransfer = transfers.find(t => t.to === expectedRecipient);
     if (!validTransfer) {
+      db.craftHistory.update(craftId, {
+        status: 'failed',
+        error_message: `Assets not transferred to ${expectedRecipient} wallet`
+      });
       return res.status(400).json({
         error: `Assets not transferred to ${expectedRecipient} wallet`,
-        success: false
+        success: false,
+        craft_id: craftId
       });
     }
 
     // Verify sender is user
     if (validTransfer.from !== user_wallet) {
+      db.craftHistory.update(craftId, {
+        status: 'failed',
+        error_message: `Transfer sender mismatch. Expected ${user_wallet}, got ${validTransfer.from}`
+      });
       return res.status(400).json({
         error: `Transfer sender mismatch. Expected ${user_wallet}, got ${validTransfer.from}`,
-        success: false
+        success: false,
+        craft_id: craftId
       });
     }
 
@@ -3144,35 +3177,40 @@ app.post('/api/factory/craft', async (req, res) => {
     const expectedCount = recipe.ingredients.reduce((sum, ing) => sum + ing.amount, 0) * batch_count;
 
     if (transferredAssetIds.length !== expectedCount) {
+      db.craftHistory.update(craftId, {
+        status: 'failed',
+        error_message: `Asset count mismatch. Expected ${expectedCount}, got ${transferredAssetIds.length}`
+      });
       return res.status(400).json({
         error: `Asset count mismatch. Expected ${expectedCount}, got ${transferredAssetIds.length}`,
-        success: false
+        success: false,
+        craft_id: craftId
       });
     }
 
     // Verify all asset IDs match what user submitted
     const missingAssets = asset_ids.filter(id => !transferredAssetIds.includes(id));
     if (missingAssets.length > 0) {
+      db.craftHistory.update(craftId, {
+        status: 'failed',
+        error_message: 'Some assets were not transferred'
+      });
       return res.status(400).json({
         error: 'Some assets were not transferred',
         missing_assets: missingAssets,
-        success: false
+        success: false,
+        craft_id: craftId
       });
     }
 
     console.log('✅ Transfer verification passed!');
 
-    // 9. Create craft record
-    const craftId = db.craftHistory.create({
-      recipe_id: recipe_id,
-      user_wallet: user_wallet,
-      batch_count: batch_count,
-      transfer_transaction_id: transfer_transaction_id,
-      ingredient_asset_ids: asset_ids,
+    // 9. Update craft record status to pending_mint
+    db.craftHistory.update(craftId, {
       status: 'pending_mint'
     });
 
-    console.log(`📝 Created craft record #${craftId}`);
+    console.log(`📝 Craft record #${craftId} verified, ready for minting`);
 
     // 10. Mint results
     console.log('🔨 Minting results...');
@@ -3289,9 +3327,11 @@ app.post('/api/factory/retry-failed', async (req, res) => {
         }
 
         // Verify transfer on blockchain
+        console.log(`      🔍 Checking blockchain for transfer...`);
         let txData;
         try {
           txData = await rpc.history_get_transaction(craft.transfer_transaction_id);
+          console.log(`      ✅ Found transfer on blockchain`);
         } catch (txError) {
           console.log(`      ❌ Transfer transaction not found on blockchain`);
           results.push({
@@ -3314,7 +3354,7 @@ app.post('/api/factory/retry-failed', async (req, res) => {
         }
 
         if (transfers.length === 0) {
-          console.log(`      ❌ No transfer found in transaction`);
+          console.log(`      ❌ No transfer actions found in transaction`);
           results.push({
             craft_id: craft.id,
             recipe_name: recipe.name,
@@ -3326,6 +3366,7 @@ app.post('/api/factory/retry-failed', async (req, res) => {
 
         // Verify transfer recipient matches recipe
         const expectedRecipient = recipe.transfer_to_wallet || 'futuresrelic';
+        console.log(`      🔍 Checking if assets were transferred to ${expectedRecipient}...`);
         const validTransfer = transfers.find(t => t.to === expectedRecipient && t.from === user_wallet);
 
         if (!validTransfer) {
@@ -3339,7 +3380,8 @@ app.post('/api/factory/retry-failed', async (req, res) => {
           continue;
         }
 
-        console.log(`      ✅ Transfer verified! Attempting mint...`);
+        console.log(`      ✅ Transfer to ${expectedRecipient} verified!`);
+        console.log(`      🔨 Attempting to mint results from futuresrelic wallet...`);
 
         // Mint results
         const mintTransactions = [];
