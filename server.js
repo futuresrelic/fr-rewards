@@ -2800,8 +2800,20 @@ app.get('/api/factory/recipes', async (req, res) => {
       return res.json({ success: true, recipes });
     }
 
-    // Fetch user's assets to check crafting ability
-    const userAssets = await wax.getUserAssetsLive(wallet, 'futuresrelic');
+    // Collect all unique template IDs needed for these recipes
+    const neededTemplateIds = new Set();
+    recipes.forEach(recipe => {
+      recipe.ingredients.forEach(ing => {
+        neededTemplateIds.add(parseInt(ing.template_id));
+      });
+    });
+
+    const templateFilter = Array.from(neededTemplateIds);
+    console.log(`📦 Fetching assets for ${recipes.length} recipe(s), templates: [${templateFilter.join(', ')}]`);
+
+    // Fetch user's assets FILTERED by needed templates only!
+    const userAssets = await wax.getUserAssetsLive(wallet, 'futuresrelic', templateFilter);
+    console.log(`   ✅ Found and enriched ${userAssets.length} assets`);
 
     // Count assets by template ID
     const templateCounts = {};
