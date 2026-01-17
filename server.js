@@ -3121,25 +3121,26 @@ app.post('/api/factory/craft', async (req, res) => {
       });
     }
 
-    // Verify recipient is futuresrelic
-    const futuresrelicTransfer = transfers.find(t => t.to === 'futuresrelic');
-    if (!futuresrelicTransfer) {
+    // Verify recipient is correct (based on recipe configuration)
+    const expectedRecipient = recipe.transfer_to_wallet || 'futuresrelic';
+    const validTransfer = transfers.find(t => t.to === expectedRecipient);
+    if (!validTransfer) {
       return res.status(400).json({
-        error: 'Assets not transferred to futuresrelic wallet',
+        error: `Assets not transferred to ${expectedRecipient} wallet`,
         success: false
       });
     }
 
     // Verify sender is user
-    if (futuresrelicTransfer.from !== user_wallet) {
+    if (validTransfer.from !== user_wallet) {
       return res.status(400).json({
-        error: `Transfer sender mismatch. Expected ${user_wallet}, got ${futuresrelicTransfer.from}`,
+        error: `Transfer sender mismatch. Expected ${user_wallet}, got ${validTransfer.from}`,
         success: false
       });
     }
 
     // Verify asset IDs match
-    const transferredAssetIds = futuresrelicTransfer.asset_ids;
+    const transferredAssetIds = validTransfer.asset_ids;
     const expectedCount = recipe.ingredients.reduce((sum, ing) => sum + ing.amount, 0) * batch_count;
 
     if (transferredAssetIds.length !== expectedCount) {
@@ -3225,7 +3226,7 @@ app.post('/api/factory/craft', async (req, res) => {
         error: 'Mint failed: ' + mintError.message,
         craft_id: craftId,
         success: false,
-        note: 'Assets have been transferred to futuresrelic. Contact admin for manual refund.'
+        note: `Assets have been transferred to ${expectedRecipient}. Contact admin for manual refund.`
       });
     }
 
