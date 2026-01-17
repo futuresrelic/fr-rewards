@@ -1223,13 +1223,14 @@ const craftRecipes = {
   create: (data) => {
     const stmt = db.prepare(`
       INSERT INTO craft_recipes
-      (name, description, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (name, description, category, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
       data.name,
       data.description || null,
+      data.category || 'Uncategorized',
       JSON.stringify(data.ingredients),
       JSON.stringify(data.results),
       data.max_batch_multiplier || 1,
@@ -1247,6 +1248,7 @@ const craftRecipes = {
       UPDATE craft_recipes
       SET name = ?,
           description = ?,
+          category = ?,
           ingredients = ?,
           results = ?,
           max_batch_multiplier = ?,
@@ -1260,6 +1262,7 @@ const craftRecipes = {
     return stmt.run(
       data.name,
       data.description || null,
+      data.category || 'Uncategorized',
       JSON.stringify(data.ingredients),
       JSON.stringify(data.results),
       data.max_batch_multiplier || 1,
