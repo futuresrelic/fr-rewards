@@ -3764,9 +3764,15 @@ app.get('/api/factory/pool-inventory/:recipe_id', async (req, res) => {
     const availability = {};
     let allAvailable = true;
 
+    // If no results defined, can't swap
+    if (!recipe.results || recipe.results.length === 0) {
+      console.log(`   ❌ No results defined for recipe`);
+      allAvailable = false;
+    }
+
     for (const result of recipe.results) {
       const templateId = parseInt(result.template_id);
-      const requiredCount = result.count * parseInt(batch_count);
+      const requiredCount = result.amount * parseInt(batch_count); // Fixed: use result.amount not result.count
 
       // Count how many of this template are in the pool
       const available = poolAssets.filter(a => parseInt(a.template.template_id) === templateId);
@@ -3779,6 +3785,8 @@ app.get('/api/factory/pool-inventory/:recipe_id', async (req, res) => {
         available: availableCount,
         has_enough: availableCount >= requiredCount
       };
+
+      console.log(`   Template ${templateId}: need ${requiredCount}, have ${availableCount}`);
 
       if (availableCount < requiredCount) {
         allAvailable = false;
