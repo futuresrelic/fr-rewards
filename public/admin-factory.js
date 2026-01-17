@@ -137,6 +137,7 @@ document.getElementById('save-recipe-btn').addEventListener('click', async () =>
     const name = document.getElementById('recipe-name').value.trim();
     const description = document.getElementById('recipe-description').value.trim();
     const category = document.getElementById('recipe-category').value.trim() || 'Uncategorized';
+    const transferToWallet = document.getElementById('recipe-transfer-wallet').value.trim() || 'pool.fr';
     const maxBatch = parseInt(document.getElementById('max-batch').value);
     const cooldownEnabled = document.getElementById('cooldown-enabled').checked;
     const cooldownHours = cooldownEnabled ? parseInt(document.getElementById('cooldown-hours').value) || null : null;
@@ -193,6 +194,7 @@ document.getElementById('save-recipe-btn').addEventListener('click', async () =>
         name,
         description,
         category,
+        transfer_to_wallet: transferToWallet,
         ingredients,
         results,
         max_batch_multiplier: maxBatch,
@@ -224,6 +226,7 @@ function resetCreateForm() {
   document.getElementById('recipe-name').value = '';
   document.getElementById('recipe-description').value = '';
   document.getElementById('recipe-category').value = 'Uncategorized';
+  document.getElementById('recipe-transfer-wallet').value = 'pool.fr';
   document.getElementById('max-batch').value = '5';
   document.getElementById('cooldown-enabled').checked = false;
   document.getElementById('cooldown-hours').value = '';
@@ -376,6 +379,12 @@ async function editRecipe(recipeId) {
         <small style="color: var(--text-secondary);">Group related recipes together for easier navigation</small>
       </div>
 
+      <div class="form-group">
+        <label>Transfer to Wallet:</label>
+        <input type="text" id="edit-recipe-transfer-wallet" class="form-control" value="${recipe.transfer_to_wallet || 'pool.fr'}">
+        <small style="color: var(--text-secondary);">Wallet where user assets will be transferred during crafting</small>
+      </div>
+
       <hr style="margin: 20px 0; border-color: rgba(255,255,255,0.1);">
 
       <h4>Ingredients</h4>
@@ -486,6 +495,7 @@ async function updateRecipe() {
     const name = document.getElementById('edit-recipe-name').value.trim();
     const description = document.getElementById('edit-recipe-description').value.trim();
     const category = document.getElementById('edit-recipe-category').value.trim() || 'Uncategorized';
+    const transferToWallet = document.getElementById('edit-recipe-transfer-wallet').value.trim() || 'pool.fr';
     const maxBatch = parseInt(document.getElementById('edit-max-batch').value);
     const cooldownEnabled = document.getElementById('edit-cooldown-enabled').checked;
     const cooldownHours = cooldownEnabled ? parseInt(document.getElementById('edit-cooldown-hours').value) || null : null;
@@ -526,6 +536,7 @@ async function updateRecipe() {
         name,
         description,
         category,
+        transfer_to_wallet: transferToWallet,
         ingredients,
         results,
         max_batch_multiplier: maxBatch,

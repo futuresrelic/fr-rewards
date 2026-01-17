@@ -443,7 +443,7 @@ function showAssetSelectionModal(groupedAssets) {
 
   html += `
     <div style="margin-top: 20px; padding: 15px; background: rgba(248, 113, 113, 0.1); border-radius: 6px; border-left: 3px solid #f87171;">
-      <strong>⚠️ Important:</strong> Selected assets will be transferred to futuresrelic wallet. This action cannot be undone automatically.
+      <strong>⚠️ Important:</strong> Selected assets will be transferred to <strong>${currentRecipe.transfer_to_wallet || 'futuresrelic'}</strong> wallet. This action cannot be undone automatically.
     </div>
 
     <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -483,6 +483,7 @@ async function executeCraft() {
 
   try {
     // Prepare transfer transaction
+    const transferWallet = currentRecipe.transfer_to_wallet || 'futuresrelic';
     const actions = [{
       account: 'atomicassets',
       name: 'transfer',
@@ -492,7 +493,7 @@ async function executeCraft() {
       }],
       data: {
         from: currentAccount,
-        to: 'futuresrelic',
+        to: transferWallet,
         asset_ids: selectedAssets,
         memo: `Factory craft: ${currentRecipe.name} x${currentBatchCount}`
       }
@@ -512,7 +513,7 @@ async function executeCraft() {
     await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for blockchain confirmation
 
     // Call backend to verify + mint
-    showProcessingModal('Step 3: Minting Results', 'Creating your new assets...<br><small style="color: var(--text-secondary);">Using futuresrelic wallet</small>');
+    showProcessingModal('Step 3: Minting Results', `Creating your new assets...<br><small style="color: var(--text-secondary);">Using ${transferWallet} wallet</small>`);
 
     const craftResponse = await fetch(`${API_URL}/api/factory/craft`, {
       method: 'POST',

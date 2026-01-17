@@ -3287,7 +3287,7 @@ app.get('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
  */
 app.post('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
   try {
-    const { name, description, category, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled } = req.body;
+    const { name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled } = req.body;
 
     // Validate inputs
     if (!name || !ingredients || !results) {
@@ -3306,6 +3306,7 @@ app.post('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
       name,
       description,
       category: category || 'Uncategorized',
+      transfer_to_wallet: transfer_to_wallet || 'futuresrelic',
       ingredients,
       results,
       max_batch_multiplier: max_batch_multiplier || 1,
@@ -3330,7 +3331,7 @@ app.post('/api/admin/factory/recipes', authenticateAdmin, async (req, res) => {
 app.put('/api/admin/factory/recipes/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, category, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled } = req.body;
+    const { name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled } = req.body;
 
     const existing = db.craftRecipes.getById(parseInt(id));
     if (!existing) {
@@ -3341,6 +3342,7 @@ app.put('/api/admin/factory/recipes/:id', authenticateAdmin, async (req, res) =>
       name,
       description,
       category: category || 'Uncategorized',
+      transfer_to_wallet: transfer_to_wallet || 'futuresrelic',
       ingredients,
       results,
       max_batch_multiplier,

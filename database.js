@@ -403,6 +403,7 @@ function initializeTables() {
           name TEXT NOT NULL,
           description TEXT,
           category TEXT DEFAULT 'Uncategorized',
+          transfer_to_wallet TEXT DEFAULT 'futuresrelic',
           ingredients TEXT NOT NULL,
           results TEXT NOT NULL,
           max_batch_multiplier INTEGER DEFAULT 1,
@@ -430,6 +431,21 @@ function initializeTables() {
       console.log('🔄 Adding category column to craft_recipes...');
       db.exec(`ALTER TABLE craft_recipes ADD COLUMN category TEXT DEFAULT 'Uncategorized'`);
       console.log('✅ category column added');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Add transfer_to_wallet column to craft_recipes if it doesn't exist
+  try {
+    const hasTransferWallet = db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('craft_recipes') WHERE name='transfer_to_wallet'
+    `).get();
+
+    if (hasTransferWallet.count === 0) {
+      console.log('🔄 Adding transfer_to_wallet column to craft_recipes...');
+      db.exec(`ALTER TABLE craft_recipes ADD COLUMN transfer_to_wallet TEXT DEFAULT 'futuresrelic'`);
+      console.log('✅ transfer_to_wallet column added');
     }
   } catch (error) {
     console.warn('⚠️ Migration warning:', error.message);
@@ -1223,14 +1239,15 @@ const craftRecipes = {
   create: (data) => {
     const stmt = db.prepare(`
       INSERT INTO craft_recipes
-      (name, description, category, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (name, description, category, transfer_to_wallet, ingredients, results, max_batch_multiplier, cooldown_hours, cooldown_enabled, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
       data.name,
       data.description || null,
       data.category || 'Uncategorized',
+      data.transfer_to_wallet || 'futuresrelic',
       JSON.stringify(data.ingredients),
       JSON.stringify(data.results),
       data.max_batch_multiplier || 1,
@@ -1249,6 +1266,7 @@ const craftRecipes = {
       SET name = ?,
           description = ?,
           category = ?,
+          transfer_to_wallet = ?,
           ingredients = ?,
           results = ?,
           max_batch_multiplier = ?,
@@ -1263,6 +1281,7 @@ const craftRecipes = {
       data.name,
       data.description || null,
       data.category || 'Uncategorized',
+      data.transfer_to_wallet || 'futuresrelic',
       JSON.stringify(data.ingredients),
       JSON.stringify(data.results),
       data.max_batch_multiplier || 1,
