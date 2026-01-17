@@ -3237,6 +3237,185 @@ app.post('/api/factory/craft', async (req, res) => {
 });
 
 /**
+ * POST /api/factory/retry-failed
+ * Retry failed crafts for a user (mints assets for verified transfers)
+ */
+app.post('/api/factory/retry-failed', async (req, res) => {
+  try {
+    const { user_wallet } = req.body;
+
+    if (!user_wallet) {
+      return res.status(400).json({ error: 'user_wallet required', success: false });
+    }
+
+    console.log(`🔄 RETRY FAILED CRAFTS REQUEST for ${user_wallet}`);
+
+    // 1. Get all failed crafts for this user
+    const allHistory = db.craftHistory.getByUser(user_wallet);
+    const failedCrafts = allHistory.filter(h => h.status === 'failed');
+
+    console.log(`   Found ${failedCrafts.length} failed craft(s)`);
+
+    if (failedCrafts.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No failed crafts found',
+        retried: 0,
+        results: []
+      });
+    }
+
+    const { JsonRpc } = require('eosjs');
+    const rpc = new JsonRpc('https://api.waxsweden.org', { fetch });
+
+    const results = [];
+    let retriedCount = 0;
+
+    // 2. Process each failed craft
+    for (const craft of failedCrafts) {
+      try {
+        console.log(`   Processing craft #${craft.id} (TX: ${craft.transfer_transaction_id})`);
+
+        // Get recipe
+        const recipe = db.craftRecipes.getById(craft.recipe_id);
+        if (!recipe) {
+          console.log(`      ❌ Recipe not found`);
+          results.push({
+            craft_id: craft.id,
+            success: false,
+            error: 'Recipe not found'
+          });
+          continue;
+        }
+
+        // Verify transfer on blockchain
+        let txData;
+        try {
+          txData = await rpc.history_get_transaction(craft.transfer_transaction_id);
+        } catch (txError) {
+          console.log(`      ❌ Transfer transaction not found on blockchain`);
+          results.push({
+            craft_id: craft.id,
+            recipe_name: recipe.name,
+            success: false,
+            error: 'Transfer not found on blockchain'
+          });
+          continue;
+        }
+
+        // Extract transfers
+        const transfers = [];
+        if (txData.traces) {
+          for (const trace of txData.traces) {
+            if (trace.act && trace.act.account === 'atomicassets' && trace.act.name === 'transfer') {
+              transfers.push(trace.act.data);
+            }
+          }
+        }
+
+        if (transfers.length === 0) {
+          console.log(`      ❌ No transfer found in transaction`);
+          results.push({
+            craft_id: craft.id,
+            recipe_name: recipe.name,
+            success: false,
+            error: 'No transfer found'
+          });
+          continue;
+        }
+
+        // Verify transfer recipient matches recipe
+        const expectedRecipient = recipe.transfer_to_wallet || 'futuresrelic';
+        const validTransfer = transfers.find(t => t.to === expectedRecipient && t.from === user_wallet);
+
+        if (!validTransfer) {
+          console.log(`      ❌ Transfer not to correct wallet (expected: ${expectedRecipient})`);
+          results.push({
+            craft_id: craft.id,
+            recipe_name: recipe.name,
+            success: false,
+            error: `Transfer not to ${expectedRecipient}`
+          });
+          continue;
+        }
+
+        console.log(`      ✅ Transfer verified! Attempting mint...`);
+
+        // Mint results
+        const mintTransactions = [];
+        try {
+          for (const result of recipe.results) {
+            const mintCount = result.amount * craft.batch_count;
+            console.log(`         Minting ${mintCount}x Template ${result.template_id}...`);
+
+            for (let i = 0; i < mintCount; i++) {
+              const mintResult = await wax.mintNFT(
+                user_wallet,
+                'futuresrelic',
+                result.template_id
+              );
+              mintTransactions.push(mintResult.transaction_id);
+            }
+          }
+
+          // Update craft as completed
+          db.craftHistory.update(craft.id, {
+            mint_transaction_id: mintTransactions[0],
+            result_info: recipe.results,
+            status: 'completed'
+          });
+
+          console.log(`      ✅ Mint successful! Craft #${craft.id} completed`);
+
+          results.push({
+            craft_id: craft.id,
+            recipe_name: recipe.name,
+            success: true,
+            mint_transaction_id: mintTransactions[0],
+            results: recipe.results.map(r => ({
+              template_id: r.template_id,
+              amount: r.amount * craft.batch_count
+            }))
+          });
+
+          retriedCount++;
+
+        } catch (mintError) {
+          console.error(`      ❌ Mint failed:`, mintError);
+          results.push({
+            craft_id: craft.id,
+            recipe_name: recipe.name,
+            success: false,
+            error: 'Mint failed: ' + mintError.message
+          });
+        }
+
+      } catch (error) {
+        console.error(`   ❌ Error processing craft #${craft.id}:`, error);
+        results.push({
+          craft_id: craft.id,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    console.log(`✅ Retry complete: ${retriedCount}/${failedCrafts.length} succeeded`);
+
+    res.json({
+      success: true,
+      retried: retriedCount,
+      total_failed: failedCrafts.length,
+      results: results
+    });
+
+  } catch (error) {
+    console.error('Error retrying failed crafts:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * GET /api/factory/history/:wallet
  * Get craft history for a user
  */
