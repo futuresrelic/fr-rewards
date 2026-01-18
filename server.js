@@ -497,14 +497,14 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
 
     console.log(`Minting ${quantityToMint}x reward NFT to ${account} (reward: ${rewardConfig.reward_template_id})`);
 
-    // Mint NFTs (one or multiple)
+    // Mint NFTs (one or multiple) - FIRST mint, THEN record
     const transactionIds = [];
     for (let i = 0; i < quantityToMint; i++) {
       const mintResult = await wax.mintNFT(account, config.collection_name, parseInt(rewardConfig.reward_template_id));
       transactionIds.push(mintResult.transaction_id);
     }
 
-    // Record claim with reward_id
+    // ONLY record claim AFTER successful mints (prevents cooldown if mint fails)
     db.claims.add(
       account,
       validatedTemplateId,
@@ -524,6 +524,155 @@ app.post('/api/user/claim', strictLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Error claiming reward:', error);
+
+    // Handle CPU exhaustion errors
+    if (error.message && error.message.toLowerCase().includes('cpu')) {
+      return res.status(503).json({
+        error: 'Server temporarily unavailable - insufficient CPU resources. Please try again in a few minutes or contact admin.'
+      });
+    }
+
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/user/claim-all
+ * Claim all available rewards at once
+ */
+app.post('/api/user/claim-all', strictLimiter, async (req, res) => {
+  try {
+    const { account } = req.body;
+
+    // Validate required fields
+    if (!account) {
+      return res.status(400).json({ error: 'Missing required field: account' });
+    }
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    const config = db.config.get();
+
+    // Get user's assets from blockchain
+    const enabledTemplates = db.templates.getEnabled();
+    const whitelistTemplates = enabledTemplates.map(t => t.template_id);
+    const eligibleAssets = await wax.getUserAssetsLive(account, config.collection_name, whitelistTemplates);
+
+    if (eligibleAssets.length === 0) {
+      return res.status(403).json({ error: 'You do not hold any whitelisted NFTs' });
+    }
+
+    // Get all enabled rewards
+    const allRewards = db.templateRewards.getAllEnabled();
+    const cooldowns = db.claims.getCooldowns(account);
+    const now = new Date();
+
+    // Find claimable rewards
+    const claimableRewards = [];
+
+    for (const reward of allRewards) {
+      // Check if user has assets for this template
+      const userAssets = eligibleAssets.filter(asset =>
+        parseInt(asset.template.template_id) === reward.template_id
+      );
+
+      if (userAssets.length === 0) continue;
+
+      // Check cooldown
+      const cooldown = cooldowns.find(c =>
+        c.template_id === reward.template_id &&
+        c.reward_id === reward.id
+      );
+
+      const canClaim = !cooldown || new Date(cooldown.next_claim_at) <= now;
+
+      if (canClaim) {
+        const quantityToMint = reward.match_quantity ? userAssets.length : (reward.max_claims || 1);
+        claimableRewards.push({
+          ...reward,
+          quantityToMint
+        });
+      }
+    }
+
+    if (claimableRewards.length === 0) {
+      return res.status(429).json({
+        error: 'No rewards available to claim. All are on cooldown.',
+        success: false
+      });
+    }
+
+    console.log(`🎁 Claim All: Processing ${claimableRewards.length} reward(s) for ${account}`);
+
+    // Claim each reward
+    const results = [];
+    const errors = [];
+
+    for (const reward of claimableRewards) {
+      try {
+        console.log(`   Minting ${reward.quantityToMint}x Template ${reward.reward_template_id} (reward #${reward.id})`);
+
+        // Mint NFTs
+        const transactionIds = [];
+        for (let i = 0; i < reward.quantityToMint; i++) {
+          const mintResult = await wax.mintNFT(account, config.collection_name, parseInt(reward.reward_template_id));
+          transactionIds.push(mintResult.transaction_id);
+        }
+
+        // ONLY record claim AFTER successful mint
+        db.claims.add(
+          account,
+          reward.template_id,
+          reward.reward_template_id,
+          transactionIds[0],
+          reward.cooldown_hours,
+          reward.id
+        );
+
+        results.push({
+          template_id: reward.template_id,
+          reward_id: reward.id,
+          reward_name: reward.reward_name,
+          reward_template_id: reward.reward_template_id,
+          quantity_minted: reward.quantityToMint,
+          transaction_ids: transactionIds,
+          success: true
+        });
+
+        console.log(`   ✅ Success: ${reward.quantityToMint}x minted - TXs: ${transactionIds.join(', ')}`);
+
+      } catch (error) {
+        console.error(`   ❌ Failed to mint reward ${reward.id}:`, error.message);
+        errors.push({
+          template_id: reward.template_id,
+          reward_id: reward.id,
+          reward_name: reward.reward_name,
+          error: error.message
+        });
+      }
+    }
+
+    // Return results
+    const response = {
+      success: results.length > 0,
+      message: `Claimed ${results.length} of ${claimableRewards.length} available rewards`,
+      results,
+      total_claimed: results.length,
+      total_attempted: claimableRewards.length
+    };
+
+    if (errors.length > 0) {
+      response.errors = errors;
+      response.partial_success = true;
+    }
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('Error in claim-all:', error);
 
     // Handle CPU exhaustion errors
     if (error.message && error.message.toLowerCase().includes('cpu')) {

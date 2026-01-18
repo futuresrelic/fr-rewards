@@ -34,7 +34,7 @@ function initializeTables() {
       );
     `);
 
-    // Create claims table
+    // Create claims table (no UNIQUE constraint - allows multiple claims at same time)
     db.exec(`
       CREATE TABLE IF NOT EXISTS claims (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,8 +43,7 @@ function initializeTables() {
         reward_template INTEGER NOT NULL,
         transaction_id TEXT NOT NULL,
         claimed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        next_claim_at TIMESTAMP NOT NULL,
-        UNIQUE(wallet_account, template_id, claimed_at)
+        next_claim_at TIMESTAMP NOT NULL
       );
     `);
 
@@ -561,6 +560,52 @@ function initializeTables() {
         ALTER TABLE scheduled_actions ADD COLUMN last_executed_at TIMESTAMP;
       `);
       console.log('✅ Recurring columns added');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Remove problematic UNIQUE constraint from claims table
+  try {
+    // Check if the claims table has the UNIQUE constraint
+    const claimsTableInfo = db.prepare(`
+      SELECT sql FROM sqlite_master WHERE type='table' AND name='claims'
+    `).get();
+
+    if (claimsTableInfo && claimsTableInfo.sql.includes('UNIQUE(wallet_account, template_id, claimed_at)')) {
+      console.log('🔄 Removing UNIQUE constraint from claims table...');
+
+      // SQLite doesn't support DROP CONSTRAINT, so we need to recreate the table
+      db.exec(`
+        -- Create new claims table without the constraint
+        CREATE TABLE claims_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          wallet_account TEXT NOT NULL,
+          template_id INTEGER NOT NULL,
+          reward_template INTEGER NOT NULL,
+          transaction_id TEXT NOT NULL,
+          claimed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          next_claim_at TIMESTAMP NOT NULL,
+          reward_id INTEGER
+        );
+
+        -- Copy data from old table
+        INSERT INTO claims_new (id, wallet_account, template_id, reward_template, transaction_id, claimed_at, next_claim_at, reward_id)
+        SELECT id, wallet_account, template_id, reward_template, transaction_id, claimed_at, next_claim_at, reward_id
+        FROM claims;
+
+        -- Drop old table
+        DROP TABLE claims;
+
+        -- Rename new table
+        ALTER TABLE claims_new RENAME TO claims;
+
+        -- Recreate indexes
+        CREATE INDEX IF NOT EXISTS idx_claims_wallet ON claims(wallet_account);
+        CREATE INDEX IF NOT EXISTS idx_claims_next_claim ON claims(wallet_account, template_id, next_claim_at);
+      `);
+
+      console.log('✅ UNIQUE constraint removed - multi-claim support enabled');
     }
   } catch (error) {
     console.warn('⚠️ Migration warning:', error.message);

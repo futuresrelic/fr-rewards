@@ -97,6 +97,7 @@ function setupEventListeners() {
   document.getElementById('connect-wcw').addEventListener('click', () => connectWallet('wcw'));
   document.getElementById('connect-anchor').addEventListener('click', () => connectWallet('anchor'));
   document.getElementById('disconnect-btn').addEventListener('click', disconnect);
+  document.getElementById('claim-all-btn').addEventListener('click', claimAll);
 }
 
 // Check for existing session
@@ -340,6 +341,15 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
     });
   });
 
+  // Check if any rewards are claimable and show/hide claim-all button
+  const hasClaimableRewards = cooldownData.cooldowns.some(cd => cd.can_claim);
+  const claimAllContainer = document.getElementById('claim-all-container');
+  if (hasClaimableRewards) {
+    claimAllContainer.style.display = 'block';
+  } else {
+    claimAllContainer.style.display = 'none';
+  }
+
   // Show claim history
   if (claimsData.claims.length > 0) {
     claimHistorySection.style.display = 'block';
@@ -416,6 +426,83 @@ async function claimReward(templateId, rewardId, button) {
     showError('Claim failed: ' + error.message);
     button.disabled = false;
     button.textContent = '🎁 Claim Reward';
+  }
+}
+
+// Claim all available rewards
+async function claimAll() {
+  const button = document.getElementById('claim-all-btn');
+  const statusEl = document.getElementById('claim-all-status');
+
+  try {
+    button.disabled = true;
+    button.textContent = '⏳ Claiming all rewards...';
+    statusEl.innerHTML = '<div style="color: var(--primary);">Processing...</div>';
+
+    const response = await fetch(`${API_URL}/api/user/claim-all`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        account: currentAccount
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Claim all failed');
+    }
+
+    // Show detailed results
+    let statusHtml = `<div style="color: var(--success); font-weight: 600; margin-bottom: 10px;">✅ ${data.message}</div>`;
+
+    if (data.results && data.results.length > 0) {
+      statusHtml += '<div style="text-align: left; max-width: 600px; margin: 0 auto;">';
+      data.results.forEach(result => {
+        const txLink = result.transaction_ids && result.transaction_ids[0]
+          ? `<a href="https://waxblock.io/transaction/${result.transaction_ids[0]}" target="_blank" style="color: var(--primary);">View TX</a>`
+          : '';
+        statusHtml += `
+          <div style="padding: 8px; border-bottom: 1px solid var(--border);">
+            <strong>${result.reward_name || 'Reward #' + result.reward_id}</strong>
+            - Minted ${result.quantity_minted}x NFT(s) ${txLink}
+          </div>
+        `;
+      });
+      statusHtml += '</div>';
+    }
+
+    if (data.errors && data.errors.length > 0) {
+      statusHtml += '<div style="margin-top: 10px; color: var(--error);">⚠️ Some claims failed:</div>';
+      data.errors.forEach(err => {
+        statusHtml += `<div style="color: var(--text-secondary); font-size: 0.85rem;">${err.reward_name || 'Reward #' + err.reward_id}: ${err.error}</div>`;
+      });
+    }
+
+    statusEl.innerHTML = statusHtml;
+
+    // Show success message
+    showError(`🎉 Successfully claimed ${data.total_claimed} reward(s)!`, 'success');
+
+    // Reload user data after 3 seconds
+    setTimeout(() => {
+      loadUserData();
+      button.disabled = false;
+      button.textContent = '🎁 Claim All Available Rewards';
+      statusEl.innerHTML = '';
+    }, 5000);
+
+  } catch (error) {
+    statusEl.innerHTML = `<div style="color: var(--error);">❌ ${error.message}</div>`;
+    showError('Claim all failed: ' + error.message);
+    button.disabled = false;
+    button.textContent = '🎁 Claim All Available Rewards';
+
+    setTimeout(() => {
+      statusEl.innerHTML = '';
+    }, 5000);
   }
 }
 
