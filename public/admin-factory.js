@@ -817,7 +817,7 @@ function displayFailed(failed) {
   let html = '<div style="max-height: 600px; overflow-y: auto;">';
 
   failed.forEach(record => {
-    const ingredientAssetIds = JSON.parse(record.ingredient_asset_ids);
+    const ingredientAssetIds = record.ingredient_asset_ids;
 
     html += `
       <div style="background: var(--bg-dark); padding: 15px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #f87171;">
