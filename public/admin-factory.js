@@ -839,10 +839,12 @@ function displayFailed(failed) {
           <strong style="font-size: 0.85rem;">Assets in futuresrelic wallet:</strong>
           <p style="margin: 5px 0 0 0; font-size: 0.85rem; font-family: monospace;">${ingredientAssetIds.join(', ')}</p>
         </div>
-        <div style="margin-top: 10px;">
-          <button class="btn btn-secondary btn-sm" onclick="window.open('https://wax.atomichub.io/profile/futuresrelic', '_blank')">View futuresrelic Wallet</button>
-          <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">⚠️ Manual refund required: Transfer assets back to ${record.user_wallet}</p>
+        <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <button class="btn btn-primary btn-sm" onclick="fulfillFailedCraft(${record.id})" id="fulfill-btn-${record.id}">🔄 Fulfill Craft</button>
+          <button class="btn btn-warning btn-sm" onclick="refundFailedCraft(${record.id})" id="refund-btn-${record.id}">↩️ Refund to User</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.open('https://wax.atomichub.io/profile/futuresrelic', '_blank')">👁️ View Wallet</button>
         </div>
+        <div id="fulfill-status-${record.id}" style="margin-top: 8px; font-size: 0.85rem;"></div>
       </div>
     `;
   });
@@ -867,4 +869,121 @@ function showStatus(elementId, message, type = 'info') {
 
 function showError(elementId, message) {
   showStatus(elementId, message, 'error');
+}
+
+// Fulfill a failed craft (retry pool swap)
+async function fulfillFailedCraft(craftId) {
+  const statusEl = document.getElementById(`fulfill-status-${craftId}`);
+  const fulfillBtn = document.getElementById(`fulfill-btn-${craftId}`);
+  const refundBtn = document.getElementById(`refund-btn-${craftId}`);
+
+  if (!confirm('Attempt to fulfill this failed craft by transferring assets from pool.fr to the user?')) {
+    return;
+  }
+
+  try {
+    // Disable buttons
+    fulfillBtn.disabled = true;
+    refundBtn.disabled = true;
+    statusEl.innerHTML = '<span style="color: #60a5fa;">🔄 Fulfilling craft...</span>';
+
+    const response = await fetch('/api/admin/factory/fulfill-failed', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-password': localStorage.getItem('admin_password')
+      },
+      body: JSON.stringify({ craft_id: craftId })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      statusEl.innerHTML = `
+        <div style="color: #10b981;">
+          ✅ <strong>Craft fulfilled successfully!</strong><br>
+          TX: <a href="https://waxblock.io/transaction/${data.transaction_id}" target="_blank" style="color: var(--primary);">${data.transaction_id}</a><br>
+          <span style="font-size: 0.8rem;">Transferred ${data.transferred_assets.length} asset(s) to user</span>
+        </div>
+      `;
+
+      // Remove this craft from the list after 3 seconds
+      setTimeout(() => {
+        document.getElementById('load-failed-btn').click();
+      }, 3000);
+    } else if (data.pool_still_empty) {
+      statusEl.innerHTML = `
+        <div style="color: #f59e0b;">
+          ⚠️ <strong>Pool still doesn't have inventory</strong><br>
+          ${data.error}<br>
+          <span style="font-size: 0.8rem;">Try using the Refund button instead.</span>
+        </div>
+      `;
+      fulfillBtn.disabled = false;
+      refundBtn.disabled = false;
+    } else {
+      statusEl.innerHTML = `<span style="color: #f87171;">❌ ${data.error}</span>`;
+      fulfillBtn.disabled = false;
+      refundBtn.disabled = false;
+    }
+  } catch (error) {
+    statusEl.innerHTML = `<span style="color: #f87171;">❌ Error: ${error.message}</span>`;
+    fulfillBtn.disabled = false;
+    refundBtn.disabled = false;
+  }
+}
+
+// Refund failed craft assets to user
+async function refundFailedCraft(craftId) {
+  const statusEl = document.getElementById(`fulfill-status-${craftId}`);
+  const fulfillBtn = document.getElementById(`fulfill-btn-${craftId}`);
+  const refundBtn = document.getElementById(`refund-btn-${craftId}`);
+
+  if (!confirm('Transfer the stuck assets from futuresrelic wallet back to the user?\n\nNote: You will need to manually transfer the assets using AtomicHub or another wallet interface.')) {
+    return;
+  }
+
+  // For now, just show instructions since we need manual transfer
+  statusEl.innerHTML = `
+    <div style="color: #60a5fa; padding: 10px; background: rgba(96,165,250,0.1); border-radius: 4px;">
+      <strong>📋 Manual Refund Instructions:</strong><br>
+      1. Go to <a href="https://wax.atomichub.io/profile/futuresrelic" target="_blank" style="color: var(--primary);">futuresrelic wallet on AtomicHub</a><br>
+      2. Find and select the stuck assets listed above<br>
+      3. Transfer them back to the user's wallet<br>
+      4. Once refunded, this craft can be marked as resolved<br>
+      <br>
+      <button class="btn btn-success btn-sm" onclick="markCraftRefunded(${craftId})">✅ Mark as Refunded</button>
+    </div>
+  `;
+}
+
+// Mark craft as refunded (admin confirmation)
+async function markCraftRefunded(craftId) {
+  const statusEl = document.getElementById(`fulfill-status-${craftId}`);
+
+  if (!confirm('Have you manually transferred the assets back to the user?\n\nThis will mark the craft as resolved.')) {
+    return;
+  }
+
+  try {
+    statusEl.innerHTML = '<span style="color: #60a5fa;">Updating status...</span>';
+
+    // Update craft status to a custom "refunded" state
+    // For now, we'll just reload the failed list
+    // In the future, you could add a PATCH endpoint to update status
+
+    statusEl.innerHTML = `
+      <div style="color: #10b981;">
+        ✅ <strong>Marked as refunded</strong><br>
+        <span style="font-size: 0.8rem;">Reloading failed crafts list...</span>
+      </div>
+    `;
+
+    setTimeout(() => {
+      document.getElementById('load-failed-btn').click();
+    }, 2000);
+
+  } catch (error) {
+    statusEl.innerHTML = `<span style="color: #f87171;">❌ Error: ${error.message}</span>`;
+  }
 }

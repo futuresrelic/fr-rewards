@@ -4014,6 +4014,236 @@ app.get('/api/admin/factory/failed', authenticateAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/factory/check-pool-inventory
+ * PRE-FLIGHT CHECK: Verify pool has required assets BEFORE user transfers
+ * Body: { recipe_id: number, batch_count: number }
+ */
+app.post('/api/factory/check-pool-inventory', async (req, res) => {
+  try {
+    const { recipe_id, batch_count } = req.body;
+
+    console.log('🔍 PRE-FLIGHT POOL CHECK');
+    console.log(`   Recipe ID: ${recipe_id}`);
+    console.log(`   Batch Count: ${batch_count}`);
+
+    if (!recipe_id || !batch_count) {
+      return res.status(400).json({ error: 'Missing recipe_id or batch_count', success: false });
+    }
+
+    // Get recipe
+    const recipe = db.craftRecipes.getById(recipe_id);
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found', success: false });
+    }
+
+    // Only applies to swap/pool mode
+    if (!recipe.pool_mode_enabled) {
+      return res.json({
+        success: true,
+        pool_mode: false,
+        message: 'Recipe is mint mode, no pool check needed'
+      });
+    }
+
+    if (!recipe.pool_wallet || !recipe.results) {
+      return res.status(400).json({
+        error: 'Recipe pool configuration incomplete',
+        success: false
+      });
+    }
+
+    // Get pool wallet name
+    const poolWallet = recipe.pool_wallet;
+    console.log(`   Checking pool wallet: ${poolWallet}`);
+
+    // Fetch pool assets for all result templates
+    const resultTemplateIds = recipe.results.map(r => parseInt(r.template_id));
+    const poolAssets = await wax.getUserAssetsLive(poolWallet, 'futuresrelic', resultTemplateIds);
+
+    console.log(`   Found ${poolAssets.length} total asset(s) in pool`);
+
+    // Check if pool has sufficient inventory for each result
+    const inventoryCheck = [];
+    let hasAllInventory = true;
+
+    for (const result of recipe.results) {
+      const templateId = parseInt(result.template_id);
+      const neededCount = result.amount * batch_count;
+
+      const availableAssets = poolAssets.filter(a =>
+        parseInt(a.template.template_id) === templateId
+      );
+
+      const templateName = availableAssets.length > 0
+        ? availableAssets[0].template.immutable_data.name || `Template #${templateId}`
+        : `Template #${templateId}`;
+
+      const hasSufficient = availableAssets.length >= neededCount;
+      if (!hasSufficient) {
+        hasAllInventory = false;
+      }
+
+      inventoryCheck.push({
+        template_id: templateId,
+        template_name: templateName,
+        needed: neededCount,
+        available: availableAssets.length,
+        sufficient: hasSufficient
+      });
+
+      console.log(`   ${templateName}: need ${neededCount}, have ${availableAssets.length} ${hasSufficient ? '✅' : '❌'}`);
+    }
+
+    if (hasAllInventory) {
+      console.log('✅ Pool has all required inventory!');
+      return res.json({
+        success: true,
+        pool_available: true,
+        inventory: inventoryCheck,
+        message: 'Pool has all required assets'
+      });
+    } else {
+      console.log('❌ Pool missing some inventory');
+      return res.json({
+        success: true,
+        pool_available: false,
+        inventory: inventoryCheck,
+        message: 'Pool does not have sufficient inventory. Use MINT mode instead.'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error checking pool inventory:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/admin/factory/fulfill-failed
+ * ADMIN: Retry completing a failed pool swap craft
+ * Body: { craft_id: number }
+ */
+app.post('/api/admin/factory/fulfill-failed', authenticateAdmin, async (req, res) => {
+  try {
+    const { craft_id } = req.body;
+
+    console.log('🔄 FULFILL FAILED CRAFT');
+    console.log(`   Craft ID: ${craft_id}`);
+
+    if (!craft_id) {
+      return res.status(400).json({ error: 'Missing craft_id', success: false });
+    }
+
+    // Get craft record
+    const craft = db.craftHistory.getById(craft_id);
+    if (!craft) {
+      return res.status(404).json({ error: 'Craft not found', success: false });
+    }
+
+    if (craft.status !== 'failed') {
+      return res.status(400).json({
+        error: `Craft is not failed (status: ${craft.status})`,
+        success: false
+      });
+    }
+
+    // Get recipe
+    const recipe = db.craftRecipes.getById(craft.recipe_id);
+    if (!recipe) {
+      return res.status(404).json({ error: 'Recipe not found', success: false });
+    }
+
+    // Only works for pool mode crafts
+    if (!recipe.pool_mode_enabled || !recipe.pool_wallet) {
+      return res.status(400).json({
+        error: 'This craft is not a pool swap, cannot fulfill',
+        success: false
+      });
+    }
+
+    console.log(`   Recipe: ${recipe.name}`);
+    console.log(`   User: ${craft.user_wallet}`);
+    console.log(`   Batch: ${craft.batch_count}x`);
+
+    // Get pool private key
+    const poolPrivateKey = process.env.POOL_FR_PRIVATE_KEY;
+    if (!poolPrivateKey) {
+      return res.status(500).json({
+        error: 'POOL_FR_PRIVATE_KEY not configured',
+        success: false
+      });
+    }
+
+    const poolWallet = recipe.pool_wallet;
+    console.log(`   Pool wallet: ${poolWallet}`);
+
+    // Fetch pool assets
+    const resultTemplateIds = recipe.results.map(r => parseInt(r.template_id));
+    const poolAssets = await wax.getUserAssetsLive(poolWallet, 'futuresrelic', resultTemplateIds);
+
+    console.log(`   Found ${poolAssets.length} asset(s) in pool`);
+
+    // Select assets to transfer
+    const assetsToTransfer = [];
+    for (const result of recipe.results) {
+      const templateId = parseInt(result.template_id);
+      const neededCount = result.amount * craft.batch_count;
+
+      const availableAssets = poolAssets.filter(a =>
+        parseInt(a.template.template_id) === templateId &&
+        !assetsToTransfer.includes(a.asset_id)
+      );
+
+      if (availableAssets.length < neededCount) {
+        return res.status(400).json({
+          error: `Insufficient pool inventory for template ${templateId}. Need ${neededCount}, have ${availableAssets.length}`,
+          success: false,
+          pool_still_empty: true
+        });
+      }
+
+      // Take the first N assets
+      for (let i = 0; i < neededCount; i++) {
+        assetsToTransfer.push(availableAssets[i].asset_id);
+      }
+    }
+
+    console.log(`   Transferring ${assetsToTransfer.length} asset(s) from pool to ${craft.user_wallet}...`);
+
+    // Transfer assets from pool to user
+    const transferResult = await wax.transferNFTs(
+      poolWallet,
+      craft.user_wallet,
+      assetsToTransfer,
+      `Crafted via recipe: ${recipe.name} (fulfilled)`,
+      poolPrivateKey
+    );
+
+    console.log(`✅ Swap completed! TX: ${transferResult.transaction_id}`);
+
+    // Update craft record as completed
+    db.craftHistory.update(craft_id, {
+      mint_transaction_id: transferResult.transaction_id,
+      result_info: recipe.results,
+      status: 'completed',
+      error_message: null
+    });
+
+    res.json({
+      success: true,
+      craft_id: craft_id,
+      transaction_id: transferResult.transaction_id,
+      transferred_assets: assetsToTransfer,
+      message: 'Failed craft fulfilled successfully!'
+    });
+
+  } catch (error) {
+    console.error('Error fulfilling failed craft:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
 // ========================================
 // Scheduled Actions API
 // ========================================
