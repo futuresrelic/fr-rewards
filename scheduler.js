@@ -36,11 +36,30 @@ async function executeAction(action) {
         throw new Error(`Unknown action type: ${action.action_type}`);
     }
 
-    // Mark action as completed
-    db.scheduledActions.update(action.id, {
-      status: 'completed',
-      executed_at: new Date().toISOString()
-    });
+    // Handle recurring vs one-time actions
+    const now = new Date();
+
+    if (action.is_recurring && action.recurrence_interval_minutes) {
+      // RECURRING ACTION: Schedule next execution
+      const nextExecutionTime = new Date(now.getTime() + action.recurrence_interval_minutes * 60 * 1000);
+
+      db.scheduledActions.update(action.id, {
+        last_executed_at: now.toISOString(),
+        execution_time: nextExecutionTime.toISOString(),
+        error_message: null // Clear any previous errors
+      });
+
+      console.log(`   🔄 Recurring action - Next execution: ${nextExecutionTime.toISOString()}`);
+
+    } else {
+      // ONE-TIME ACTION: Mark as completed
+      db.scheduledActions.update(action.id, {
+        status: 'completed',
+        executed_at: now.toISOString()
+      });
+
+      console.log(`   ✅ Action completed!`);
+    }
 
     // Log successful execution
     db.actionExecutions.create({
@@ -50,7 +69,7 @@ async function executeAction(action) {
       result_data: result
     });
 
-    console.log(`   ✅ Action completed! TX: ${result.transaction_id}`);
+    console.log(`   TX: ${result.transaction_id}`);
 
     return { success: true, result };
 

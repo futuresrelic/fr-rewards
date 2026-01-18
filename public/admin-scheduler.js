@@ -122,6 +122,12 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
   });
 });
 
+// Recurring checkbox toggle
+document.getElementById('is-recurring').addEventListener('change', (e) => {
+  const recurringConfig = document.getElementById('recurring-config');
+  recurringConfig.style.display = e.target.checked ? 'block' : 'none';
+});
+
 // Save action
 document.getElementById('save-action-btn').addEventListener('click', async () => {
   try {
@@ -132,6 +138,29 @@ document.getElementById('save-action-btn').addEventListener('click', async () =>
     if (!name || !execution_time) {
       showStatus('create-status', 'Please fill in all required fields', 'error');
       return;
+    }
+
+    // Collect recurring settings
+    const isRecurring = document.getElementById('is-recurring').checked;
+    let recurrenceIntervalMinutes = null;
+
+    if (isRecurring) {
+      const recurrenceValue = parseInt(document.getElementById('recurrence-value').value);
+      const recurrenceUnit = document.getElementById('recurrence-unit').value;
+
+      if (!recurrenceValue || recurrenceValue < 1) {
+        showStatus('create-status', 'Recurrence value must be at least 1', 'error');
+        return;
+      }
+
+      // Convert to minutes based on unit
+      if (recurrenceUnit === 'minutes') {
+        recurrenceIntervalMinutes = recurrenceValue;
+      } else if (recurrenceUnit === 'hours') {
+        recurrenceIntervalMinutes = recurrenceValue * 60;
+      } else if (recurrenceUnit === 'days') {
+        recurrenceIntervalMinutes = recurrenceValue * 60 * 24;
+      }
     }
 
     // Build action_params based on type
@@ -156,19 +185,23 @@ document.getElementById('save-action-btn').addEventListener('click', async () =>
       };
     }
 
+    const requestBody = {
+      name,
+      action_type,
+      action_params,
+      execution_time: new Date(execution_time).toISOString(),
+      created_by: 'admin',
+      is_recurring: isRecurring,
+      recurrence_interval_minutes: recurrenceIntervalMinutes
+    };
+
     const response = await fetch(`${API_URL}/api/admin/scheduler/actions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        name,
-        action_type,
-        action_params,
-        execution_time: new Date(execution_time).toISOString(),
-        created_by: 'admin'
-      })
+      body: JSON.stringify(requestBody)
     });
 
     const data = await response.json();
@@ -268,14 +301,30 @@ function displayActions(actions) {
     const now = new Date();
     const isPast = execTime < now;
 
+    // Format recurring info
+    let recurringInfo = '';
+    if (action.is_recurring && action.recurrence_interval_minutes) {
+      const interval = action.recurrence_interval_minutes;
+      let intervalText = '';
+      if (interval < 60) {
+        intervalText = `${interval}m`;
+      } else if (interval < 1440) {
+        intervalText = `${Math.floor(interval / 60)}h`;
+      } else {
+        intervalText = `${Math.floor(interval / 1440)}d`;
+      }
+      recurringInfo = `<br><small style="color: #10b981;">🔄 Repeats every ${intervalText}</small>`;
+    }
+
     html += `
       <tr>
         <td>#${action.id}</td>
-        <td><strong>${action.name}</strong></td>
+        <td><strong>${action.name}</strong>${action.is_recurring ? ' 🔄' : ''}</td>
         <td>${getActionTypeIcon(action.action_type)} ${action.action_type}</td>
         <td>
           ${execTime.toLocaleString()}
           ${isPast && action.status === 'pending' ? '<br><small style="color: #fbbf24;">⚠️ Overdue</small>' : ''}
+          ${recurringInfo}
         </td>
         <td><span class="status-badge status-${action.status}">${action.status}</span></td>
         <td><small>${createdTime.toLocaleString()}</small></td>
@@ -320,7 +369,26 @@ async function viewActionDetails(id) {
       const action = data.action;
       const params = JSON.stringify(action.action_params, null, 2);
 
-      alert(`Action #${action.id}: ${action.name}\n\nType: ${action.action_type}\nStatus: ${action.status}\nExecution Time: ${new Date(action.execution_time).toLocaleString()}\n\nParameters:\n${params}`);
+      let recurringText = '';
+      if (action.is_recurring && action.recurrence_interval_minutes) {
+        const interval = action.recurrence_interval_minutes;
+        let intervalDisplay = '';
+        if (interval < 60) {
+          intervalDisplay = `${interval} minute(s)`;
+        } else if (interval < 1440) {
+          intervalDisplay = `${Math.floor(interval / 60)} hour(s)`;
+        } else {
+          intervalDisplay = `${Math.floor(interval / 1440)} day(s)`;
+        }
+        recurringText = `\nRecurring: Yes - Every ${intervalDisplay}`;
+        if (action.last_executed_at) {
+          recurringText += `\nLast Executed: ${new Date(action.last_executed_at).toLocaleString()}`;
+        }
+      } else {
+        recurringText = '\nRecurring: No (One-time action)';
+      }
+
+      alert(`Action #${action.id}: ${action.name}\n\nType: ${action.action_type}\nStatus: ${action.status}\nExecution Time: ${new Date(action.execution_time).toLocaleString()}${recurringText}\n\nParameters:\n${params}`);
     } else {
       alert('Error loading action details');
     }
@@ -480,5 +548,9 @@ function resetCreateForm() {
   document.getElementById('mint-template-id').value = '';
   document.getElementById('mint-quantity').value = '1';
   document.getElementById('mint-authorized-minter').value = 'futuresrelic';
+  document.getElementById('is-recurring').checked = false;
+  document.getElementById('recurring-config').style.display = 'none';
+  document.getElementById('recurrence-value').value = '5';
+  document.getElementById('recurrence-unit').value = 'minutes';
   document.getElementById('create-status').style.display = 'none';
 }

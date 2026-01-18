@@ -3884,7 +3884,7 @@ app.get('/api/admin/scheduler/actions/:id', authenticateAdmin, async (req, res) 
  */
 app.post('/api/admin/scheduler/actions', authenticateAdmin, async (req, res) => {
   try {
-    const { name, action_type, action_params, execution_time, created_by } = req.body;
+    const { name, action_type, action_params, execution_time, created_by, is_recurring, recurrence_interval_minutes } = req.body;
 
     // Validate inputs
     if (!name || !action_type || !action_params || !execution_time) {
@@ -3901,6 +3901,15 @@ app.post('/api/admin/scheduler/actions', authenticateAdmin, async (req, res) => 
     const execTime = new Date(execution_time);
     if (execTime <= new Date()) {
       return res.status(400).json({ error: 'execution_time must be in the future', success: false });
+    }
+
+    // Validate recurring settings
+    if (is_recurring && !recurrence_interval_minutes) {
+      return res.status(400).json({ error: 'Recurring actions require recurrence_interval_minutes', success: false });
+    }
+
+    if (is_recurring && recurrence_interval_minutes < 1) {
+      return res.status(400).json({ error: 'recurrence_interval_minutes must be at least 1', success: false });
     }
 
     // Validate action_params based on type
@@ -3922,7 +3931,9 @@ app.post('/api/admin/scheduler/actions', authenticateAdmin, async (req, res) => 
       action_type,
       action_params,
       execution_time: execTime.toISOString(),
-      created_by: created_by || 'admin'
+      created_by: created_by || 'admin',
+      is_recurring: is_recurring || false,
+      recurrence_interval_minutes: recurrence_interval_minutes || null
     });
 
     console.log(`✅ Created scheduled action #${actionId}: ${name} (${action_type}) at ${execution_time}`);

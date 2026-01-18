@@ -526,6 +526,9 @@ function initializeTables() {
           action_params TEXT NOT NULL,
           execution_time TIMESTAMP NOT NULL,
           status TEXT DEFAULT 'pending',
+          is_recurring INTEGER DEFAULT 0,
+          recurrence_interval_minutes INTEGER,
+          last_executed_at TIMESTAMP,
           created_by TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           executed_at TIMESTAMP,
@@ -539,6 +542,25 @@ function initializeTables() {
       `);
 
       console.log('✅ scheduled_actions table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Add recurring columns to scheduled_actions if they don't exist
+  try {
+    const hasRecurring = db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('scheduled_actions') WHERE name='is_recurring'
+    `).get();
+
+    if (hasRecurring.count === 0) {
+      console.log('🔄 Adding recurring columns to scheduled_actions...');
+      db.exec(`
+        ALTER TABLE scheduled_actions ADD COLUMN is_recurring INTEGER DEFAULT 0;
+        ALTER TABLE scheduled_actions ADD COLUMN recurrence_interval_minutes INTEGER;
+        ALTER TABLE scheduled_actions ADD COLUMN last_executed_at TIMESTAMP;
+      `);
+      console.log('✅ Recurring columns added');
     }
   } catch (error) {
     console.warn('⚠️ Migration warning:', error.message);
@@ -1614,8 +1636,8 @@ const scheduledActions = {
   create: (data) => {
     const stmt = db.prepare(`
       INSERT INTO scheduled_actions
-      (name, action_type, action_params, execution_time, created_by, status)
-      VALUES (?, ?, ?, ?, ?, ?)
+      (name, action_type, action_params, execution_time, created_by, status, is_recurring, recurrence_interval_minutes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
@@ -1624,7 +1646,9 @@ const scheduledActions = {
       JSON.stringify(data.action_params),
       data.execution_time,
       data.created_by || null,
-      data.status || 'pending'
+      data.status || 'pending',
+      data.is_recurring ? 1 : 0,
+      data.recurrence_interval_minutes || null
     );
 
     return result.lastInsertRowid;
@@ -1643,6 +1667,16 @@ const scheduledActions = {
     if (data.executed_at !== undefined) {
       updates.push('executed_at = ?');
       values.push(data.executed_at);
+    }
+
+    if (data.execution_time !== undefined) {
+      updates.push('execution_time = ?');
+      values.push(data.execution_time);
+    }
+
+    if (data.last_executed_at !== undefined) {
+      updates.push('last_executed_at = ?');
+      values.push(data.last_executed_at);
     }
 
     if (data.error_message !== undefined) {

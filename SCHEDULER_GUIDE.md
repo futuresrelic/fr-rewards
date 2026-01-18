@@ -16,6 +16,7 @@ Login with your admin password (same as other admin panels).
 
 ### 2. Create Your First Scheduled Mint
 
+**One-Time Action:**
 1. Click **"+ Create Action"**
 2. Fill in the form:
    - **Name**: "Test Mint in 5 Minutes"
@@ -24,12 +25,46 @@ Login with your admin password (same as other admin panels).
    - **To Wallet**: Enter a wallet address (e.g., `czkua.wam`)
    - **Template ID**: Enter a template ID (e.g., `391378`)
    - **Quantity**: `1`
+   - Leave **"Recurring Action"** unchecked
 3. Click **"Save Action"**
 4. Wait 5 minutes and check the execution history!
+
+**Recurring Action:**
+1. Click **"+ Create Action"**
+2. Fill in the form as above
+3. Check **"🔄 Recurring Action (Loop)"**
+4. Set **"Repeat Every"**: `5` `Minutes`
+5. Click **"Save Action"**
+6. The action will execute every 5 minutes until you cancel it!
 
 ---
 
 ## 📋 Features
+
+### 🔄 Recurring Actions (NEW!)
+
+**Automate repeating tasks with loop functionality!**
+
+Recurring actions automatically reschedule themselves after each successful execution, creating an infinite loop until you cancel them.
+
+**How It Works:**
+- Check the **"🔄 Recurring Action (Loop)"** checkbox when creating an action
+- Set the interval: Minutes, Hours, or Days
+- The action executes at the first scheduled time, then repeats at the specified interval
+- Status stays "pending" (it never completes, it just keeps looping!)
+- Cancel anytime to stop the loop
+
+**Use Cases:**
+- **Daily Rewards**: Mint 1 crEDIT every 24 hours
+- **Hourly Bonuses**: Award NFTs every hour
+- **Testing**: Run actions every 5 minutes for debugging
+- **Automated Airdrops**: Distribute NFTs on a schedule
+
+**Example Settings:**
+- Every 5 minutes: `5` `Minutes`
+- Every 2 hours: `2` `Hours`
+- Every day: `1` `Days`
+- Every week: `7` `Days`
 
 ### ⏰ Time Presets
 
@@ -204,9 +239,9 @@ Every execution is logged in the database:
 
 ## 🎓 Example Scenarios
 
-### 1. Daily Login Reward
+### 1. Daily Login Reward (Recurring!)
 
-**Goal:** Mint 1 crEDIT daily at midnight
+**Goal:** Mint 1 crEDIT daily at midnight, every day forever
 
 **Setup:**
 1. Name: "Daily crEDIT Reward"
@@ -215,8 +250,10 @@ Every execution is logged in the database:
 4. To Wallet: `userwalletname.wam`
 5. Template: `391378`
 6. Quantity: `1`
+7. **Enable Recurring**: ✅ Check the box
+8. **Repeat Every**: `1` `Days`
 
-**Note:** This is a one-time action. For recurring, you'd need to create multiple actions or add recurring feature later.
+**Result:** The action will mint 1 crEDIT every 24 hours until you cancel it!
 
 ### 2. Delayed Craft Reward
 
@@ -285,10 +322,17 @@ Every execution is logged in the database:
 
 ## 🎯 What's Next?
 
+**✅ Phase 1 - Complete!**
+- ✅ Mint Actions
+- ✅ Recurring Actions (Loop functionality)
+- ✅ Admin Panel with time presets
+- ✅ Execution history and logging
+
 **Phase 2 - Transfer Actions:**
 - Transfer NFTs between wallets
 - Support for template-based transfers
 - Asset ID-based transfers
+- Recurring transfers
 
 **Phase 3 - Drop Actions:**
 - Create time-limited claim windows
@@ -298,12 +342,14 @@ Every execution is logged in the database:
 **Phase 4 - Burn Actions:**
 - Schedule asset burns
 - Deflationary mechanics
+- Recurring burns
 
-**Future:**
-- Recurring actions (cron-like)
-- Conditional execution
+**Future Enhancements:**
+- Conditional execution (if/then logic)
 - Action chains (do X then Y)
 - Webhook notifications
+- Email alerts for failures
+- Pause/Resume for recurring actions
 
 ---
 
