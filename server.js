@@ -199,10 +199,34 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
       templateQuantities[templateId].quantity++;
     });
 
+    // Fetch template metadata for asset images/videos
+    const templateMetadata = new Map();
+    const uniqueAssetTemplates = Object.keys(templateQuantities).map(t => parseInt(t));
+
+    await Promise.all(uniqueAssetTemplates.map(async (templateId) => {
+      try {
+        const templateData = await wax.getTemplate(config.collection_name, templateId);
+        if (templateData) {
+          const video = templateData?.immutable_data?.video;
+          const img = templateData?.immutable_data?.img;
+          const name = templateData?.immutable_data?.name;
+          const media = video || img;
+          templateMetadata.set(templateId, {
+            image_url: media ? (wax.getIpfsUrl ? wax.getIpfsUrl(media) : null) : null,
+            is_video: !!video,
+            name: name
+          });
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch metadata for template ${templateId}:`, error.message);
+      }
+    }));
+
     // Build enriched assets with multiple rewards
     const enrichedAssets = Object.entries(templateQuantities).map(([templateId, data]) => {
       const templateConfig = enabledTemplates.find(t => t.template_id === parseInt(templateId));
       const templateRewards = allRewards.filter(r => r.template_id === parseInt(templateId));
+      const metadata = templateMetadata.get(parseInt(templateId));
 
       // Enrich each reward with image and available quantity
       const rewards = templateRewards.map(reward => {
@@ -222,9 +246,10 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
 
       return {
         template_id: templateId,
-        name: data.asset.name,
+        name: templateConfig?.name || metadata?.name || `Template #${templateId}`,
         quantity_owned: data.quantity,
-        image_url: data.asset.image_url || null,
+        image_url: metadata?.image_url || null,
+        is_video: metadata?.is_video || false,
         template_config: templateConfig,
         rewards: rewards
       };

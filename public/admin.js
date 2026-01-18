@@ -724,6 +724,7 @@ async function loadBranding() {
 // ==================== REWARDS MANAGEMENT ====================
 
 let currentTemplateId = null;
+let editingRewardId = null; // Track if we're editing
 
 // Open rewards modal
 async function openRewardsModal(templateId, templateName) {
@@ -739,6 +740,7 @@ async function openRewardsModal(templateId, templateName) {
 document.getElementById('close-rewards-modal').addEventListener('click', () => {
   document.getElementById('rewards-modal').style.display = 'none';
   currentTemplateId = null;
+  cancelEdit(); // Reset edit mode when closing
 });
 
 // Load rewards for a template
@@ -778,6 +780,7 @@ async function loadRewards(templateId) {
             </div>
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-sm" style="background: #3b82f6; color: white;" onclick="editReward(${reward.id}, ${reward.template_id}, ${reward.reward_template_id}, '${(reward.reward_name || '').replace(/'/g, "\\'")}', ${reward.cooldown_hours}, ${reward.max_claims || 'null'}, ${reward.match_quantity})">✏️ Edit</button>
             <button class="btn btn-sm" style="background: #ef4444; color: white;" onclick="deleteReward(${reward.id})">🗑️ Delete</button>
           </div>
         </div>
@@ -802,8 +805,15 @@ document.getElementById('add-reward-form').addEventListener('submit', async (e) 
   const matchQuantity = document.getElementById('reward-match-quantity-input').checked;
 
   try {
-    const response = await fetch(`${API_URL}/api/admin/template-rewards`, {
-      method: 'POST',
+    // Check if we're editing or adding
+    const isEditing = editingRewardId !== null;
+    const url = isEditing
+      ? `${API_URL}/api/admin/template-rewards/${editingRewardId}`
+      : `${API_URL}/api/admin/template-rewards`;
+    const method = isEditing ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method: method,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${adminToken}`
@@ -821,17 +831,58 @@ document.getElementById('add-reward-form').addEventListener('submit', async (e) 
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || 'Failed to add reward');
+      throw new Error(data.error || (isEditing ? 'Failed to update reward' : 'Failed to add reward'));
     }
 
-    showRewardsMessage('Reward added successfully!', 'success');
-    document.getElementById('add-reward-form').reset();
-    document.getElementById('reward-cooldown-input').value = '24'; // Reset to default
+    showRewardsMessage(isEditing ? 'Reward updated successfully!' : 'Reward added successfully!', 'success');
+
+    // Reset form and edit mode
+    cancelEdit();
     await loadRewards(templateId);
   } catch (error) {
     showRewardsMessage('Error: ' + error.message, 'error');
   }
 });
+
+// Edit reward - populate form with existing values
+function editReward(rewardId, templateId, rewardTemplateId, rewardName, cooldownHours, maxClaims, matchQuantity) {
+  editingRewardId = rewardId;
+
+  // Populate form fields
+  document.getElementById('reward-template-id-input').value = rewardTemplateId;
+  document.getElementById('reward-name-input').value = rewardName || '';
+  document.getElementById('reward-cooldown-input').value = cooldownHours;
+  document.getElementById('reward-max-claims-input').value = maxClaims || '';
+  document.getElementById('reward-match-quantity-input').checked = matchQuantity;
+
+  // Update form title and button text
+  const formTitle = document.querySelector('#rewards-modal h3');
+  formTitle.innerHTML = '✏️ Edit Reward <button type="button" onclick="cancelEdit()" class="btn btn-sm" style="background: #6b7280; color: white; margin-left: 10px;">Cancel</button>';
+
+  const submitBtn = document.querySelector('#add-reward-form button[type="submit"]');
+  submitBtn.textContent = '💾 Update Reward';
+  submitBtn.style.background = '#10b981';
+
+  // Scroll to form
+  document.querySelector('#rewards-modal .card').scrollTop = 0;
+}
+
+// Cancel edit mode
+function cancelEdit() {
+  editingRewardId = null;
+
+  // Reset form
+  document.getElementById('add-reward-form').reset();
+  document.getElementById('reward-cooldown-input').value = '24';
+
+  // Update form title and button text
+  const formTitle = document.querySelector('#rewards-modal h3');
+  formTitle.textContent = 'Add New Reward';
+
+  const submitBtn = document.querySelector('#add-reward-form button[type="submit"]');
+  submitBtn.textContent = '➕ Add Reward';
+  submitBtn.style.background = '';
+}
 
 // Delete reward
 async function deleteReward(rewardId) {
