@@ -69,6 +69,11 @@ app.get('/COMPLETE_API_WIKI.md', (req, res) => {
   res.sendFile(__dirname + '/COMPLETE_API_WIKI.md');
 });
 
+// Serve user guide markdown file
+app.get('/USER_GUIDE.md', (req, res) => {
+  res.sendFile(__dirname + '/USER_GUIDE.md');
+});
+
 // Serve uploads from persistent volume
 app.use('/uploads', express.static(uploadsDir));
 

@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Guide - FR Rewards</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      /* Dark Mode Colors */
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-dark: #0a0f1a;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --primary: #667eea;
+      --accent: #10b981;
+      --border: #334155;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .guide-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .guide-header {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      padding: 40px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      color: white;
+      text-align: center;
+    }
+
+    .guide-header h1 {
+      margin: 0 0 15px 0;
+      font-size: 2.8rem;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .guide-header p {
+      margin: 0;
+      opacity: 0.95;
+      font-size: 1.2rem;
+    }
+
+    .guide-nav {
+      background: var(--bg-secondary);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .guide-nav a, .guide-nav button {
+      padding: 10px 20px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      text-decoration: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .guide-nav a:hover, .guide-nav button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 400px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 12px 40px 12px 15px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+
+    .search-icon {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+      font-size: 1.2rem;
+    }
+
+    .guide-content {
+      background: var(--bg-secondary);
+      padding: 50px;
+      border-radius: 12px;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+      line-height: 1.8;
+    }
+
+    .guide-content h1 {
+      color: var(--accent);
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 15px;
+      margin-top: 0;
+      font-size: 2.5rem;
+    }
+
+    .guide-content h2 {
+      color: var(--accent);
+      margin-top: 50px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--border);
+      font-size: 1.8rem;
+    }
+
+    .guide-content h3 {
+      color: var(--text-primary);
+      margin-top: 35px;
+      font-size: 1.4rem;
+    }
+
+    .guide-content h4 {
+      color: var(--text-secondary);
+      margin-top: 25px;
+      font-size: 1.1rem;
+    }
+
+    .guide-content code {
+      background: rgba(16, 185, 129, 0.1);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 0.9em;
+      color: #10b981;
+    }
+
+    .guide-content pre {
+      background: var(--bg-dark);
+      padding: 25px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border-left: 4px solid var(--accent);
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .guide-content pre code {
+      background: none;
+      color: #e2e8f0;
+      padding: 0;
+    }
+
+    .guide-content blockquote {
+      border-left: 4px solid var(--accent);
+      background: rgba(16, 185, 129, 0.1);
+      padding: 20px 25px;
+      margin: 25px 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .guide-content blockquote p {
+      margin: 10px 0;
+    }
+
+    .guide-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 25px 0;
+    }
+
+    .guide-content table th,
+    .guide-content table td {
+      padding: 14px;
+      border: 1px solid var(--border);
+      text-align: left;
+    }
+
+    .guide-content table th {
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+
+    .guide-content table tr:nth-child(even) {
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .guide-content a {
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .guide-content a:hover {
+      border-bottom-color: var(--accent);
+    }
+
+    .guide-content ul, .guide-content ol {
+      padding-left: 30px;
+    }
+
+    .guide-content li {
+      margin: 10px 0;
+    }
+
+    .guide-content strong {
+      color: var(--accent);
+    }
+
+    .back-to-top {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      background: var(--accent);
+      color: white;
+      width: 55px;
+      height: 55px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.2s;
+      z-index: 1000;
+      border: none;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .back-to-top.show {
+      opacity: 1;
+    }
+
+    .back-to-top:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    }
+
+    .loading {
+      text-align: center;
+      padding: 80px;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      border: 4px solid var(--border);
+      border-top: 4px solid var(--accent);
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 25px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .quick-links {
+      background: var(--bg-dark);
+      padding: 25px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      border-left: 4px solid var(--accent);
+    }
+
+    .quick-links h3 {
+      margin-top: 0;
+      color: var(--accent);
+    }
+
+    .quick-links a {
+      display: inline-block;
+      margin: 5px 10px 5px 0;
+      padding: 8px 15px;
+      background: rgba(16, 185, 129, 0.15);
+      border-radius: 6px;
+      color: var(--accent);
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+
+    .quick-links a:hover {
+      background: rgba(16, 185, 129, 0.25);
+    }
+
+    @media (max-width: 768px) {
+      .guide-content {
+        padding: 25px;
+      }
+
+      .guide-header h1 {
+        font-size: 2rem;
+      }
+
+      .guide-header p {
+        font-size: 1rem;
+      }
+
+      .guide-nav {
+        flex-direction: column;
+      }
+
+      .search-box {
+        max-width: 100%;
+      }
+
+      .guide-content h1 {
+        font-size: 1.8rem;
+      }
+
+      .guide-content h2 {
+        font-size: 1.4rem;
+      }
+    }
+
+    @media print {
+      .guide-header,
+      .guide-nav,
+      .back-to-top {
+        display: none;
+      }
+
+      body {
+        background: white;
+        color: black;
+      }
+
+      .guide-content {
+        box-shadow: none;
+        background: white;
+        color: black;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="guide-container">
+    <div class="guide-header">
+      <h1>🎁 FR Rewards User Guide</h1>
+      <p>Everything you need to know about claiming rewards, crafting NFTs, and exploring stories</p>
+    </div>
+
+    <div class="guide-nav">
+      <a href="/index.html">🏠 Home</a>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search guide... (Ctrl+F)">
+        <span class="search-icon">🔍</span>
+      </div>
+      <button onclick="printGuide()">🖨️ Print</button>
+      <button onclick="downloadMarkdown()">⬇️ Download</button>
+    </div>
+
+    <div id="guide-loading" class="loading">
+      <div class="spinner"></div>
+      <p>Loading user guide...</p>
+    </div>
+
+    <div id="guide-content" class="guide-content" style="display: none;"></div>
+  </div>
+
+  <button class="back-to-top" id="back-to-top" onclick="scrollToTop()">↑</button>
+
+  <script>
+    let guideMarkdown = '';
+
+    // Load and render user guide
+    async function loadGuide() {
+      try {
+        const response = await fetch('/USER_GUIDE.md');
+        if (!response.ok) throw new Error('Failed to load user guide');
+
+        guideMarkdown = await response.text();
+
+        // Configure marked options
+        marked.setOptions({
+          highlight: function(code, lang) {
+            return code;
+          },
+          breaks: true,
+          gfm: true
+        });
+
+        // Render markdown to HTML
+        const html = marked.parse(guideMarkdown);
+
+        document.getElementById('guide-content').innerHTML = html;
+        document.getElementById('guide-loading').style.display = 'none';
+        document.getElementById('guide-content').style.display = 'block';
+
+        // Add anchor links to headings
+        addAnchorLinks();
+
+        // Add quick navigation
+        addQuickLinks();
+
+      } catch (error) {
+        console.error('Error loading guide:', error);
+        document.getElementById('guide-loading').innerHTML = `
+          <p style="color: #f87171;">❌ Failed to load user guide: ${error.message}</p>
+          <p><a href="#" onclick="location.reload()" style="color: var(--accent);">Try again</a></p>
+        `;
+      }
+    }
+
+    // Add anchor links to all headings
+    function addAnchorLinks() {
+      const content = document.getElementById('guide-content');
+      const headings = content.querySelectorAll('h1, h2, h3, h4');
+
+      headings.forEach(heading => {
+        const id = heading.textContent
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+        heading.id = id;
+
+        const link = document.createElement('a');
+        link.href = '#' + id;
+        link.className = 'anchor-link';
+        link.style.marginLeft = '10px';
+        link.style.opacity = '0';
+        link.style.transition = 'opacity 0.2s';
+        link.textContent = '🔗';
+
+        heading.appendChild(link);
+
+        heading.addEventListener('mouseenter', () => {
+          link.style.opacity = '0.5';
+        });
+
+        heading.addEventListener('mouseleave', () => {
+          link.style.opacity = '0';
+        });
+      });
+    }
+
+    // Add quick navigation links
+    function addQuickLinks() {
+      const content = document.getElementById('guide-content');
+      const h2s = content.querySelectorAll('h2');
+
+      if (h2s.length > 0) {
+        const quickLinksDiv = document.createElement('div');
+        quickLinksDiv.className = 'quick-links';
+        quickLinksDiv.innerHTML = '<h3>📑 Quick Navigation</h3>';
+
+        h2s.forEach(h2 => {
+          const link = document.createElement('a');
+          link.href = '#' + h2.id;
+          link.textContent = h2.textContent.replace('🔗', '').trim();
+          quickLinksDiv.appendChild(link);
+        });
+
+        content.insertBefore(quickLinksDiv, content.firstChild);
+      }
+    }
+
+    // Search functionality
+    const searchInput = document.getElementById('search-input');
+    searchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      if (!searchTerm) {
+        loadGuide();
+        return;
+      }
+
+      const content = document.getElementById('guide-content');
+      const text = content.textContent.toLowerCase();
+
+      if (text.includes(searchTerm)) {
+        highlightText(searchTerm);
+      }
+    });
+
+    // Highlight search results
+    function highlightText(term) {
+      const content = document.getElementById('guide-content');
+      const html = guideMarkdown;
+      const regex = new RegExp(`(${term})`, 'gi');
+
+      // Re-render with highlights
+      const highlighted = marked.parse(html);
+      content.innerHTML = highlighted.replace(regex, '<mark style="background: #fef08a; color: #0f172a; padding: 2px 6px; border-radius: 3px; font-weight: 500;">$1</mark>');
+
+      // Re-add anchor links and quick navigation after highlighting
+      addAnchorLinks();
+      addQuickLinks();
+    }
+
+    // Print guide
+    function printGuide() {
+      window.print();
+    }
+
+    // Download markdown
+    function downloadMarkdown() {
+      const blob = new Blob([guideMarkdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'FR_Rewards_User_Guide.md';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // Back to top button
+    window.addEventListener('scroll', () => {
+      const backToTop = document.getElementById('back-to-top');
+      if (window.pageYOffset > 300) {
+        backToTop.classList.add('show');
+      } else {
+        backToTop.classList.remove('show');
+      }
+    });
+
+    function scrollToTop() {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Ctrl/Cmd + F - Focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        searchInput.focus();
+      }
+
+      // Escape - Clear search
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        loadGuide();
+      }
+    });
+
+    // Load guide on page load
+    loadGuide();
+  </script>
+</body>
+</html>
