@@ -4,6 +4,11 @@
 
 You're working on the **fr-rewards** system - a WAX blockchain NFT platform with multiple working features that are currently scattered across separate HTML pages. Everything works perfectly. Your job is to **consolidate without breaking anything**.
 
+**🌿 YOUR WORKING BRANCH**: `claude/fix-crafts-json-error-292nn`
+- All commits and pushes MUST go to this branch
+- DO NOT work on any other branch
+- Create backup branch first (see Phase 0)
+
 **CRITICAL**: Read these files FIRST before starting:
 - `COMPLETE_API_WIKI.md` - Every API endpoint, database function, and pattern
 - `CRITICAL_LOGIC_CORRECTIONS.md` - Deep logic understanding (match_quantity, LIVE queries, etc.)
@@ -374,23 +379,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
 **Before making ANY changes, create a backup branch!**
 
-1. **Create backup branch**:
+1. **Checkout your working branch**:
+   ```bash
+   git checkout claude/fix-crafts-json-error-292nn
+   git pull origin claude/fix-crafts-json-error-292nn
+   ```
+
+2. **Create backup branch from current state**:
    ```bash
    git checkout -b backup-before-modular-platform
    git push -u origin backup-before-modular-platform
    ```
 
-2. **Return to working branch**:
+3. **Return to working branch**:
    ```bash
-   git checkout claude/continue-project-review-aB6RT
+   git checkout claude/fix-crafts-json-error-292nn
    ```
 
-3. **Verify backup exists**:
+4. **Verify backup exists**:
    ```bash
    git branch -a | grep backup
    ```
 
 **This backup ensures you can restore everything if something breaks!**
+
+**IMPORTANT**: Your working branch is `claude/fix-crafts-json-error-292nn` - all development and commits must go to this branch!
 
 ### Phase 1: Setup Module System (Do This First!)
 
@@ -1666,8 +1679,12 @@ When you're done, provide:
 
 ## 🎯 QUICK SUMMARY FOR NEW CLAUDE
 
+**Your working branch**: `claude/fix-crafts-json-error-292nn`
+- ⚠️ **ALL work must be done on this branch!**
+- ⚠️ **DO NOT push to any other branch!**
+
 **What you're building**:
-1. ✅ **Backup everything first** (Phase 0 - create backup branch)
+1. ✅ **Backup everything first** (Phase 0 - create backup branch from claude/fix-crafts-json-error-292nn)
 2. 🎨 **Modular platform** - Convert existing features into reusable modules
 3. 📖 **Story-driven interface** - Text + images + embedded interactive modules
 4. 🧩 **7 different modules** - All existing features plus new blend array view
@@ -1676,6 +1693,7 @@ When you're done, provide:
 7. 🔄 **Blend Array (Transfer Mode)** - Alternative blend system using transfers instead of burns
 
 **Critical rules**:
+- ⚠️ **WORK ON CORRECT BRANCH** - claude/fix-crafts-json-error-292nn only!
 - ⚠️ **BACKUP FIRST** - Create backup branch before ANY changes
 - ⚠️ **BREAK NOTHING** - All existing features must keep working
 - ⚠️ **READ DOCS FIRST** - COMPLETE_API_WIKI.md and CRITICAL_LOGIC_CORRECTIONS.md
