@@ -890,8 +890,8 @@ async function fulfillFailedCraft(craftId) {
     const response = await fetch('/api/admin/factory/fulfill-failed', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-admin-password': localStorage.getItem('admin_password')
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({ craft_id: craftId })
     });
