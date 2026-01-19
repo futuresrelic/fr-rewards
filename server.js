@@ -290,6 +290,7 @@ app.get('/api/user/claims/:account', async (req, res) => {
   try {
     const { account } = req.params;
     const claims = db.claims.getByAccount(account);
+    const config = db.config.get();
 
     // Enrich claims with template names
     const enrichedClaims = await Promise.all(claims.map(async (claim) => {
@@ -316,7 +317,7 @@ app.get('/api/user/claims/:account', async (req, res) => {
 
       // Get qualifying template name
       let qualifyingTemplateName = null;
-      const templateConfig = db.templates.getByTemplateId(claim.template_id);
+      const templateConfig = db.templates.getById(claim.template_id);
       if (templateConfig && templateConfig.name) {
         qualifyingTemplateName = templateConfig.name;
       } else {
@@ -898,8 +899,9 @@ app.get('/api/admin/claims/full', authenticateAdmin, async (req, res) => {
     const limit = parseInt(req.query.limit) || 0;
     const offset = parseInt(req.query.offset) || 0;
 
-    // Get all claims from database
-    const allClaims = db.prepare('SELECT * FROM claims').all();
+    // Get all claims from database (using large limit to get all)
+    const allClaims = db.claims.getAll(999999);
+    const config = db.config.get();
 
     // Enrich claims with template names
     const enrichedClaims = await Promise.all(allClaims.map(async (claim) => {
@@ -925,7 +927,7 @@ app.get('/api/admin/claims/full', authenticateAdmin, async (req, res) => {
 
       // Get qualifying template name
       let qualifyingTemplateName = null;
-      const templateConfig = db.templates.getByTemplateId(claim.template_id);
+      const templateConfig = db.templates.getById(claim.template_id);
       if (templateConfig && templateConfig.name) {
         qualifyingTemplateName = templateConfig.name;
       } else {
