@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Story Demo - Modular Platform</title>
+  <link rel="stylesheet" href="/styles.css">
+
+  <style>
+    .story-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .story-section {
+      margin-bottom: 3rem;
+      padding: 2rem;
+      background: var(--bg-card);
+      border-radius: 12px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .story-text {
+      font-size: 1.1rem;
+      line-height: 1.8;
+      color: var(--text-primary);
+      margin-bottom: 2rem;
+    }
+
+    .story-text h2 {
+      color: var(--primary);
+      margin-bottom: 1rem;
+      font-size: 1.8rem;
+    }
+
+    .story-text p {
+      margin-bottom: 1rem;
+    }
+
+    .module-embed {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: var(--bg-dark);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .demo-badge {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid var(--primary);
+      border-radius: 6px;
+      color: var(--primary);
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="story-container">
+    <header style="text-align: center; margin-bottom: 3rem;">
+      <h1>🎭 The Modular Platform Demo</h1>
+      <p class="subtitle">A proof-of-concept showing modules embedded in a story-driven interface</p>
+      <div class="demo-badge">🧪 Phase 4 Proof of Concept</div>
+    </header>
+
+    <!-- Story Section 1: Introduction -->
+    <div class="story-section">
+      <div class="story-text">
+        <h2>📖 Welcome to Future Relic</h2>
+        <p>
+          In the vast expanse of the WAX blockchain, Future Relic stands as a beacon of innovation and creativity.
+          Our journey begins with two powerful capabilities that every collector needs to master.
+        </p>
+        <p>
+          First, let's check if you're eligible for any rewards. Connect your wallet below to see what awaits you...
+        </p>
+      </div>
+
+      <div class="module-embed">
+        <h3 style="margin-bottom: 1rem; color: var(--text-secondary);">
+          🎁 Reward Claims Module
+        </h3>
+        <div
+          id="story-claim-rewards"
+          data-module="claim-rewards"
+          data-config='{"auto_connect": false}'
+        ></div>
+      </div>
+    </div>
+
+    <!-- Story Section 2: Factory -->
+    <div class="story-section">
+      <div class="story-text">
+        <h2>🏭 The Factory</h2>
+        <p>
+          Beyond claiming rewards, true collectors know the power of creation. The Factory allows you to
+          combine ingredients and craft entirely new items, each with its own story and purpose.
+        </p>
+        <p>
+          Explore the recipes below and see what you can create from your collection...
+        </p>
+      </div>
+
+      <div class="module-embed">
+        <h3 style="margin-bottom: 1rem; color: var(--text-secondary);">
+          ⚙️ Factory Craft Module
+        </h3>
+        <div
+          id="story-factory-craft"
+          data-module="factory-craft"
+          data-config='{"auto_connect": false}'
+        ></div>
+      </div>
+    </div>
+
+    <!-- Story Section 3: What's Next -->
+    <div class="story-section">
+      <div class="story-text">
+        <h2>🚀 What's Next?</h2>
+        <p>
+          This demo page showcases the <strong>modular platform architecture</strong> where each feature
+          is a self-contained, reusable module that can be embedded anywhere.
+        </p>
+        <p>
+          <strong>Key Benefits:</strong>
+        </p>
+        <ul style="line-height: 2; margin-left: 2rem;">
+          <li>✅ Modules are fully independent and reusable</li>
+          <li>✅ Same wallet connection across all modules</li>
+          <li>✅ Easy to embed in any page or story context</li>
+          <li>✅ Configurable per instance (via data-config)</li>
+          <li>✅ Clean separation of concerns</li>
+        </ul>
+        <p style="margin-top: 1.5rem;">
+          <strong>Future Modules (from spec):</strong>
+        </p>
+        <ul style="line-height: 2; margin-left: 2rem;">
+          <li>🔀 Blend Array Module (multi-ingredient blending)</li>
+          <li>📦 Unpack Module (open mystery packs)</li>
+          <li>🎁 Claim Unpack Module (claim + unpack combo)</li>
+          <li>🌊 NeftyBlocks Drops Module (browse and purchase)</li>
+          <li>↔️ Transfer Mode Module (send/receive assets)</li>
+        </ul>
+      </div>
+
+      <div style="margin-top: 2rem; padding: 1.5rem; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border-left: 3px solid var(--success);">
+        <h3 style="margin-bottom: 1rem;">✅ Phase 4 Complete!</h3>
+        <p style="margin-bottom: 0.5rem;"><strong>What was accomplished:</strong></p>
+        <ul style="line-height: 1.8; margin-left: 1.5rem;">
+          <li>Created module loader system (Phase 1)</li>
+          <li>Extracted claim-rewards module (Phase 2)</li>
+          <li>Extracted factory-craft module (Phase 3)</li>
+          <li>Built this story demo page (Phase 4)</li>
+        </ul>
+        <p style="margin-top: 1rem; color: var(--text-secondary);">
+          The foundation is solid. Future sessions can now add more modules and expand the storytelling interface!
+        </p>
+      </div>
+    </div>
+
+    <footer style="text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border); color: var(--text-secondary);">
+      <p>
+        <a href="/test-modules.html" class="btn btn-secondary btn-sm">🧪 View Test Page</a>
+        <a href="/index.html" class="btn btn-secondary btn-sm" style="margin-left: 1rem;">🏠 Main Site</a>
+        <a href="/factory.html" class="btn btn-secondary btn-sm" style="margin-left: 1rem;">🏭 Original Factory</a>
+      </p>
+      <p style="margin-top: 1rem; font-size: 0.9rem;">
+        Future Relic Modular Platform • Built with Claude Code
+      </p>
+    </footer>
+  </div>
+
+  <!-- Load Module Loader -->
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>
