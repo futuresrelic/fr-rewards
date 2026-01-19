@@ -1,7 +1,13 @@
 # 🔧 Complete API & System Wiki
 
-**Last Updated**: January 18, 2026
+**Last Updated**: January 19, 2026
 **Purpose**: Comprehensive reference for all endpoints, functions, and patterns
+
+> **🆕 Recent Updates (Jan 19, 2026)**:
+> - ✅ `transferNFTs()` function added to wax.js (commit 96b9061)
+> - ✅ `craftHistory.getById()` function added to database.js
+> - ✅ Fulfill Failed Craft endpoint now fully operational
+> - ✅ Fixed endpoint path documentation
 
 ---
 
@@ -229,7 +235,7 @@
 
 ---
 
-#### GET `/api/admin/factory/crafts/failed`
+#### GET `/api/admin/factory/failed`
 **Purpose**: Get all failed crafts needing refunds
 
 **Auth**: Admin token required
@@ -699,14 +705,14 @@ db.actionExecutions.create({
 - ✅ `getUserAssetsLive()` - LIVE blockchain queries (USE THIS!)
 - ✅ `getTemplate()` - Get template metadata
 - ✅ `mintNFT()` - Mint NFTs with private key
+- ✅ `transferNFTs()` - Transfer NFTs between wallets (ADDED Jan 19, 2026)
 - ✅ `getCollection()` - Get collection info
 - ✅ `verifyTransaction()` - Verify TX on blockchain
 - ✅ `getAccountResources()` - Check CPU/NET/RAM
 - ✅ `getIpfsUrl()` - Convert IPFS hash to URL
 
-**NOT Implemented** (called but missing):
-- ❌ `transferNFTs()` - Transfer assets (see TRANSFER_FUNCTION_MISSING.md)
-- ❌ `transferNFT()` - Single asset transfer (doesn't exist)
+**NOT Implemented**:
+- ❌ `transferNFT()` - Single asset transfer (use transferNFTs with array of 1)
 
 ---
 
@@ -797,11 +803,11 @@ Requires `MINTER_PRIVATE_KEY` env variable
 
 ### transferNFTs(fromWallet, toWallet, assetIds, memo, privateKey)
 
-**STATUS**: ❌ **MISSING** - See `TRANSFER_FUNCTION_MISSING.md` for implementation
+**STATUS**: ✅ **IMPLEMENTED** (Added Jan 19, 2026 - Commit 96b9061)
 
-**Purpose**: Transfer NFTs from one wallet to another
+**Purpose**: Transfer NFTs from one wallet to another using a private key
 
-**Expected Usage**:
+**Usage**:
 ```javascript
 const result = await wax.transferNFTs(
   'pool.fr',                    // from
@@ -810,15 +816,32 @@ const result = await wax.transferNFTs(
   'Fulfill failed craft',       // memo
   process.env.POOL_FR_PRIVATE_KEY  // private key
 );
-// Should return: { transaction_id, from, to, asset_count, asset_ids }
+// Returns: { transaction_id, from, to, asset_count, asset_ids }
 ```
 
-**Where Called**:
-1. `server.js:3488` - Pool swap crafting
-2. `scheduler.js:182` - Scheduled transfers
-3. New fulfill/refund endpoints
+**Returns**:
+```javascript
+{
+  transaction_id: "abc123...",
+  from: "pool.fr",
+  to: "czkua.wam",
+  asset_count: 2,
+  asset_ids: ['1099512345678', '1099512345679']
+}
+```
 
-**Action Structure** (when implemented):
+**Where Used**:
+1. `server.js:3488` - Pool swap crafting
+2. `server.js:4195` - Fulfill failed craft endpoint
+3. `scheduler.js:182` - Scheduled transfers (if implemented)
+
+**Implementation Details**:
+- Uses multiple RPC endpoint fallback (waxsweden, greymass, alohaeos)
+- Signs transaction with provided private key
+- Retries on failure across different endpoints
+- Proper error handling and logging
+
+**Action Structure**:
 ```javascript
 {
   account: 'atomicassets',
@@ -1544,7 +1567,7 @@ document.getElementById('run-now-btn').addEventListener('click', async () => {
 2. **Always mint FIRST, record AFTER** to prevent cooldown on failures
 3. **JSON fields must be parsed** from database (ingredients, results, params)
 4. **Recurring actions stay "pending"** - they reschedule, never complete
-5. **transferNFTs is MISSING** - see TRANSFER_FUNCTION_MISSING.md
+5. **Use `wax.transferNFTs()`** - for wallet-to-wallet transfers (requires private key)
 6. **Private keys from env only** - never hardcode
 7. **Admin endpoints need Bearer token** - get from /api/admin/login
 8. **Pool mode needs inventory** - check pool.fr wallet before swapping
@@ -1554,7 +1577,7 @@ document.getElementById('run-now-btn').addEventListener('click', async () => {
 - ❌ Using cached `getUserAssets()` instead of LIVE
 - ❌ Recording claim before mint completes
 - ❌ Forgetting to JSON.parse() database fields
-- ❌ Calling `wax.transferNFTs()` (doesn't exist yet!)
+- ❌ Forgetting to add new functions to module.exports in wax.js
 - ❌ Hardcoding private keys
 - ❌ Missing Authorization header on admin endpoints
 - ❌ Marking recurring actions as "completed"
@@ -1572,6 +1595,24 @@ document.getElementById('run-now-btn').addEventListener('click', async () => {
 
 ---
 
-**Last Updated**: January 18, 2026
+**Last Updated**: January 19, 2026
 **Maintained By**: Claude AI Sessions
 **Questions?**: Check HANDOFF_CONTINUATION_2026-01-18.md for session context
+
+---
+
+## 📝 CHANGELOG
+
+### January 19, 2026
+- ✅ Added `transferNFTs()` function to wax.js (commit 96b9061)
+- ✅ Added `craftHistory.getById()` function to database.js (commit 74441d1)
+- ✅ Fixed endpoint path: `/api/admin/factory/failed` (was incorrectly documented as `/crafts/failed`)
+- ✅ Fulfill Failed Craft feature now fully operational
+- ✅ Updated wiki status from "MISSING" to "IMPLEMENTED" for transferNFTs
+- 🔧 Fixed authentication bug in fulfill-failed endpoint (commit 103736f)
+- 🔧 Fixed double JSON.parse() error in admin-factory.js (commit c454155)
+
+### January 18, 2026
+- 📚 Initial wiki created by previous Claude session
+- 📋 Documented all existing endpoints and functions
+- 📖 Added common patterns and gotchas

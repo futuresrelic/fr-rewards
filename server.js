@@ -64,6 +64,11 @@ app.use(express.static('public'));
 app.use('/libs/waxjs', express.static('node_modules/@waxio/waxjs/dist'));
 app.use('/libs/eosjs', express.static('node_modules/eosjs/dist'));
 
+// Serve wiki markdown file
+app.get('/COMPLETE_API_WIKI.md', (req, res) => {
+  res.sendFile(__dirname + '/COMPLETE_API_WIKI.md');
+});
+
 // Serve uploads from persistent volume
 app.use('/uploads', express.static(uploadsDir));
 

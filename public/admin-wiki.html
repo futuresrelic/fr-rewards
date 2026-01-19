@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Wiki - FR Rewards System</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .wiki-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .wiki-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 30px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      color: white;
+      text-align: center;
+    }
+
+    .wiki-header h1 {
+      margin: 0 0 10px 0;
+      font-size: 2.5rem;
+    }
+
+    .wiki-header p {
+      margin: 0;
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    .wiki-nav {
+      background: var(--bg-secondary);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .wiki-nav a, .wiki-nav button {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      text-decoration: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+
+    .wiki-nav a:hover, .wiki-nav button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 400px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 10px 40px 10px 15px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    .search-icon {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-secondary);
+    }
+
+    .wiki-content {
+      background: var(--bg-secondary);
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+      line-height: 1.7;
+    }
+
+    .wiki-content h1 {
+      color: var(--primary);
+      border-bottom: 3px solid var(--primary);
+      padding-bottom: 10px;
+      margin-top: 0;
+    }
+
+    .wiki-content h2 {
+      color: var(--primary);
+      margin-top: 40px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .wiki-content h3 {
+      color: var(--text-primary);
+      margin-top: 30px;
+    }
+
+    .wiki-content code {
+      background: rgba(102, 126, 234, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 0.9em;
+      color: #667eea;
+    }
+
+    .wiki-content pre {
+      background: #1e1e1e;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border-left: 4px solid var(--primary);
+    }
+
+    .wiki-content pre code {
+      background: none;
+      color: #d4d4d4;
+      padding: 0;
+    }
+
+    .wiki-content blockquote {
+      border-left: 4px solid var(--primary);
+      background: rgba(102, 126, 234, 0.05);
+      padding: 15px 20px;
+      margin: 20px 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .wiki-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+
+    .wiki-content table th,
+    .wiki-content table td {
+      padding: 12px;
+      border: 1px solid var(--border);
+      text-align: left;
+    }
+
+    .wiki-content table th {
+      background: var(--primary);
+      color: white;
+      font-weight: 600;
+    }
+
+    .wiki-content a {
+      color: var(--primary);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+    }
+
+    .wiki-content a:hover {
+      border-bottom-color: var(--primary);
+    }
+
+    .wiki-content ul, .wiki-content ol {
+      padding-left: 30px;
+    }
+
+    .wiki-content li {
+      margin: 8px 0;
+    }
+
+    .back-to-top {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      background: var(--primary);
+      color: white;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.2s;
+      z-index: 1000;
+      border: none;
+      font-size: 20px;
+    }
+
+    .back-to-top.show {
+      opacity: 1;
+    }
+
+    .back-to-top:hover {
+      transform: translateY(-3px);
+    }
+
+    .loading {
+      text-align: center;
+      padding: 60px;
+      color: var(--text-secondary);
+    }
+
+    .spinner {
+      border: 3px solid var(--border);
+      border-top: 3px solid var(--primary);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 768px) {
+      .wiki-content {
+        padding: 20px;
+      }
+
+      .wiki-header h1 {
+        font-size: 1.8rem;
+      }
+
+      .wiki-nav {
+        flex-direction: column;
+      }
+
+      .search-box {
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wiki-container">
+    <div class="wiki-header">
+      <h1>📚 API & System Wiki</h1>
+      <p>Complete reference for FR Rewards System</p>
+    </div>
+
+    <div class="wiki-nav">
+      <a href="/admin.html">← Admin Panel</a>
+      <a href="/admin-factory.html">🏭 Factory</a>
+      <a href="/admin-scheduler.html">⏰ Scheduler</a>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search wiki... (Ctrl+F)">
+        <span class="search-icon">🔍</span>
+      </div>
+      <button onclick="printWiki()">🖨️ Print</button>
+      <button onclick="downloadMarkdown()">⬇️ Download MD</button>
+    </div>
+
+    <div id="wiki-loading" class="loading">
+      <div class="spinner"></div>
+      <p>Loading wiki...</p>
+    </div>
+
+    <div id="wiki-content" class="wiki-content" style="display: none;"></div>
+  </div>
+
+  <button class="back-to-top" id="back-to-top" onclick="scrollToTop()">↑</button>
+
+  <script>
+    let wikiMarkdown = '';
+
+    // Load and render wiki
+    async function loadWiki() {
+      try {
+        const response = await fetch('/COMPLETE_API_WIKI.md');
+        if (!response.ok) throw new Error('Failed to load wiki');
+
+        wikiMarkdown = await response.text();
+
+        // Configure marked options
+        marked.setOptions({
+          highlight: function(code, lang) {
+            return code;
+          },
+          breaks: true,
+          gfm: true
+        });
+
+        // Render markdown to HTML
+        const html = marked.parse(wikiMarkdown);
+
+        document.getElementById('wiki-content').innerHTML = html;
+        document.getElementById('wiki-loading').style.display = 'none';
+        document.getElementById('wiki-content').style.display = 'block';
+
+        // Add anchor links to headings
+        addAnchorLinks();
+
+      } catch (error) {
+        console.error('Error loading wiki:', error);
+        document.getElementById('wiki-loading').innerHTML = `
+          <p style="color: #f87171;">❌ Failed to load wiki: ${error.message}</p>
+          <p><a href="#" onclick="location.reload()">Try again</a></p>
+        `;
+      }
+    }
+
+    // Add anchor links to all headings
+    function addAnchorLinks() {
+      const content = document.getElementById('wiki-content');
+      const headings = content.querySelectorAll('h1, h2, h3, h4');
+
+      headings.forEach(heading => {
+        const id = heading.textContent
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+        heading.id = id;
+
+        const link = document.createElement('a');
+        link.href = '#' + id;
+        link.className = 'anchor-link';
+        link.style.marginLeft = '10px';
+        link.style.opacity = '0';
+        link.style.transition = 'opacity 0.2s';
+        link.textContent = '🔗';
+
+        heading.appendChild(link);
+
+        heading.addEventListener('mouseenter', () => {
+          link.style.opacity = '0.5';
+        });
+
+        heading.addEventListener('mouseleave', () => {
+          link.style.opacity = '0';
+        });
+      });
+    }
+
+    // Search functionality
+    const searchInput = document.getElementById('search-input');
+    searchInput.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      if (!searchTerm) {
+        loadWiki();
+        return;
+      }
+
+      const content = document.getElementById('wiki-content');
+      const text = content.textContent.toLowerCase();
+
+      if (text.includes(searchTerm)) {
+        highlightText(searchTerm);
+      }
+    });
+
+    // Highlight search results
+    function highlightText(term) {
+      const content = document.getElementById('wiki-content');
+      const html = wikiMarkdown;
+      const regex = new RegExp(`(${term})`, 'gi');
+
+      // Re-render with highlights
+      const highlighted = marked.parse(html);
+      content.innerHTML = highlighted.replace(regex, '<mark style="background: #fef08a; padding: 2px 4px; border-radius: 2px;">$1</mark>');
+    }
+
+    // Print wiki
+    function printWiki() {
+      window.print();
+    }
+
+    // Download markdown
+    function downloadMarkdown() {
+      const blob = new Blob([wikiMarkdown], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'FR_Rewards_Wiki.md';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // Back to top button
+    window.addEventListener('scroll', () => {
+      const backToTop = document.getElementById('back-to-top');
+      if (window.pageYOffset > 300) {
+        backToTop.classList.add('show');
+      } else {
+        backToTop.classList.remove('show');
+      }
+    });
+
+    function scrollToTop() {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      // Ctrl/Cmd + F - Focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        searchInput.focus();
+      }
+
+      // Escape - Clear search
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        loadWiki();
+      }
+    });
+
+    // Load wiki on page load
+    loadWiki();
+  </script>
+</body>
+</html>
