@@ -702,6 +702,11 @@ app.post('/api/user/claim-all', strictLimiter, async (req, res) => {
         for (let i = 0; i < reward.quantityToMint; i++) {
           const mintResult = await wax.mintNFT(account, config.collection_name, parseInt(reward.reward_template_id));
           transactionIds.push(mintResult.transaction_id);
+
+          // Add delay between mints to prevent duplicate transaction errors
+          if (i < reward.quantityToMint - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+          }
         }
 
         // ONLY record claim AFTER successful mint
@@ -725,6 +730,11 @@ app.post('/api/user/claim-all', strictLimiter, async (req, res) => {
         });
 
         console.log(`   ✅ Success: ${reward.quantityToMint}x minted - TXs: ${transactionIds.join(', ')}`);
+
+        // Add delay between different rewards to prevent duplicate transaction errors
+        if (claimableRewards.indexOf(reward) < claimableRewards.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        }
 
       } catch (error) {
         console.error(`   ❌ Failed to mint reward ${reward.id}:`, error.message);
