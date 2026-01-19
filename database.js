@@ -1528,6 +1528,20 @@ const craftHistory = {
     return record;
   },
 
+  // Get by ID
+  getById: (id) => {
+    const record = db.prepare(`
+      SELECT * FROM craft_history WHERE id = ?
+    `).get(id);
+
+    if (record) {
+      record.ingredient_asset_ids = JSON.parse(record.ingredient_asset_ids);
+      record.result_info = record.result_info ? JSON.parse(record.result_info) : null;
+    }
+
+    return record;
+  },
+
   // Get last craft for user + recipe (for cooldown check)
   getLastCraft: (wallet, recipe_id) => {
     return db.prepare(`
