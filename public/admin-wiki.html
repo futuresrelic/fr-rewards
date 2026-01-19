@@ -7,6 +7,20 @@
   <link rel="stylesheet" href="/styles.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
+    :root {
+      /* Dark Mode Colors */
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-dark: #0a0f1a;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --primary: #667eea;
+      --border: #334155;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
+
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -102,7 +116,7 @@
       background: var(--bg-secondary);
       padding: 40px;
       border-radius: 12px;
-      box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
       line-height: 1.7;
     }
 
@@ -135,25 +149,30 @@
     }
 
     .wiki-content pre {
-      background: #1e1e1e;
+      background: var(--bg-dark);
       padding: 20px;
       border-radius: 8px;
       overflow-x: auto;
       border-left: 4px solid var(--primary);
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
     }
 
     .wiki-content pre code {
       background: none;
-      color: #d4d4d4;
+      color: #e2e8f0;
       padding: 0;
     }
 
     .wiki-content blockquote {
       border-left: 4px solid var(--primary);
-      background: rgba(102, 126, 234, 0.05);
+      background: rgba(102, 126, 234, 0.15);
       padding: 15px 20px;
       margin: 20px 0;
       border-radius: 0 8px 8px 0;
+    }
+
+    .wiki-content blockquote p {
+      margin: 8px 0;
     }
 
     .wiki-content table {
