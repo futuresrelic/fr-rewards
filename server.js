@@ -291,11 +291,57 @@ app.get('/api/user/claims/:account', async (req, res) => {
     const { account } = req.params;
     const claims = db.claims.getByAccount(account);
 
+    // Enrich claims with template names
+    const enrichedClaims = await Promise.all(claims.map(async (claim) => {
+      // Get reward template name from template_rewards table first
+      let rewardName = null;
+      if (claim.reward_id) {
+        const rewardConfig = db.templateRewards.getById(claim.reward_id);
+        if (rewardConfig && rewardConfig.reward_name) {
+          rewardName = rewardConfig.reward_name;
+        }
+      }
+
+      // If no custom reward name, fetch from blockchain
+      if (!rewardName) {
+        try {
+          const rewardTemplate = await wax.getTemplate(config.collection_name, claim.reward_template);
+          if (rewardTemplate && rewardTemplate.immutable_data && rewardTemplate.immutable_data.name) {
+            rewardName = rewardTemplate.immutable_data.name;
+          }
+        } catch (err) {
+          console.warn(`Could not fetch reward template ${claim.reward_template}:`, err.message);
+        }
+      }
+
+      // Get qualifying template name
+      let qualifyingTemplateName = null;
+      const templateConfig = db.templates.getByTemplateId(claim.template_id);
+      if (templateConfig && templateConfig.name) {
+        qualifyingTemplateName = templateConfig.name;
+      } else {
+        try {
+          const qualifyingTemplate = await wax.getTemplate(config.collection_name, claim.template_id);
+          if (qualifyingTemplate && qualifyingTemplate.immutable_data && qualifyingTemplate.immutable_data.name) {
+            qualifyingTemplateName = qualifyingTemplate.immutable_data.name;
+          }
+        } catch (err) {
+          console.warn(`Could not fetch template ${claim.template_id}:`, err.message);
+        }
+      }
+
+      return {
+        ...claim,
+        reward_name: rewardName || `Template #${claim.reward_template}`,
+        qualifying_template_name: qualifyingTemplateName || `Template #${claim.template_id}`
+      };
+    }));
+
     res.json({
       success: true,
       account,
-      total: claims.length,
-      claims
+      total: enrichedClaims.length,
+      claims: enrichedClaims
     });
   } catch (error) {
     console.error('Error fetching claims:', error);
@@ -831,6 +877,170 @@ app.get('/api/admin/claims', authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching claims:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/claims/full
+ * Get comprehensive claim history with filtering and sorting
+ * Query params:
+ *   - groupBy: "claim" (default) or "wallet"
+ *   - sortBy: "date" (default), "wallet", "reward"
+ *   - sortOrder: "desc" (default) or "asc"
+ *   - limit: number of results (default: all)
+ *   - offset: pagination offset (default: 0)
+ */
+app.get('/api/admin/claims/full', authenticateAdmin, async (req, res) => {
+  try {
+    const groupBy = req.query.groupBy || 'claim';
+    const sortBy = req.query.sortBy || 'date';
+    const sortOrder = req.query.sortOrder || 'desc';
+    const limit = parseInt(req.query.limit) || 0;
+    const offset = parseInt(req.query.offset) || 0;
+
+    // Get all claims from database
+    const allClaims = db.prepare('SELECT * FROM claims').all();
+
+    // Enrich claims with template names
+    const enrichedClaims = await Promise.all(allClaims.map(async (claim) => {
+      // Get reward name
+      let rewardName = null;
+      if (claim.reward_id) {
+        const rewardConfig = db.templateRewards.getById(claim.reward_id);
+        if (rewardConfig && rewardConfig.reward_name) {
+          rewardName = rewardConfig.reward_name;
+        }
+      }
+
+      if (!rewardName) {
+        try {
+          const rewardTemplate = await wax.getTemplate(config.collection_name, claim.reward_template);
+          if (rewardTemplate && rewardTemplate.immutable_data && rewardTemplate.immutable_data.name) {
+            rewardName = rewardTemplate.immutable_data.name;
+          }
+        } catch (err) {
+          console.warn(`Could not fetch reward template ${claim.reward_template}:`, err.message);
+        }
+      }
+
+      // Get qualifying template name
+      let qualifyingTemplateName = null;
+      const templateConfig = db.templates.getByTemplateId(claim.template_id);
+      if (templateConfig && templateConfig.name) {
+        qualifyingTemplateName = templateConfig.name;
+      } else {
+        try {
+          const qualifyingTemplate = await wax.getTemplate(config.collection_name, claim.template_id);
+          if (qualifyingTemplate && qualifyingTemplate.immutable_data && qualifyingTemplate.immutable_data.name) {
+            qualifyingTemplateName = qualifyingTemplate.immutable_data.name;
+          }
+        } catch (err) {
+          console.warn(`Could not fetch template ${claim.template_id}:`, err.message);
+        }
+      }
+
+      return {
+        ...claim,
+        reward_name: rewardName || `Template #${claim.reward_template}`,
+        qualifying_template_name: qualifyingTemplateName || `Template #${claim.template_id}`
+      };
+    }));
+
+    let result;
+
+    if (groupBy === 'wallet') {
+      // Group by wallet
+      const walletGroups = {};
+      enrichedClaims.forEach(claim => {
+        if (!walletGroups[claim.wallet_account]) {
+          walletGroups[claim.wallet_account] = {
+            wallet: claim.wallet_account,
+            total_claims: 0,
+            first_claim: claim.claimed_at,
+            last_claim: claim.claimed_at,
+            claims: []
+          };
+        }
+        walletGroups[claim.wallet_account].total_claims++;
+        walletGroups[claim.wallet_account].claims.push(claim);
+
+        // Update first/last claim dates
+        if (claim.claimed_at < walletGroups[claim.wallet_account].first_claim) {
+          walletGroups[claim.wallet_account].first_claim = claim.claimed_at;
+        }
+        if (claim.claimed_at > walletGroups[claim.wallet_account].last_claim) {
+          walletGroups[claim.wallet_account].last_claim = claim.claimed_at;
+        }
+      });
+
+      result = Object.values(walletGroups);
+
+      // Sort grouped results
+      if (sortBy === 'wallet') {
+        result.sort((a, b) => {
+          const comparison = a.wallet.localeCompare(b.wallet);
+          return sortOrder === 'asc' ? comparison : -comparison;
+        });
+      } else if (sortBy === 'date') {
+        result.sort((a, b) => {
+          const comparison = new Date(a.last_claim) - new Date(b.last_claim);
+          return sortOrder === 'asc' ? comparison : -comparison;
+        });
+      } else if (sortBy === 'count') {
+        result.sort((a, b) => {
+          const comparison = a.total_claims - b.total_claims;
+          return sortOrder === 'asc' ? comparison : -comparison;
+        });
+      }
+
+      // Sort claims within each group by date
+      result.forEach(group => {
+        group.claims.sort((a, b) => {
+          const comparison = new Date(a.claimed_at) - new Date(b.claimed_at);
+          return sortOrder === 'asc' ? comparison : -comparison;
+        });
+      });
+    } else {
+      // Individual claims
+      result = enrichedClaims;
+
+      // Sort results
+      if (sortBy === 'wallet') {
+        result.sort((a, b) => {
+          const comparison = a.wallet_account.localeCompare(b.wallet_account);
+          return sortOrder === 'asc' ? comparison : -comparison;
+        });
+      } else if (sortBy === 'reward') {
+        result.sort((a, b) => {
+          const comparison = a.reward_name.localeCompare(b.reward_name);
+          return sortOrder === 'asc' ? comparison : -comparison;
+        });
+      } else { // date
+        result.sort((a, b) => {
+          const comparison = new Date(a.claimed_at) - new Date(b.claimed_at);
+          return sortOrder === 'asc' ? comparison : -comparison;
+        });
+      }
+    }
+
+    // Apply pagination
+    const total = result.length;
+    if (limit > 0) {
+      result = result.slice(offset, offset + limit);
+    }
+
+    res.json({
+      success: true,
+      total,
+      count: result.length,
+      groupBy,
+      sortBy,
+      sortOrder,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error fetching full claim history:', error);
+    res.status(500).json({ error: error.message, success: false });
   }
 });
 

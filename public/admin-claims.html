@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claim History - Admin</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .controls-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-group label {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .control-group select,
+    .control-group input {
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      font-size: 0.95rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      padding: 20px;
+      border-radius: 8px;
+      color: white;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .stat-label {
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+
+    .wallet-group {
+      background: var(--bg-dark);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+
+    .wallet-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      cursor: pointer;
+      padding: 10px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+    }
+
+    .wallet-header:hover {
+      background: var(--bg-primary);
+    }
+
+    .wallet-name {
+      font-weight: bold;
+      font-size: 1.1rem;
+      color: var(--primary);
+    }
+
+    .wallet-stats {
+      display: flex;
+      gap: 20px;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .wallet-claims {
+      margin-top: 10px;
+      padding-left: 15px;
+    }
+
+    .wallet-claims.collapsed {
+      display: none;
+    }
+
+    .claim-item {
+      padding: 10px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .claim-item:hover {
+      background: var(--bg-primary);
+    }
+
+    .pagination-controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 15px;
+      margin-top: 25px;
+      padding: 20px;
+      background: var(--bg-dark);
+      border-radius: 8px;
+    }
+
+    .pagination-controls button {
+      padding: 8px 16px;
+      min-width: 80px;
+    }
+
+    .page-info {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .export-btn {
+      margin-top: 15px;
+    }
+
+    @media (max-width: 768px) {
+      .controls-container {
+        grid-template-columns: 1fr;
+      }
+
+      .claim-item {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .wallet-stats {
+        flex-direction: column;
+        gap: 5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📊 Claim History</h1>
+      <p class="subtitle">Comprehensive claim tracking and analytics</p>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <a href="admin.html" class="nav-tab">⚙️ Main Admin</a>
+      <a href="admin-workflow.html" class="nav-tab">📖 Story Workflow</a>
+      <a href="admin-factory.html" class="nav-tab">🏭 Factory</a>
+      <a href="admin-claims.html" class="nav-tab active">📊 Claims</a>
+      <a href="admin-scheduler.html" class="nav-tab">⏰ Scheduler</a>
+    </nav>
+
+    <!-- Login Section -->
+    <div id="admin-login" class="card">
+      <h2>Admin Authentication</h2>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="admin-password">Admin Password:</label>
+          <input type="password" id="admin-password" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+      <div id="login-error" class="alert alert-error" style="display: none;"></div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="admin-dashboard" style="display: none;">
+      <div class="user-header">
+        <div class="user-info">
+          <span class="label">Claim History Admin</span>
+        </div>
+        <button id="admin-logout" class="btn btn-secondary btn-sm">Logout</button>
+      </div>
+
+      <!-- Statistics -->
+      <div class="stats-grid" id="stats-container">
+        <div class="stat-card">
+          <div class="stat-value" id="total-claims">0</div>
+          <div class="stat-label">Total Claims</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="total-wallets">0</div>
+          <div class="stat-label">Unique Wallets</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="claims-today">0</div>
+          <div class="stat-label">Claims Today</div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="card">
+        <h2>🎛️ View Controls</h2>
+        <div class="controls-container">
+          <div class="control-group">
+            <label for="view-type">View Type:</label>
+            <select id="view-type" class="form-control">
+              <option value="claim">Individual Claims</option>
+              <option value="wallet">Group by Wallet</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="sort-by">Sort By:</label>
+            <select id="sort-by" class="form-control">
+              <option value="date">Date</option>
+              <option value="wallet">Wallet</option>
+              <option value="reward">Reward Name</option>
+              <option value="count">Claim Count (Wallet View Only)</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="sort-order">Sort Order:</label>
+            <select id="sort-order" class="form-control">
+              <option value="desc">Newest First (Descending)</option>
+              <option value="asc">Oldest First (Ascending)</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="items-per-page">Items Per Page:</label>
+            <select id="items-per-page" class="form-control">
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="0">All</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="refresh-btn" class="btn btn-primary" style="margin-top: 15px;">
+          🔄 Refresh Data
+        </button>
+
+        <button id="export-csv-btn" class="btn btn-secondary export-btn">
+          📥 Export to CSV
+        </button>
+      </div>
+
+      <!-- Claims Display -->
+      <div class="card">
+        <h2 id="claims-header">📋 Claims</h2>
+        <div id="loading" style="text-align: center; padding: 40px;">
+          <div class="loader"></div>
+          <p>Loading claim history...</p>
+        </div>
+
+        <div id="claims-container" style="display: none;">
+          <!-- Individual Claims View -->
+          <div id="individual-claims-view">
+            <div class="table-container">
+              <table id="claims-table">
+                <thead>
+                  <tr>
+                    <th>Wallet</th>
+                    <th>Reward</th>
+                    <th>Qualifying Asset</th>
+                    <th>Date</th>
+                    <th>Transaction</th>
+                  </tr>
+                </thead>
+                <tbody id="claims-table-body">
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Grouped by Wallet View -->
+          <div id="wallet-grouped-view" style="display: none;">
+            <div id="wallet-groups-container">
+            </div>
+          </div>
+
+          <!-- Pagination -->
+          <div class="pagination-controls" id="pagination" style="display: none;">
+            <button id="prev-page-btn" class="btn btn-secondary">← Previous</button>
+            <span class="page-info">
+              Page <span id="current-page">1</span> of <span id="total-pages">1</span>
+              (<span id="showing-count">0</span> of <span id="total-count">0</span> items)
+            </span>
+            <button id="next-page-btn" class="btn btn-secondary">Next →</button>
+          </div>
+        </div>
+
+        <div id="no-claims" style="display: none; text-align: center; padding: 40px; color: var(--text-secondary);">
+          <p>No claims found.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = window.location.origin;
+    let authToken = localStorage.getItem('admin_token');
+    let currentPage = 1;
+    let itemsPerPage = 25;
+    let totalItems = 0;
+    let currentData = null;
+
+    // Authentication
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = document.getElementById('admin-password').value;
+
+      try {
+        const response = await fetch(`${API_URL}/api/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          authToken = data.token;
+          localStorage.setItem('admin_token', authToken);
+          document.getElementById('admin-login').style.display = 'none';
+          document.getElementById('admin-dashboard').style.display = 'block';
+          loadClaimHistory();
+        } else {
+          document.getElementById('login-error').textContent = 'Invalid password';
+          document.getElementById('login-error').style.display = 'block';
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        document.getElementById('login-error').textContent = 'Login failed';
+        document.getElementById('login-error').style.display = 'block';
+      }
+    });
+
+    document.getElementById('admin-logout').addEventListener('click', () => {
+      localStorage.removeItem('admin_token');
+      authToken = null;
+      document.getElementById('admin-login').style.display = 'block';
+      document.getElementById('admin-dashboard').style.display = 'none';
+    });
+
+    // Check existing session
+    if (authToken) {
+      document.getElementById('admin-login').style.display = 'none';
+      document.getElementById('admin-dashboard').style.display = 'block';
+      loadClaimHistory();
+    }
+
+    // Control listeners
+    document.getElementById('view-type').addEventListener('change', () => {
+      currentPage = 1;
+      loadClaimHistory();
+    });
+
+    document.getElementById('sort-by').addEventListener('change', () => {
+      currentPage = 1;
+      loadClaimHistory();
+    });
+
+    document.getElementById('sort-order').addEventListener('change', () => {
+      currentPage = 1;
+      loadClaimHistory();
+    });
+
+    document.getElementById('items-per-page').addEventListener('change', () => {
+      itemsPerPage = parseInt(document.getElementById('items-per-page').value);
+      currentPage = 1;
+      loadClaimHistory();
+    });
+
+    document.getElementById('refresh-btn').addEventListener('click', loadClaimHistory);
+
+    document.getElementById('prev-page-btn').addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        loadClaimHistory();
+      }
+    });
+
+    document.getElementById('next-page-btn').addEventListener('click', () => {
+      const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+      if (currentPage < totalPages) {
+        currentPage++;
+        loadClaimHistory();
+      }
+    });
+
+    document.getElementById('export-csv-btn').addEventListener('click', exportToCSV);
+
+    // Load claim history
+    async function loadClaimHistory() {
+      const viewType = document.getElementById('view-type').value;
+      const sortBy = document.getElementById('sort-by').value;
+      const sortOrder = document.getElementById('sort-order').value;
+      const limit = itemsPerPage;
+      const offset = (currentPage - 1) * itemsPerPage;
+
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('claims-container').style.display = 'none';
+      document.getElementById('no-claims').style.display = 'none';
+
+      try {
+        const params = new URLSearchParams({
+          groupBy: viewType,
+          sortBy: sortBy,
+          sortOrder: sortOrder,
+          limit: limit > 0 ? limit : 0,
+          offset: offset
+        });
+
+        const response = await fetch(`${API_URL}/api/admin/claims/full?${params}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch claim history');
+        }
+
+        const data = await response.json();
+        currentData = data;
+        totalItems = data.total;
+
+        document.getElementById('loading').style.display = 'none';
+
+        if (data.total === 0) {
+          document.getElementById('no-claims').style.display = 'block';
+          return;
+        }
+
+        document.getElementById('claims-container').style.display = 'block';
+
+        // Update statistics
+        updateStatistics(data);
+
+        // Display data based on view type
+        if (viewType === 'wallet') {
+          displayWalletGroupedView(data.data);
+        } else {
+          displayIndividualClaimsView(data.data);
+        }
+
+        // Update pagination
+        updatePagination();
+
+      } catch (error) {
+        console.error('Error loading claim history:', error);
+        document.getElementById('loading').style.display = 'none';
+        alert('Failed to load claim history: ' + error.message);
+      }
+    }
+
+    function updateStatistics(data) {
+      document.getElementById('total-claims').textContent = data.total.toLocaleString();
+
+      // Calculate unique wallets
+      let uniqueWallets = 0;
+      if (data.groupBy === 'wallet') {
+        // Get total from all pages, not just current page
+        fetch(`${API_URL}/api/admin/claims/full?groupBy=wallet&limit=0`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        })
+        .then(r => r.json())
+        .then(allData => {
+          document.getElementById('total-wallets').textContent = allData.data.length.toLocaleString();
+        });
+      } else {
+        const wallets = new Set(data.data.map(claim => claim.wallet_account));
+        uniqueWallets = wallets.size;
+        document.getElementById('total-wallets').textContent = uniqueWallets.toLocaleString();
+      }
+
+      // Calculate claims today
+      const today = new Date().toISOString().split('T')[0];
+      let claimsToday = 0;
+      if (data.groupBy === 'claim') {
+        claimsToday = data.data.filter(claim => claim.claimed_at.startsWith(today)).length;
+      } else {
+        data.data.forEach(group => {
+          claimsToday += group.claims.filter(claim => claim.claimed_at.startsWith(today)).length;
+        });
+      }
+      document.getElementById('claims-today').textContent = claimsToday.toLocaleString();
+    }
+
+    function displayIndividualClaimsView(claims) {
+      document.getElementById('individual-claims-view').style.display = 'block';
+      document.getElementById('wallet-grouped-view').style.display = 'none';
+
+      const tbody = document.getElementById('claims-table-body');
+      tbody.innerHTML = '';
+
+      claims.forEach(claim => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${claim.wallet_account}</td>
+          <td><strong>${claim.reward_name}</strong></td>
+          <td>${claim.qualifying_template_name}</td>
+          <td>${formatDate(claim.claimed_at)}</td>
+          <td>
+            <a href="https://waxblock.io/transaction/${claim.transaction_id}" target="_blank" style="color: var(--primary); text-decoration: none;">
+              ${claim.transaction_id.substring(0, 8)}...
+            </a>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function displayWalletGroupedView(groups) {
+      document.getElementById('individual-claims-view').style.display = 'none';
+      document.getElementById('wallet-grouped-view').style.display = 'block';
+
+      const container = document.getElementById('wallet-groups-container');
+      container.innerHTML = '';
+
+      groups.forEach(group => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'wallet-group';
+
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'wallet-header';
+        headerDiv.innerHTML = `
+          <div class="wallet-name">${group.wallet}</div>
+          <div class="wallet-stats">
+            <span><strong>${group.total_claims}</strong> claims</span>
+            <span>First: ${formatDate(group.first_claim)}</span>
+            <span>Last: ${formatDate(group.last_claim)}</span>
+          </div>
+        `;
+
+        const claimsDiv = document.createElement('div');
+        claimsDiv.className = 'wallet-claims';
+
+        group.claims.forEach(claim => {
+          const claimDiv = document.createElement('div');
+          claimDiv.className = 'claim-item';
+          claimDiv.innerHTML = `
+            <div><strong>${claim.reward_name}</strong></div>
+            <div>${formatDate(claim.claimed_at)}</div>
+            <div>
+              <a href="https://waxblock.io/transaction/${claim.transaction_id}" target="_blank" style="color: var(--primary); text-decoration: none;">
+                View TX
+              </a>
+            </div>
+          `;
+          claimsDiv.appendChild(claimDiv);
+        });
+
+        // Toggle collapse on header click
+        headerDiv.addEventListener('click', () => {
+          claimsDiv.classList.toggle('collapsed');
+        });
+
+        groupDiv.appendChild(headerDiv);
+        groupDiv.appendChild(claimsDiv);
+        container.appendChild(groupDiv);
+      });
+    }
+
+    function updatePagination() {
+      const totalPages = itemsPerPage > 0 ? Math.ceil(totalItems / itemsPerPage) : 1;
+      const showingCount = currentData.count;
+
+      document.getElementById('current-page').textContent = currentPage;
+      document.getElementById('total-pages').textContent = totalPages;
+      document.getElementById('showing-count').textContent = showingCount;
+      document.getElementById('total-count').textContent = totalItems;
+
+      document.getElementById('prev-page-btn').disabled = currentPage === 1;
+      document.getElementById('next-page-btn').disabled = currentPage >= totalPages;
+
+      if (itemsPerPage > 0 && totalItems > itemsPerPage) {
+        document.getElementById('pagination').style.display = 'flex';
+      } else {
+        document.getElementById('pagination').style.display = 'none';
+      }
+    }
+
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function exportToCSV() {
+      if (!currentData || !currentData.data || currentData.data.length === 0) {
+        alert('No data to export');
+        return;
+      }
+
+      let csv = '';
+
+      if (currentData.groupBy === 'wallet') {
+        // Export wallet-grouped data
+        csv = 'Wallet,Total Claims,First Claim,Last Claim,Reward Name,Claimed At,Transaction ID\n';
+        currentData.data.forEach(group => {
+          group.claims.forEach((claim, index) => {
+            const walletInfo = index === 0 ? `${group.wallet},${group.total_claims},${group.first_claim},${group.last_claim}` : ',,,';
+            csv += `${walletInfo},${claim.reward_name},${claim.claimed_at},${claim.transaction_id}\n`;
+          });
+        });
+      } else {
+        // Export individual claims
+        csv = 'Wallet,Reward Name,Qualifying Asset,Claimed At,Transaction ID\n';
+        currentData.data.forEach(claim => {
+          csv += `${claim.wallet_account},${claim.reward_name},${claim.qualifying_template_name},${claim.claimed_at},${claim.transaction_id}\n`;
+        });
+      }
+
+      // Download CSV
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `claim-history-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>

@@ -359,7 +359,7 @@ function showEligibleState(eligibilityData, cooldownData, claimsData) {
       const historyItem = document.createElement('div');
       historyItem.className = 'history-item';
       historyItem.innerHTML = `
-        <span>Template ${claim.template_id}</span>
+        <span>${claim.reward_name || `Template ${claim.reward_template}`}</span>
         <span class="history-date">${formatDate(claim.claimed_at)}</span>
       `;
       historyListEl.appendChild(historyItem);
