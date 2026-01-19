@@ -655,12 +655,90 @@ async function getUserAssetsLive(account, collection = null, templateFilter = nu
   throw new Error(`All RPC endpoints failed. Last error: ${lastError?.message}`);
 }
 
+/**
+ * Transfer NFTs from one wallet to another
+ * @param {string} fromWallet - Source wallet
+ * @param {string} toWallet - Destination wallet
+ * @param {string[]} assetIds - Array of asset IDs to transfer
+ * @param {string} memo - Transfer memo
+ * @param {string} privateKey - Private key of source wallet
+ * @returns {Promise<object>} Transaction result
+ */
+async function transferNFTs(fromWallet, toWallet, assetIds, memo, privateKey) {
+  const { Api, JsonRpc } = require('eosjs');
+  const { JsSignatureProvider } = require('eosjs/dist/eosjs-jssig');
+  const fetch = require('node-fetch');
+  const { TextEncoder, TextDecoder } = require('util');
+
+  const rpcEndpoints = [
+    'https://api.waxsweden.org',
+    'https://wax.greymass.com',
+    'https://api.wax.alohaeos.com'
+  ];
+
+  let lastError = null;
+
+  for (const endpoint of rpcEndpoints) {
+    try {
+      console.log(`🔗 Attempting transfer via ${endpoint}...`);
+      const rpc = new JsonRpc(endpoint, { fetch });
+      const signatureProvider = new JsSignatureProvider([privateKey]);
+      const api = new Api({
+        rpc,
+        signatureProvider,
+        textDecoder: new TextDecoder(),
+        textEncoder: new TextEncoder()
+      });
+
+      const result = await api.transact(
+        {
+          actions: [{
+            account: 'atomicassets',
+            name: 'transfer',
+            authorization: [{
+              actor: fromWallet,
+              permission: 'active',
+            }],
+            data: {
+              from: fromWallet,
+              to: toWallet,
+              asset_ids: assetIds,
+              memo: memo || ''
+            },
+          }]
+        },
+        {
+          blocksBehind: 3,
+          expireSeconds: 30,
+        }
+      );
+
+      console.log(`✅ Transfer successful! TX: ${result.transaction_id}`);
+      return {
+        transaction_id: result.transaction_id,
+        from: fromWallet,
+        to: toWallet,
+        asset_count: assetIds.length,
+        asset_ids: assetIds
+      };
+
+    } catch (error) {
+      console.warn(`❌ ${endpoint} failed:`, error.message);
+      lastError = error;
+      continue;
+    }
+  }
+
+  throw new Error(`All RPC endpoints failed. Last: ${lastError?.message}`);
+}
+
 module.exports = {
   getUserAssets,
   getUserAssetsLive,
   getTemplate,
   checkEligibility,
   mintNFT,
+  transferNFTs,
   getCollection,
   verifyTransaction,
   getAccountResources,
