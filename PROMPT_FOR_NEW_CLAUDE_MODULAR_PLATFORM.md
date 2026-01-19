@@ -157,31 +157,73 @@ You have these **WORKING** features that need to be modularized:
 - **CRITICAL**: Must burn ingredients atomically (all or nothing)
 - **CRITICAL**: Uses `getUserAssetsLive()` to validate ingredients
 
+### 6. **Blend Array Module** (NEW - Like story.html mode)
+- **What it does**: Display multiple blend recipes in an array/grid format
+- **Similar to**: `public/story.html` structure with blend arrays
+- **User wants**: Many blends displayed in organized grid, not one-at-a-time
+- **Key features**:
+  - Grid layout showing multiple recipes at once
+  - Each recipe card shows ingredients, results, requirements
+  - Click to expand/execute specific blend
+  - Filter by category or search
+- **Uses same backend**: Existing craft endpoints
+- **Config options**:
+  - `recipe_ids`: Array of specific recipes to show
+  - `category`: Filter by category
+  - `layout`: "grid" or "list"
+- **This is NOT NeftyBlocks** - Uses our own factory system
+
+### 7. **Blend Array (Transfer + Mint Mode)** (NEW REQUIREMENT)
+- **What it does**: Alternative to current factory that uses asset transfers instead of burns
+- **How it works**:
+  1. User selects blend recipe
+  2. User transfers ingredients to blend wallet (from config)
+  3. Backend detects transfer
+  4. Backend mints result NFT to user's wallet
+- **Why different from current factory**:
+  - Current: Burns ingredients → mints result
+  - New: Transfers ingredients → mints result
+  - Ingredients go to `blend_array_wallet` (config) instead of being destroyed
+- **Config needed**:
+  - `BLEND_ARRAY_WALLET` - Where ingredients are transferred to
+  - `BLEND_ARRAY_PRIVATE_KEY` - To verify/process transfers
+- **Database addition**: Need to track transfers vs burns
+- **API endpoints needed**:
+  - `POST /api/user/blend-array` - Submit transfer-based blend
+  - Backend validates transfer occurred, mints result
+- **CRITICAL**: Must verify transfer BEFORE minting result
+- **This is NOT using NeftyBlocks contracts** - Our own implementation using atomicassets::transfer
+
 ## 🏗️ ARCHITECTURE REQUIREMENTS
 
 ### Structure Overview:
 
 ```
 public/
-├── index.html              ← NEW: Main unified page with story + modules
-├── modules/                ← NEW: Modular components
-│   ├── claim-rewards.html      ← Extract from current index.html
-│   ├── claim-rewards.js        ← Extract from current app.js
-│   ├── nefty-drops.html        ← New embed wrapper
-│   ├── unpack.html             ← New unpack interface
-│   ├── unpack.js               ← New unpack logic
-│   ├── claim-unpack.html       ← New claim unpack interface
-│   ├── claim-unpack.js         ← New claim unpack logic
-│   ├── factory-craft.html      ← Extract from craft.html
-│   ├── factory-craft.js        ← Extract from craft.js
-│   └── module-loader.js        ← NEW: Dynamic module injection
+├── index.html                  ← NEW: Main unified page with story + modules
+├── modules/                    ← NEW: Modular components
+│   ├── claim-rewards.html          ← Extract from current index.html
+│   ├── claim-rewards.js            ← Extract from current app.js
+│   ├── nefty-drops.html            ← New embed wrapper
+│   ├── unpack.html                 ← New unpack interface
+│   ├── unpack.js                   ← New unpack logic
+│   ├── claim-unpack.html           ← New claim unpack interface
+│   ├── claim-unpack.js             ← New claim unpack logic
+│   ├── factory-craft.html          ← Extract from craft.html
+│   ├── factory-craft.js            ← Extract from craft.js
+│   ├── blend-array.html            ← NEW: Grid view of multiple blends
+│   ├── blend-array.js              ← NEW: Blend array logic
+│   └── module-loader.js            ← NEW: Dynamic module injection
 ├── styles/
-│   ├── main.css               ← Global styles
-│   └── modules.css            ← Module-specific styles
-├── admin.html             ← Keep existing (add to nav)
-├── admin-scheduler.html   ← Keep existing (add to nav)
-├── user-guide.html        ← Keep existing (add to nav)
-└── admin-wiki.html        ← Keep existing (add to nav)
+│   ├── main.css                   ← Global styles
+│   └── modules.css                ← Module-specific styles
+├── admin.html                 ← Keep existing (add to nav)
+├── admin-scheduler.html       ← Keep existing (add to nav)
+├── admin-factory.html         ← Update with NeftyBlocks extractor
+├── admin-page-builder.html    ← NEW: Visual page builder
+├── admin-page-builder.js      ← NEW: Page builder logic
+├── user-guide.html            ← Keep existing (add to nav)
+└── admin-wiki.html            ← Keep existing (add to nav)
 ```
 
 ### Module System Requirements:
@@ -327,6 +369,28 @@ document.addEventListener('DOMContentLoaded', () => {
 ```
 
 ## 📋 STEP-BY-STEP IMPLEMENTATION PLAN
+
+### Phase 0: Backup Everything (CRITICAL - Do This FIRST!)
+
+**Before making ANY changes, create a backup branch!**
+
+1. **Create backup branch**:
+   ```bash
+   git checkout -b backup-before-modular-platform
+   git push -u origin backup-before-modular-platform
+   ```
+
+2. **Return to working branch**:
+   ```bash
+   git checkout claude/continue-project-review-aB6RT
+   ```
+
+3. **Verify backup exists**:
+   ```bash
+   git branch -a | grep backup
+   ```
+
+**This backup ensures you can restore everything if something breaks!**
 
 ### Phase 1: Setup Module System (Do This First!)
 
@@ -855,7 +919,612 @@ Create new `public/index.html` with story + embedded modules:
 </html>
 ```
 
-### Phase 8: Testing & Polish
+### Phase 8: Create NeftyBlocks Recipe Extractor (Admin Tool)
+
+**User wants**: Button in `admin-factory.html` to extract blend recipes from NeftyBlocks and auto-fill the factory form!
+
+1. **Add to `public/admin-factory.html`**:
+
+```html
+<!-- Add this section at the top of the factory admin panel -->
+<div class="nefty-extractor-section" style="background: rgba(147, 51, 234, 0.1); padding: 20px; border-radius: 12px; margin-bottom: 30px;">
+  <h3>🎯 NeftyBlocks Recipe Extractor</h3>
+  <p style="color: var(--text-secondary); margin-bottom: 15px;">
+    Import a blend recipe from NeftyBlocks - paste the blend URL and we'll extract all the data for you!
+  </p>
+
+  <div style="display: flex; gap: 10px; align-items: center;">
+    <input
+      type="text"
+      id="nefty-blend-url"
+      placeholder="https://neftyblocks.com/c/futuresrelic/blends/12345"
+      style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border);">
+    <button id="extract-nefty-recipe-btn" class="btn btn-primary" style="min-width: 150px;">
+      🔍 Extract Recipe
+    </button>
+  </div>
+
+  <div id="nefty-extract-status" style="margin-top: 10px; font-size: 0.9rem;"></div>
+
+  <!-- Extracted data display -->
+  <div id="nefty-extracted-data" style="display: none; margin-top: 20px; padding: 15px; background: var(--card-bg); border-radius: 8px;">
+    <h4>Extracted Recipe Data:</h4>
+    <div id="nefty-recipe-preview"></div>
+    <button id="auto-fill-recipe-btn" class="btn btn-success" style="margin-top: 10px;">
+      ✅ Auto-Fill Form with This Recipe
+    </button>
+  </div>
+</div>
+```
+
+2. **Create extraction logic in `public/admin-factory.js`**:
+
+```javascript
+// NeftyBlocks Recipe Extractor
+document.getElementById('extract-nefty-recipe-btn')?.addEventListener('click', async () => {
+  const url = document.getElementById('nefty-blend-url').value.trim();
+  const statusEl = document.getElementById('nefty-extract-status');
+  const dataEl = document.getElementById('nefty-extracted-data');
+
+  if (!url) {
+    statusEl.innerHTML = '<span style="color: var(--error);">Please enter a NeftyBlocks blend URL</span>';
+    return;
+  }
+
+  // Extract blend ID from URL
+  const blendIdMatch = url.match(/blends\/(\d+)/);
+  if (!blendIdMatch) {
+    statusEl.innerHTML = '<span style="color: var(--error);">Invalid NeftyBlocks blend URL format</span>';
+    return;
+  }
+
+  const blendId = blendIdMatch[1];
+  statusEl.innerHTML = '<span style="color: var(--primary);">🔄 Fetching blend data from NeftyBlocks...</span>';
+
+  try {
+    // Call backend endpoint that fetches from NeftyBlocks API
+    const response = await fetch(`${API_URL}/api/admin/extract-nefty-blend/${blendId}`, {
+      headers: {
+        'Authorization': `Bearer ${adminToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch blend data');
+    }
+
+    const blendData = await response.json();
+
+    // Display extracted data
+    displayExtractedRecipe(blendData);
+    dataEl.style.display = 'block';
+    statusEl.innerHTML = '<span style="color: var(--success);">✅ Recipe extracted successfully!</span>';
+
+  } catch (error) {
+    statusEl.innerHTML = `<span style="color: var(--error);">❌ Error: ${error.message}</span>`;
+  }
+});
+
+function displayExtractedRecipe(blendData) {
+  const previewEl = document.getElementById('nefty-recipe-preview');
+
+  let html = '<div style="font-size: 0.95rem;">';
+
+  // Recipe Name
+  html += `<div style="margin-bottom: 10px;"><strong>Name:</strong> ${blendData.name || 'Unnamed Blend'}</div>`;
+
+  // Ingredients
+  html += '<div style="margin-bottom: 10px;"><strong>Ingredients:</strong></div>';
+  html += '<ul style="margin-left: 20px; color: var(--text-secondary);">';
+  blendData.ingredients.forEach(ing => {
+    html += `<li>Template #${ing.template_id} - ${ing.name || 'Unknown'} (Quantity: ${ing.quantity})</li>`;
+  });
+  html += '</ul>';
+
+  // Results
+  html += '<div style="margin-bottom: 10px;"><strong>Results:</strong></div>';
+  html += '<ul style="margin-left: 20px; color: var(--text-secondary);">';
+  blendData.results.forEach(res => {
+    html += `<li>Template #${res.template_id} - ${res.name || 'Unknown'} (Quantity: ${res.quantity})</li>`;
+  });
+  html += '</ul>';
+
+  html += '</div>';
+  previewEl.innerHTML = html;
+
+  // Store data for auto-fill
+  window.extractedNeftyRecipe = blendData;
+}
+
+// Auto-fill form with extracted recipe
+document.getElementById('auto-fill-recipe-btn')?.addEventListener('click', () => {
+  if (!window.extractedNeftyRecipe) return;
+
+  const recipe = window.extractedNeftyRecipe;
+
+  // Fill recipe name
+  document.getElementById('recipe-name-input').value = recipe.name || '';
+
+  // Fill ingredients
+  document.getElementById('recipe-ingredients-input').value = JSON.stringify(recipe.ingredients, null, 2);
+
+  // Fill results
+  document.getElementById('recipe-results-input').value = JSON.stringify(recipe.results, null, 2);
+
+  // Fill mode (default to mint if not specified)
+  const modeSelect = document.getElementById('recipe-mode-select');
+  if (modeSelect) {
+    modeSelect.value = recipe.mode || 'mint';
+  }
+
+  // Scroll to form
+  document.getElementById('recipe-name-input').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Show success message
+  showMessage('✅ Form auto-filled with NeftyBlocks recipe data! Review and save.', 'success');
+});
+```
+
+3. **Backend: Add extraction endpoint to `server.js`**:
+
+```javascript
+// GET /api/admin/extract-nefty-blend/:blendId
+app.get('/api/admin/extract-nefty-blend/:blendId', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { blendId } = req.params;
+
+    console.log(`📥 Extracting NeftyBlocks blend ${blendId}...`);
+
+    // Fetch blend data from NeftyBlocks API
+    const neftyResponse = await fetch(`https://neftyblocks.com/api/v1/blends/${blendId}`);
+
+    if (!neftyResponse.ok) {
+      return res.status(404).json({ error: 'Blend not found on NeftyBlocks' });
+    }
+
+    const neftyBlend = await neftyResponse.json();
+
+    // Extract ingredients
+    const ingredients = neftyBlend.ingredients?.map(ing => ({
+      template_id: parseInt(ing.template_id),
+      name: ing.template_data?.immutable_data?.name || null,
+      quantity: parseInt(ing.amount || 1),
+      effect: 'burn'  // NeftyBlocks always burns
+    })) || [];
+
+    // Extract results
+    const results = neftyBlend.outputs?.map(out => ({
+      template_id: parseInt(out.template_id),
+      name: out.template_data?.immutable_data?.name || null,
+      quantity: parseInt(out.amount || 1)
+    })) || [];
+
+    // Return formatted data ready for our factory
+    res.json({
+      name: neftyBlend.name || `Blend #${blendId}`,
+      description: neftyBlend.description || null,
+      ingredients: ingredients,
+      results: results,
+      mode: 'mint',  // Default to mint mode
+      nefty_blend_id: blendId,
+      extracted_at: new Date().toISOString()
+    });
+
+    console.log(`✅ Successfully extracted blend ${blendId} with ${ingredients.length} ingredients and ${results.length} results`);
+
+  } catch (error) {
+    console.error('❌ NeftyBlocks extraction error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+```
+
+**What this does**:
+- User pastes NeftyBlocks blend URL
+- Backend calls NeftyBlocks API to fetch blend data
+- Extracts: recipe name, ingredient template IDs + names + quantities, result template IDs + names + quantities
+- Displays extracted data in preview
+- "Auto-Fill" button populates the factory recipe form
+- User reviews and saves to database
+
+**NeftyBlocks API endpoints to use**:
+- `GET https://neftyblocks.com/api/v1/blends/{blendId}` - Get blend details
+- Returns ingredients, outputs, template data, etc.
+
+### Phase 9: Create Main Page Builder (Admin Tool)
+
+**User wants**: Visual tool to build the main story page with text, images, and module embeds!
+
+1. **Create `public/admin-page-builder.html`**:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Page Builder - Future Relic Admin</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="main-nav">
+    <!-- Same nav as other pages -->
+  </nav>
+
+  <div class="container" style="max-width: 1400px; margin: 2rem auto; padding: 0 2rem;">
+    <div style="display: flex; gap: 2rem;">
+
+      <!-- Left Panel: Page Builder Controls -->
+      <div style="flex: 1; max-width: 400px;">
+        <div class="card">
+          <h2>📝 Page Builder</h2>
+          <p style="color: var(--text-secondary); margin-bottom: 20px;">
+            Build your story page by adding sections of text, images, and interactive modules.
+          </p>
+
+          <!-- Add Section Controls -->
+          <div class="section-adder">
+            <h3>Add New Section:</h3>
+
+            <button class="add-section-btn" data-type="heading">
+              📌 Add Heading
+            </button>
+            <button class="add-section-btn" data-type="text">
+              📄 Add Text Paragraph
+            </button>
+            <button class="add-section-btn" data-type="image">
+              🖼️ Add Image
+            </button>
+            <button class="add-section-btn" data-type="module">
+              🧩 Add Interactive Module
+            </button>
+
+            <hr style="margin: 20px 0;">
+
+            <!-- Module Selection -->
+            <div id="module-selector" style="display: none;">
+              <h4>Select Module Type:</h4>
+              <select id="module-type-select" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+                <option value="claim-rewards">Claim Rewards</option>
+                <option value="factory-craft">Factory Craft</option>
+                <option value="blend-array">Blend Array</option>
+                <option value="unpack">Unpack Packs</option>
+                <option value="claim-unpack">Claim Unpack</option>
+                <option value="nefty-drops">NeftyBlocks Drop</option>
+              </select>
+              <textarea id="module-config-input" placeholder='{"config": "value"}' style="width: 100%; min-height: 80px; font-family: monospace;"></textarea>
+              <button id="confirm-module-btn" class="btn btn-primary">Add Module</button>
+            </div>
+          </div>
+
+          <hr style="margin: 20px 0;">
+
+          <!-- Page Actions -->
+          <div class="page-actions">
+            <button id="preview-page-btn" class="btn btn-secondary" style="width: 100%; margin-bottom: 10px;">
+              👁️ Preview Page
+            </button>
+            <button id="save-page-btn" class="btn btn-success" style="width: 100%; margin-bottom: 10px;">
+              💾 Save Page
+            </button>
+            <button id="export-html-btn" class="btn btn-primary" style="width: 100%;">
+              📦 Export HTML
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel: Live Preview -->
+      <div style="flex: 2;">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2>👁️ Live Preview</h2>
+            <button id="clear-preview-btn" class="btn btn-danger">Clear All</button>
+          </div>
+
+          <div id="page-preview" class="page-preview">
+            <p style="color: var(--text-secondary); text-align: center; padding: 40px;">
+              Your page content will appear here. Start adding sections!
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/admin-page-builder.js"></script>
+</body>
+</html>
+```
+
+2. **Create `public/admin-page-builder.js`**:
+
+```javascript
+let pageContent = [];  // Array of content blocks
+
+// Add section buttons
+document.querySelectorAll('.add-section-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const type = btn.getAttribute('data-type');
+
+    if (type === 'module') {
+      // Show module selector
+      document.getElementById('module-selector').style.display = 'block';
+    } else {
+      addSection(type);
+    }
+  });
+});
+
+// Confirm module addition
+document.getElementById('confirm-module-btn').addEventListener('click', () => {
+  const moduleType = document.getElementById('module-type-select').value;
+  const configText = document.getElementById('module-config-input').value;
+
+  let config = {};
+  try {
+    config = configText ? JSON.parse(configText) : {};
+  } catch (e) {
+    alert('Invalid JSON config. Using empty config.');
+  }
+
+  addSection('module', { module_type: moduleType, config: config });
+
+  // Reset
+  document.getElementById('module-config-input').value = '';
+  document.getElementById('module-selector').style.display = 'none';
+});
+
+function addSection(type, data = {}) {
+  let content = '';
+
+  switch (type) {
+    case 'heading':
+      content = prompt('Enter heading text:', 'Chapter Title');
+      if (!content) return;
+      pageContent.push({ type: 'heading', content: content });
+      break;
+
+    case 'text':
+      content = prompt('Enter paragraph text:', 'Your story text here...');
+      if (!content) return;
+      pageContent.push({ type: 'text', content: content });
+      break;
+
+    case 'image':
+      const imageUrl = prompt('Enter image URL:', '/images/chapter1.jpg');
+      if (!imageUrl) return;
+      const imageAlt = prompt('Enter image alt text:', 'Chapter Image');
+      pageContent.push({ type: 'image', url: imageUrl, alt: imageAlt });
+      break;
+
+    case 'module':
+      pageContent.push({ type: 'module', module_type: data.module_type, config: data.config });
+      break;
+  }
+
+  renderPreview();
+}
+
+function renderPreview() {
+  const preview = document.getElementById('page-preview');
+
+  if (pageContent.length === 0) {
+    preview.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 40px;">Your page content will appear here. Start adding sections!</p>';
+    return;
+  }
+
+  let html = '';
+
+  pageContent.forEach((item, index) => {
+    html += `<div class="preview-section" data-index="${index}" style="position: relative; margin-bottom: 20px; padding: 15px; border: 1px solid var(--border); border-radius: 8px;">`;
+
+    // Delete button
+    html += `<button class="delete-section-btn" onclick="deleteSection(${index})" style="position: absolute; top: 10px; right: 10px; background: var(--error); color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">🗑️ Delete</button>`;
+
+    switch (item.type) {
+      case 'heading':
+        html += `<h2 style="color: var(--primary);">${item.content}</h2>`;
+        break;
+
+      case 'text':
+        html += `<p style="font-size: 1.1rem; line-height: 1.8;">${item.content}</p>`;
+        break;
+
+      case 'image':
+        html += `<img src="${item.url}" alt="${item.alt}" style="max-width: 100%; border-radius: 8px;">`;
+        break;
+
+      case 'module':
+        html += `
+          <div style="background: rgba(59, 130, 246, 0.1); padding: 20px; border-radius: 8px; border: 2px dashed var(--primary);">
+            <strong>🧩 Interactive Module: ${item.module_type}</strong>
+            <pre style="margin-top: 10px; font-size: 0.85rem; color: var(--text-secondary);">${JSON.stringify(item.config, null, 2)}</pre>
+          </div>
+        `;
+        break;
+    }
+
+    html += '</div>';
+  });
+
+  preview.innerHTML = html;
+}
+
+window.deleteSection = function(index) {
+  if (confirm('Delete this section?')) {
+    pageContent.splice(index, 1);
+    renderPreview();
+  }
+};
+
+// Clear all
+document.getElementById('clear-preview-btn').addEventListener('click', () => {
+  if (confirm('Clear all content?')) {
+    pageContent = [];
+    renderPreview();
+  }
+});
+
+// Save page
+document.getElementById('save-page-btn').addEventListener('click', async () => {
+  if (pageContent.length === 0) {
+    alert('Nothing to save!');
+    return;
+  }
+
+  const pageName = prompt('Enter page name:', 'main-story');
+  if (!pageName) return;
+
+  try {
+    const response = await fetch('/api/admin/save-page', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getAdminToken()}`
+      },
+      body: JSON.stringify({
+        name: pageName,
+        content: pageContent
+      })
+    });
+
+    if (response.ok) {
+      alert('✅ Page saved successfully!');
+    } else {
+      alert('❌ Failed to save page');
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+});
+
+// Export HTML
+document.getElementById('export-html-btn').addEventListener('click', () => {
+  if (pageContent.length === 0) {
+    alert('Nothing to export!');
+    return;
+  }
+
+  const html = generateHTML();
+
+  // Download as file
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'index.html';
+  a.click();
+});
+
+function generateHTML() {
+  let html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Future Relic - Story</title>
+  <link rel="stylesheet" href="/styles/main.css">
+  <link rel="stylesheet" href="/styles/modules.css">
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="main-nav">
+    <!-- Add navigation here -->
+  </nav>
+
+  <div class="story-container">
+`;
+
+  pageContent.forEach(item => {
+    switch (item.type) {
+      case 'heading':
+        html += `    <h1>${item.content}</h1>\n`;
+        break;
+
+      case 'text':
+        html += `    <p>${item.content}</p>\n`;
+        break;
+
+      case 'image':
+        html += `    <img src="${item.url}" alt="${item.alt}" class="story-image">\n`;
+        break;
+
+      case 'module':
+        const moduleId = `module-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        html += `    <div class="story-module">
+      <div id="${moduleId}" data-module="${item.module_type}" data-config='${JSON.stringify(item.config)}'></div>
+    </div>\n`;
+        break;
+    }
+  });
+
+  html += `  </div>
+
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>`;
+
+  return html;
+}
+
+function getAdminToken() {
+  return localStorage.getItem('admin_token') || '';
+}
+```
+
+3. **Backend: Add save page endpoint to `server.js`**:
+
+```javascript
+// POST /api/admin/save-page
+app.post('/api/admin/save-page', adminAuthMiddleware, async (req, res) => {
+  try {
+    const { name, content } = req.body;
+
+    if (!name || !content) {
+      return res.status(400).json({ error: 'Name and content required' });
+    }
+
+    // Generate HTML
+    const html = generatePageHTML(content);
+
+    // Save to file
+    const fs = require('fs').promises;
+    const path = require('path');
+    const filePath = path.join(__dirname, 'public', `${name}.html`);
+
+    await fs.writeFile(filePath, html, 'utf8');
+
+    console.log(`✅ Page saved: ${filePath}`);
+
+    res.json({
+      success: true,
+      message: `Page saved as ${name}.html`,
+      path: `/${name}.html`
+    });
+
+  } catch (error) {
+    console.error('❌ Save page error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+function generatePageHTML(content) {
+  // Same logic as frontend generateHTML()
+  // ... implementation ...
+}
+```
+
+**What this does**:
+- Drag-and-drop style page builder interface
+- Add headings, paragraphs, images, and modules
+- Live preview on the right side
+- Rearrange/delete sections
+- Save to database or export as HTML file
+- User can build entire story page without touching code!
+
+### Phase 10: Testing & Polish
 
 1. **Test each module independently**
 2. **Test all modules on main page**
@@ -863,6 +1532,8 @@ Create new `public/index.html` with story + embedded modules:
 4. **Test on mobile** (responsive design)
 5. **Add loading states and error handling**
 6. **Add transitions and animations**
+7. **Test NeftyBlocks extractor with real blend URLs**
+8. **Test page builder export and save**
 
 ## ⚠️ CRITICAL REQUIREMENTS
 
@@ -906,16 +1577,35 @@ Create new `public/index.html` with story + embedded modules:
 
 You succeed when:
 
-1. ✅ Main page loads with navigation bar
-2. ✅ Story content displays with images
-3. ✅ All 5 modules load and work independently
-4. ✅ Wallet connection works across all modules
-5. ✅ User can progress through story and complete actions
-6. ✅ All existing pages still accessible via nav
-7. ✅ Mobile responsive on all screen sizes
-8. ✅ Zero breaking changes to backend
-9. ✅ All existing functionality still works
-10. ✅ Code is clean, commented, maintainable
+1. ✅ **Phase 0 complete**: Backup branch created and pushed
+2. ✅ Main page loads with navigation bar
+3. ✅ Story content displays with images
+4. ✅ All 7 modules load and work independently:
+   - Claim Rewards
+   - Factory Craft
+   - Blend Array (grid view)
+   - Unpack
+   - Claim Unpack
+   - NeftyBlocks Drops
+   - Blend Array (transfer + mint mode)
+5. ✅ Wallet connection works across all modules
+6. ✅ User can progress through story and complete actions
+7. ✅ All existing pages still accessible via nav
+8. ✅ Mobile responsive on all screen sizes
+9. ✅ **NeftyBlocks Recipe Extractor works**:
+   - Paste NeftyBlocks blend URL
+   - Extracts ingredients, results, template names
+   - Auto-fills factory form
+   - User can review and save
+10. ✅ **Page Builder works**:
+    - Add headings, text, images, modules
+    - Live preview updates
+    - Save/export functionality
+    - User can build pages without coding
+11. ✅ Zero breaking changes to backend (all existing endpoints work)
+12. ✅ All existing functionality still works (test claims, crafts, scheduler)
+13. ✅ Code is clean, commented, maintainable
+14. ✅ Documentation updated with new features
 
 ## 💬 COMMUNICATION STYLE
 
@@ -942,13 +1632,56 @@ You succeed when:
 
 When you're done, provide:
 
-1. **File structure** - List all new files created
-2. **Module documentation** - How to use each module
-3. **Configuration guide** - How user can customize story/modules
-4. **Testing report** - What you tested and results
-5. **Screenshots** - Show the working platform
-6. **Next steps** - Recommendations for improvement
+1. **Backup confirmation** - Verify backup branch exists and is pushed
+2. **File structure** - List all new files created
+3. **Module documentation** - How to use each module, including:
+   - Claim Rewards
+   - Factory Craft
+   - Blend Array (both modes)
+   - Unpack/Claim Unpack
+   - NeftyBlocks Drops
+4. **Configuration guide** - How user can customize story/modules
+5. **NeftyBlocks Extractor guide** - How to extract and import blend recipes
+6. **Page Builder guide** - How to use the visual page builder
+7. **Testing report** - What you tested and results:
+   - Each module independently
+   - All modules on story page
+   - NeftyBlocks extractor with real URLs
+   - Page builder save/export
+   - Existing features (claims, crafts, scheduler)
+8. **Screenshots/Videos** - Show:
+   - Working story page with embedded modules
+   - NeftyBlocks extractor in action
+   - Page builder interface
+   - Blend array grid view
+9. **API changes** - Document new endpoints added:
+   - `/api/user/blend-array`
+   - `/api/admin/extract-nefty-blend/:blendId`
+   - `/api/admin/save-page`
+   - `/api/user/unpack`
+   - `/api/user/claim-unpack`
+10. **Next steps** - Recommendations for improvement
 
 ---
 
-**Remember**: User doesn't code. You do ALL the implementation. Break nothing. Make it beautiful. Make it work. Make the user proud! 🚀
+## 🎯 QUICK SUMMARY FOR NEW CLAUDE
+
+**What you're building**:
+1. ✅ **Backup everything first** (Phase 0 - create backup branch)
+2. 🎨 **Modular platform** - Convert existing features into reusable modules
+3. 📖 **Story-driven interface** - Text + images + embedded interactive modules
+4. 🧩 **7 different modules** - All existing features plus new blend array view
+5. 🔧 **NeftyBlocks Recipe Extractor** - Button to import blend recipes from NeftyBlocks
+6. 🛠️ **Visual Page Builder** - Admin tool to build story pages without coding
+7. 🔄 **Blend Array (Transfer Mode)** - Alternative blend system using transfers instead of burns
+
+**Critical rules**:
+- ⚠️ **BACKUP FIRST** - Create backup branch before ANY changes
+- ⚠️ **BREAK NOTHING** - All existing features must keep working
+- ⚠️ **READ DOCS FIRST** - COMPLETE_API_WIKI.md and CRITICAL_LOGIC_CORRECTIONS.md
+- ⚠️ **TEST THOROUGHLY** - Each module + existing features
+- ⚠️ **USER DOESN'T CODE** - You do 100% of implementation
+
+---
+
+**Remember**: User doesn't code. You do ALL the implementation. Backup first. Break nothing. Make it beautiful. Make it work. Make the user proud! 🚀
