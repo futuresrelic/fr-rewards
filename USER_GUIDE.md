@@ -66,10 +66,13 @@ If you own specific Future's Relic NFTs (like Editor Cards), you can claim **fre
 ### Example
 
 If you own **4x Intern Editor Cards**, you might see:
-- ✅ **Eligible for**: Wax Seal
-- 🎁 **Reward**: 1x Wax Seal NFT
-- ⏰ **Cooldown**: 24 hours
+- ✅ **Eligible for**: Wax Seal reward
+- 🎁 **You'll receive**: 1x Wax Seal NFT (standard reward)
+  - *Note: Some rewards may give 4x instead - check the claim page!*
+- ⏰ **Cooldown**: 24 hours between claims
 - 🟢 **Status**: Ready to claim!
+
+**Remember**: Owning 4 cards doesn't automatically mean 4 rewards. The number you receive depends on how the reward is configured. The claim page shows exactly what you'll get when you click "Claim"!
 
 ### Claim All Button
 
@@ -95,12 +98,25 @@ The page shows a **countdown** for each reward:
 - ✅ **"Ready to claim!"** = Cooldown finished, claim now!
 - ⏰ **Timer counting down** = Wait for it to reach zero
 
-### Multiple NFTs
+### Owning Multiple NFTs
 
-If you own multiple eligible NFTs:
-- Each one has its own cooldown
-- Claiming from one doesn't affect the others
-- You can claim from all of them when ready!
+**Important**: How many rewards you get depends on the reward configuration!
+
+**Scenario**: You own 4x Intern Editor Cards
+
+**Option A - Standard Rewards (Most Common)**:
+- 🎁 You claim **ONCE** per cooldown period
+- ✅ You receive **1 reward** (regardless of owning 4 cards)
+- ⏰ One cooldown timer for this reward type
+- 🔄 After cooldown expires, claim again for 1 more
+
+**Option B - Quantity-Matched Rewards (Special)**:
+- 🎁 You claim **ONCE** per cooldown period
+- ✅ You receive **4 rewards** (matching your 4 cards!)
+- ⏰ One cooldown timer for this reward type
+- 🔄 After cooldown expires, claim again for 4 more
+
+**The key**: You don't claim separately for each card. You claim once per reward type, and the number you receive is set by the reward's configuration. Check the claim page to see exactly what you'll get!
 
 ---
 
@@ -335,12 +351,22 @@ B) No, walk away → Leads to Solo Path
 - Depends on the cooldown period
 - Most rewards have 24-hour cooldowns
 - Some may be longer or shorter
-- Each NFT template has its own cooldown
+- Each reward type has its own cooldown (not each individual NFT you own)
+- Example: If you own 4x Intern Editor Cards, you still claim once per cooldown period for that reward
 
 **Q: Do I lose my NFTs when I claim?**
 - **No!** Your original NFTs stay in your wallet
 - Only the *reward* NFT is newly minted to you
 - You keep all your NFTs!
+
+**Q: I own 5 eligible NFTs. Do I get 5 rewards?**
+- **Not always!** It depends on the reward configuration
+- **Standard rewards**: You get 1 reward per claim (most common)
+- **Quantity-matched rewards**: You get as many rewards as NFTs you own (special cases)
+- The claim page shows exactly how many you'll receive
+- Example 1: Own 5 cards, claim once, get 1 reward (standard)
+- Example 2: Own 5 cards, claim once, get 5 rewards (quantity-matched)
+- Either way, you claim ONCE per cooldown period, not separately for each NFT
 
 ### Factory Crafting
 
