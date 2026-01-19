@@ -777,6 +777,60 @@ app.post('/api/user/claim-all', strictLimiter, async (req, res) => {
   }
 });
 
+// ==================== BLEND ENDPOINTS ====================
+
+/**
+ * POST /api/blend/mint
+ * Mint result NFT after burning ingredients
+ */
+app.post('/api/blend/mint', strictLimiter, async (req, res) => {
+  try {
+    const { account, collection, template_id, burn_transaction_id, burned_asset_ids } = req.body;
+
+    // Validate required fields
+    if (!account || !collection || !template_id || !burn_transaction_id || !burned_asset_ids) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    console.log(`🔀 Blend Mint Request:`);
+    console.log(`   Account: ${account}`);
+    console.log(`   Collection: ${collection}`);
+    console.log(`   Result Template: ${template_id}`);
+    console.log(`   Burned Assets: ${burned_asset_ids.length}`);
+    console.log(`   Burn TX: ${burn_transaction_id}`);
+
+    // Verify burn transaction (optional but recommended)
+    try {
+      await wax.verifyTransaction(burn_transaction_id);
+      console.log('   ✅ Burn transaction verified');
+    } catch (error) {
+      console.warn('   ⚠️ Could not verify burn transaction:', error.message);
+      // Continue anyway - user already burned their assets
+    }
+
+    // Mint the result NFT
+    const mintResult = await wax.mintNFT(account, collection, parseInt(template_id));
+
+    console.log(`   ✅ Result minted: ${mintResult.transaction_id}`);
+
+    res.json({
+      success: true,
+      transaction_id: mintResult.transaction_id,
+      template_id: template_id,
+      burned_count: burned_asset_ids.length
+    });
+
+  } catch (error) {
+    console.error('Error in blend mint:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== ADMIN ENDPOINTS ====================
 
 /**

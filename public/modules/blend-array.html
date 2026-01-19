@@ -1,0 +1,128 @@
+<div class="module-container blend-array-module">
+  <!-- Not Connected State -->
+  <div class="blend-not-connected" style="display: block; text-align: center;">
+    <h3>Connect Your Wallet</h3>
+    <p style="margin-bottom: 20px;">Connect your WAX wallet to blend NFTs.</p>
+
+    <div class="wallet-buttons" style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
+      <button class="blend-connect-wcw btn btn-primary">
+        <span class="btn-icon">☁️</span>
+        Wax Cloud Wallet
+      </button>
+      <button class="blend-connect-anchor btn btn-primary">
+        <span class="btn-icon">⚓</span>
+        Anchor Wallet
+      </button>
+    </div>
+  </div>
+
+  <!-- Connected State -->
+  <div class="blend-connected" style="display: none;">
+    <div class="blend-wallet-info" style="margin-bottom: 20px; text-align: center;">
+      <span style="color: var(--text-secondary);">Connected: </span>
+      <span class="blend-connected-account" style="font-weight: 600; color: var(--primary);"></span>
+      <button class="blend-disconnect-btn btn btn-secondary btn-sm" style="margin-left: 15px;">Disconnect</button>
+    </div>
+
+    <!-- Blend Setup -->
+    <div class="blend-setup-section">
+      <div class="card" style="margin-bottom: 20px;">
+        <h3 style="margin-bottom: 15px;">🔀 Blend Configuration</h3>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; font-weight: 600;">Collection Name:</label>
+          <input
+            type="text"
+            class="blend-collection-input"
+            placeholder="e.g., futuresrelic"
+            style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);"
+          />
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; font-weight: 600;">Result Template ID:</label>
+          <input
+            type="number"
+            class="blend-result-template-input"
+            placeholder="Template ID of what you'll receive"
+            style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);"
+          />
+          <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
+            Enter the template ID for the NFT you want to receive after blending
+          </small>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <label style="display: block; margin-bottom: 5px; font-weight: 600;">Required NFTs to Blend:</label>
+          <input
+            type="number"
+            class="blend-required-count-input"
+            placeholder="e.g., 3"
+            min="2"
+            value="3"
+            style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);"
+          />
+          <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
+            How many NFTs must be selected to perform the blend
+          </small>
+        </div>
+
+        <button class="blend-load-assets-btn btn btn-primary">
+          📦 Load My NFTs
+        </button>
+      </div>
+
+      <!-- Loading State -->
+      <div class="blend-loading" style="display: none; text-align: center; padding: 40px;">
+        <div class="loader" style="margin: 0 auto 15px;"></div>
+        <p>Loading your NFTs...</p>
+      </div>
+
+      <!-- Assets Selection -->
+      <div class="blend-assets-section" style="display: none;">
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Select NFTs to Blend <span class="blend-asset-count" style="color: var(--text-secondary); font-size: 0.9rem;"></span></h3>
+            <button class="blend-clear-selection-btn btn btn-secondary btn-sm">Clear Selection</button>
+          </div>
+
+          <div class="blend-selection-info" style="margin-bottom: 15px; padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid var(--primary);">
+            <strong>Selected: <span class="blend-selected-count">0</span> / <span class="blend-required-count">0</span> NFT(s)</strong>
+          </div>
+
+          <div class="blend-assets-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px;">
+            <!-- Assets will be loaded here -->
+          </div>
+
+          <div style="padding: 15px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid var(--error); margin-bottom: 15px;">
+            <strong>⚠️ Warning:</strong> Selected NFTs will be permanently burned during the blend process!
+          </div>
+
+          <button class="blend-execute-btn btn btn-success btn-lg" style="width: 100%;" disabled>
+            🔀 Execute Blend
+          </button>
+        </div>
+      </div>
+
+      <!-- No Assets State -->
+      <div class="blend-no-assets" style="display: none; text-align: center; padding: 40px; color: var(--text-secondary);">
+        <p>No NFTs found in your wallet for this collection.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error State -->
+  <div class="blend-error" style="display: none; padding: 20px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; color: var(--error);"></div>
+
+  <!-- Processing Modal -->
+  <div class="blend-processing-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1001;">
+    <div style="display: flex; align-items: center; justify-content: center; height: 100%;">
+      <div class="card" style="max-width: 500px; text-align: center;">
+        <h2 class="blend-processing-title">Processing...</h2>
+        <div class="blend-processing-content" style="padding: 20px;">
+          <!-- Progress content -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
