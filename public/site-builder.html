@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Builder - Future Relic Rewards</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    .builder-container {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Top Bar */
+    .builder-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 100;
+    }
+
+    .builder-header h1 {
+      margin: 0;
+      font-size: 1.3rem;
+      color: var(--primary);
+    }
+
+    .builder-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    /* Left Panel - Module Gallery */
+    .builder-left {
+      width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      margin-top: 60px;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .module-gallery-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 15px;
+      color: var(--text-primary);
+    }
+
+    .module-card {
+      background: var(--bg-dark);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .module-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+
+    .module-card-icon {
+      font-size: 2rem;
+      margin-bottom: 8px;
+    }
+
+    .module-card-name {
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: var(--text-primary);
+    }
+
+    .module-card-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* Center Panel - Canvas */
+    .builder-center {
+      flex: 1;
+      margin-top: 60px;
+      overflow-y: auto;
+      padding: 30px;
+    }
+
+    .canvas-empty {
+      text-align: center;
+      padding: 100px 20px;
+      color: var(--text-secondary);
+    }
+
+    .canvas-empty-icon {
+      font-size: 4rem;
+      margin-bottom: 20px;
+      opacity: 0.3;
+    }
+
+    .canvas-modules {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .canvas-module {
+      background: var(--bg-secondary);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .canvas-module.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .canvas-module-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .canvas-module-title {
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .canvas-module-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .canvas-module-preview {
+      min-height: 200px;
+    }
+
+    /* Right Panel - Configuration */
+    .builder-right {
+      width: 350px;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border);
+      margin-top: 60px;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .config-empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+    }
+
+    .config-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+    }
+
+    .config-section {
+      margin-bottom: 20px;
+    }
+
+    .config-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+    }
+
+    .config-input {
+      width: 100%;
+      padding: 10px;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+    }
+
+    .config-textarea {
+      width: 100%;
+      padding: 10px;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      min-height: 80px;
+      font-family: 'Courier New', monospace;
+    }
+
+    .config-checkbox {
+      width: auto;
+      margin-right: 8px;
+    }
+
+    .config-help {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 5px;
+    }
+
+    /* Code Modal */
+    .code-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 1000;
+      padding: 40px;
+    }
+
+    .code-modal-content {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 30px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .code-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .code-modal-title {
+      font-size: 1.3rem;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .code-block {
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 15px 0;
+      position: relative;
+    }
+
+    .code-block pre {
+      margin: 0;
+      overflow-x: auto;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+
+    .code-copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-dark);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 5px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="builder-header">
+    <h1>🛠️ Site Builder</h1>
+    <div class="builder-actions">
+      <button class="btn btn-secondary btn-sm" id="clearBtn">
+        🗑️ Clear All
+      </button>
+      <button class="btn btn-secondary btn-sm" id="saveBtn">
+        💾 Save Config
+      </button>
+      <button class="btn btn-secondary btn-sm" id="loadBtn">
+        📂 Load Config
+      </button>
+      <button class="btn btn-primary btn-sm" id="exportBtn">
+        📋 Export Code
+      </button>
+    </div>
+  </div>
+
+  <div class="builder-container">
+    <!-- Left Panel - Module Gallery -->
+    <div class="builder-left">
+      <div class="module-gallery-title">📦 Available Modules</div>
+      <div id="moduleGallery">
+        <!-- Module cards will be inserted here -->
+      </div>
+    </div>
+
+    <!-- Center Panel - Canvas -->
+    <div class="builder-center">
+      <div id="canvasEmpty" class="canvas-empty">
+        <div class="canvas-empty-icon">🎨</div>
+        <h2>Start Building Your Page</h2>
+        <p>Click a module from the left panel to add it to your page</p>
+      </div>
+      <div id="canvasModules" class="canvas-modules" style="display: none;">
+        <!-- Added modules will appear here -->
+      </div>
+    </div>
+
+    <!-- Right Panel - Configuration -->
+    <div class="builder-right">
+      <div id="configEmpty" class="config-empty">
+        <p>Select a module to configure it</p>
+      </div>
+      <div id="configPanel" style="display: none;">
+        <div class="config-title" id="configTitle">Module Configuration</div>
+        <div id="configForm">
+          <!-- Configuration fields will appear here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Code Export Modal -->
+  <div id="codeModal" class="code-modal">
+    <div class="code-modal-content">
+      <div class="code-modal-header">
+        <div class="code-modal-title">📋 Generated Code</div>
+        <button class="btn btn-secondary btn-sm" id="closeCodeModal">Close</button>
+      </div>
+
+      <h3>Copy this HTML to your page:</h3>
+      <div class="code-block">
+        <button class="btn btn-primary btn-sm code-copy-btn" data-copy="htmlCode">Copy</button>
+        <pre id="htmlCode"></pre>
+      </div>
+
+      <h3>Required Scripts (add to your page):</h3>
+      <div class="code-block">
+        <button class="btn btn-primary btn-sm code-copy-btn" data-copy="scriptsCode">Copy</button>
+        <pre id="scriptsCode"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module Loader -->
+  <script src="/js/module-loader.js"></script>
+  <script src="/site-builder.js"></script>
+</body>
+</html>
