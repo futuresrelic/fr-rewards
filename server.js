@@ -2888,6 +2888,102 @@ app.get('/api/user/claimable-packs/:account', async (req, res) => {
 });
 
 /**
+ * GET /api/pack/unbox-details/:pack_asset_id
+ * Get details about what's inside an unpacked (but not yet claimed) pack
+ * Returns template info and images for each roll
+ */
+app.get('/api/pack/unbox-details/:pack_asset_id', async (req, res) => {
+  try {
+    const packAssetId = req.params.pack_asset_id;
+
+    console.log(`📦 Fetching unbox details for pack ${packAssetId}...`);
+
+    const { JsonRpc } = require('eosjs');
+    const rpc = new JsonRpc('https://wax.greymass.com', { fetch });
+
+    // Query unboxassets table for this pack's rolls
+    const rollsResult = await rpc.get_table_rows({
+      json: true,
+      code: 'atomicpacksx',
+      scope: packAssetId,
+      table: 'unboxassets',
+      limit: 1000,
+      reverse: false,
+      show_payer: false
+    });
+
+    if (!rollsResult.rows || rollsResult.rows.length === 0) {
+      return res.json({
+        success: true,
+        assets: [],
+        count: 0
+      });
+    }
+
+    console.log(`Found ${rollsResult.rows.length} rolls in pack ${packAssetId}`);
+
+    // Fetch template details for each roll
+    const atomicEndpoint = 'https://aa-wax-public1.neftyblocks.com';
+    const assets = [];
+
+    for (const row of rollsResult.rows) {
+      try {
+        // Get template details from AtomicAssets API
+        const templateResponse = await fetch(`${atomicEndpoint}/atomicassets/v1/templates/futuresrelic/${row.template_id}`);
+
+        if (templateResponse.ok) {
+          const templateData = await templateResponse.json();
+          const template = templateData.data;
+
+          const assetData = {
+            template_id: row.template_id,
+            origin_roll_id: row.origin_roll_id,
+            name: template.immutable_data?.name || `Template #${row.template_id}`,
+            img: template.immutable_data?.img || null,
+            video: template.immutable_data?.video || null,
+            rarity: template.immutable_data?.rarity || null
+          };
+
+          assets.push(assetData);
+          console.log(`  - Roll ${row.origin_roll_id}: ${assetData.name} (Template ${row.template_id})`);
+        } else {
+          // Fallback if template fetch fails
+          assets.push({
+            template_id: row.template_id,
+            origin_roll_id: row.origin_roll_id,
+            name: `Template #${row.template_id}`,
+            img: null,
+            video: null,
+            rarity: null
+          });
+        }
+      } catch (err) {
+        console.warn(`Could not fetch template ${row.template_id}:`, err.message);
+        // Add fallback entry
+        assets.push({
+          template_id: row.template_id,
+          origin_roll_id: row.origin_roll_id,
+          name: `Template #${row.template_id}`,
+          img: null,
+          video: null,
+          rarity: null
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      assets: assets,
+      count: assets.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching unbox details:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * POST /api/pack/check-claimable
  * Check which pack asset IDs are in the unboxassets table (ready to claim)
  * Body: { asset_ids: [id1, id2, ...] }

@@ -550,6 +550,21 @@ window.init_unpack = function(containerId, config = {}) {
 
       const rollIds = asset.roll_ids || [];
 
+      // Fetch unbox details to see what we're claiming
+      let claimableAssets = [];
+      try {
+        const unboxResponse = await fetch(`${API_URL}/api/pack/unbox-details/${asset.asset_id}`);
+        if (unboxResponse.ok) {
+          const unboxData = await unboxResponse.json();
+          if (unboxData.success && unboxData.assets) {
+            claimableAssets = unboxData.assets;
+            console.log(`📦 Will claim ${claimableAssets.length} assets:`, claimableAssets);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch unbox details:', err);
+      }
+
       // Get wallet API
       const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
 
@@ -579,15 +594,42 @@ window.init_unpack = function(containerId, config = {}) {
       button.textContent = '✅ Claimed!';
       button.style.background = '#4ade80';
 
+      // Build assets display HTML
+      let assetsHtml = '';
+      if (claimableAssets.length > 0) {
+        assetsHtml = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0;">';
+        claimableAssets.forEach(nft => {
+          let mediaHtml = '🎁';
+          if (nft.video) {
+            const videoUrl = nft.video.startsWith('Qm')
+              ? `https://ipfs.io/ipfs/${nft.video}`
+              : nft.video.replace('ipfs://', 'https://ipfs.io/ipfs/');
+            mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 6px;" autoplay loop muted playsinline></video>`;
+          } else if (nft.img) {
+            const imgUrl = nft.img.startsWith('Qm')
+              ? `https://ipfs.io/ipfs/${nft.img}`
+              : nft.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
+            mediaHtml = `<img src="${imgUrl}" alt="${nft.name}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 6px;">`;
+          }
+
+          assetsHtml += `
+            <div style="background: var(--bg-dark); border-radius: 8px; padding: 10px; text-align: center;">
+              ${mediaHtml}
+              <div style="margin-top: 8px; font-size: 0.85rem; font-weight: 600;">${nft.name}</div>
+              <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">Template #${nft.template_id}</div>
+            </div>
+          `;
+        });
+        assetsHtml += '</div>';
+      }
+
       showProcessingModal('✅ Claim Complete!', `
-        <p style="margin: 15px 0; color: #4ade80;">Successfully claimed ${rollIds.length} NFTs from ${packName}!</p>
-        <p style="font-size: 0.85rem;">
+        <p style="margin: 15px 0 20px; color: #4ade80; font-size: 1.1rem;">Successfully claimed ${rollIds.length} NFT${rollIds.length > 1 ? 's' : ''} from ${packName}!</p>
+        ${assetsHtml}
+        <p style="font-size: 0.85rem; margin-top: 15px;">
           TX: <a href="https://waxblock.io/transaction/${txId}" target="_blank" style="color: var(--primary);">${txId.substr(0, 16)}...</a>
         </p>
-        <p style="margin-top: 15px; color: var(--text-secondary); font-size: 0.9rem;">
-          Check your wallet for the new assets! 🎉
-        </p>
-        <button class="btn btn-primary unpack-close-btn" style="margin-top: 15px;">Close & Refresh</button>
+        <button class="btn btn-primary unpack-close-btn" style="margin-top: 15px; width: 100%;">Close & Refresh</button>
       `);
 
       // Close button with refresh
