@@ -48,11 +48,77 @@ const AVAILABLE_MODULES = [
   },
   {
     id: 'blend-array',
-    name: 'Blend Array',
-    icon: '🔀',
-    description: 'NeftyBlocks blend detector and executor',
+  },
+  {
+    id: 'nefty-drop',
+    name: 'NeftyBlocks Drop',
+    icon: '🎁',
+    description: 'Embed NeftyBlocks drops for users to claim',
     config: {
       collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
+      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
+    }
+    name: 'Blend Array',
+  },
+  {
+    id: 'nefty-drop',
+    name: 'NeftyBlocks Drop',
+    icon: '🎁',
+    description: 'Embed NeftyBlocks drops for users to claim',
+    config: {
+      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
+      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
+    }
+    icon: '🔀',
+  },
+  {
+    id: 'nefty-drop',
+    name: 'NeftyBlocks Drop',
+    icon: '🎁',
+    description: 'Embed NeftyBlocks drops for users to claim',
+    config: {
+      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
+      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
+    }
+    description: 'NeftyBlocks blend detector and executor',
+  },
+  {
+    id: 'nefty-drop',
+    name: 'NeftyBlocks Drop',
+    icon: '🎁',
+    description: 'Embed NeftyBlocks drops for users to claim',
+    config: {
+      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
+      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
+    }
+    config: {
+  },
+  {
+    id: 'nefty-drop',
+    name: 'NeftyBlocks Drop',
+    icon: '🎁',
+    description: 'Embed NeftyBlocks drops for users to claim',
+    config: {
+      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
+      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
+    }
+      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+  },
+  {
+    id: 'nefty-drop',
+    name: 'NeftyBlocks Drop',
+    icon: '🎁',
+    description: 'Embed NeftyBlocks drops for users to claim',
+    config: {
+      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
+      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
+    }
       blend_ids: { type: 'text', label: 'Blend IDs', default: '', help: 'Comma-separated NeftyBlocks blend IDs' },
       auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false }
     }
@@ -475,7 +541,10 @@ function exportCode() {
 <!-- Optional: Wallet Libraries (if using auto_connect or wallet features) -->
 <script src="https://cdn.jsdelivr.net/npm/waxjs@1.0.0/dist-web/waxjs.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/anchor-link@3.4.4/dist/index.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/anchor-link-browser-transport@3.4.4/dist/index.min.js"></script>`;
+<script src="https://cdn.jsdelivr.net/npm/anchor-link-browser-transport@3.4.4/dist/index.min.js"></script>
+
+<!-- NeftyBlocks Web Components (for drop module) -->
+<script src="https://cdn.jsdelivr.net/npm/@neftyblocks/web-components@latest/dist/neftyblocks-drops/neftyblocks-drops.js" type="module"></script>`;
 
   // Show in modal
   document.getElementById('htmlCode').textContent = html;
