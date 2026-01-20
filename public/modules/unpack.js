@@ -55,14 +55,14 @@ window.init_unpack = function(containerId, config = {}) {
 
   // Wait for wallet libraries
   async function waitForLibraries() {
-    // Wait for WaxJS to load
+    // Wait for WaxJS to load (check multiple possible export names)
     let waxAttempts = 0;
-    while (!(window.WaxJS || window.waxjs?.WaxJS) && waxAttempts < 50) {
+    while (!(window.waxjs || window.WaxJS) && waxAttempts < 50) {
       await new Promise(resolve => setTimeout(resolve, 100));
       waxAttempts++;
     }
 
-    if (window.WaxJS || window.waxjs?.WaxJS) {
+    if (window.waxjs || window.WaxJS) {
       console.log('✅ WaxJS loaded');
     } else {
       console.error('❌ WaxJS not loaded after waiting');
@@ -126,10 +126,10 @@ window.init_unpack = function(containerId, config = {}) {
         }
       } else if (savedWallet === 'wcw') {
         // Initialize WaxJS for auto-login
-        const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
-        if (WaxJS) {
+        const WaxLib = window.waxjs || window.WaxJS;
+        if (WaxLib) {
           try {
-            wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
+            wax = new WaxLib.WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
             const autoLoginAccount = await wax.login();
             if (autoLoginAccount === savedAccount) {
               currentAccount = autoLoginAccount;
@@ -174,10 +174,10 @@ window.init_unpack = function(containerId, config = {}) {
 
   // Connect WCW
   async function connectWCW() {
-    const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
-    if (!WaxJS) throw new Error('WaxJS not loaded');
+    const WaxLib = window.waxjs || window.WaxJS;
+    if (!WaxLib) throw new Error('WaxJS not loaded');
 
-    wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: false });
+    wax = new WaxLib.WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: false });
     currentAccount = await wax.login();
   }
 
