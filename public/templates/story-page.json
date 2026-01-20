@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "name": "Story Page Template",
+  "description": "Single action module for narrative-driven pages - add your story text in HTML",
+  "modules": [
+    {
+      "id": 1,
+      "moduleType": "nefty-drop",
+      "config": {
+        "collection": "futuresrelic",
+        "drop_id": "",
+        "limit": "1"
+      }
+    }
+  ]
+}

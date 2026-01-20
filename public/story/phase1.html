@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 1: The Recruitment - Future's Relic</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .story-container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 3rem 2rem;
+    }
+    .story-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+    .story-header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      color: var(--primary);
+    }
+    .story-header .subtitle {
+      font-size: 1.2rem;
+      color: var(--text-secondary);
+    }
+    .narrative {
+      background: var(--bg-secondary);
+      border-left: 4px solid var(--primary);
+      padding: 2rem;
+      margin-bottom: 3rem;
+      border-radius: 8px;
+      line-height: 1.8;
+      font-size: 1.05rem;
+    }
+    .narrative h2 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+    .action-module {
+      margin-bottom: 3rem;
+    }
+    .nav-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 3rem;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@neftyblocks/web-components@latest/dist/neftyblocks-drops/neftyblocks-drops.js" type="module"></script>
+</head>
+<body>
+  <div class="story-container">
+    <div class="story-header">
+      <h1>Phase 1: The Recruitment</h1>
+      <p class="subtitle">Action: Acquire the "Help Wanted" Pack</p>
+    </div>
+
+    <div class="narrative">
+      <h2>The Office Chaos</h2>
+      <p>
+        "Welcome to Future's Relic, Ottawa's quietest film restoration office... or it was, until the crates started arriving. We are currently buried under a landslide of correspondence, film fragments, and desert sand. We don't just need hands; we need eyes.
+      </p>
+      <p>
+        That Help Wanted sign isn't a suggestion. It's a plea. If you want to see what we found out there in the desert, you'll need to officially join the team. Grab a Help Wanted Pack—it's your only way through the door."
+      </p>
+    </div>
+
+    <div class="action-module">
+      <div
+        id="drop-module"
+        data-module="nefty-drop"
+        data-config='{"collection":"futuresrelic","drop_id":"229014","limit":"1"}'
+      ></div>
+    </div>
+
+    <div class="nav-buttons">
+      <a href="/story/index.html" class="btn btn-secondary">← Story Index</a>
+      <a href="/story/phase2.html" class="btn btn-primary">Continue to Phase 2 →</a>
+    </div>
+  </div>
+
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>
