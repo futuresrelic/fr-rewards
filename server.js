@@ -3011,14 +3011,14 @@ app.get('/api/page/load/:filepath(*)', async (req, res) => {
     const htmlContent = fs.readFileSync(fullPath, 'utf8');
 
     // Parse modules from HTML
-    const cheerio = require('cheerio');
-    const $ = cheerio.load(htmlContent);
+    const { parse } = require('node-html-parser');
+    const root = parse(htmlContent);
     const modules = [];
 
-    $('[data-module]').each((index, element) => {
-      const $el = $(element);
-      const moduleType = $el.attr('data-module');
-      const configStr = $el.attr('data-config') || '{}';
+    const moduleElements = root.querySelectorAll('[data-module]');
+    moduleElements.forEach((element, index) => {
+      const moduleType = element.getAttribute('data-module');
+      const configStr = element.getAttribute('data-config') || '{}';
 
       try {
         const config = JSON.parse(configStr);
@@ -3074,22 +3074,22 @@ app.post('/api/page/save', async (req, res) => {
 
     // Read current HTML
     const htmlContent = fs.readFileSync(fullPath, 'utf8');
-    const cheerio = require('cheerio');
-    const $ = cheerio.load(htmlContent);
+    const { parse } = require('node-html-parser');
+    const root = parse(htmlContent);
 
     // Update each module's config
-    $('[data-module]').each((index, element) => {
-      const $el = $(element);
+    const moduleElements = root.querySelectorAll('[data-module]');
+    moduleElements.forEach((element, index) => {
       const moduleInUpdate = modules[index];
 
       if (moduleInUpdate) {
         // Update the data-config attribute
-        $el.attr('data-config', JSON.stringify(moduleInUpdate.config));
+        element.setAttribute('data-config', JSON.stringify(moduleInUpdate.config));
       }
     });
 
     // Write back to file
-    fs.writeFileSync(fullPath, $.html(), 'utf8');
+    fs.writeFileSync(fullPath, root.toString(), 'utf8');
 
     console.log(`✅ Saved page: ${filepath}`);
 

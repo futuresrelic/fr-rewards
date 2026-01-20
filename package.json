@@ -23,7 +23,6 @@
     "anchor-link-browser-transport": "^3.6.1",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^9.2.2",
-    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "eosjs": "^22.1.0",
@@ -32,6 +31,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.0",
     "node-fetch": "^2.7.0",
+    "node-html-parser": "^6.1.13",
     "sharp": "^0.34.5"
   },
   "devDependencies": {
