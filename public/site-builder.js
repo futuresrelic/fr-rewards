@@ -467,10 +467,10 @@ function exportCode() {
 
   // Generate required scripts
   const scripts = `<!-- Required: CSS -->
-<link rel="stylesheet" href="https://claim.futuresrelic.com/css/main.css">
+<link rel="stylesheet" href="https://claim.futuresrelic.com/styles.css">
 
 <!-- Required: Module Loader -->
-<script src="https://claim.futuresrelic.com/js/module-loader.js"></script>
+<script src="https://claim.futuresrelic.com/modules/module-loader.js"></script>
 
 <!-- Optional: Wallet Libraries (if using auto_connect or wallet features) -->
 <script src="https://cdn.jsdelivr.net/npm/waxjs@1.0.0/dist-web/waxjs.js"></script>
