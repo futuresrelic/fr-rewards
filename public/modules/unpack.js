@@ -745,6 +745,19 @@ window.init_unpack = function(containerId, config = {}) {
     notConnectedSection.style.display = 'none';
     connectedSection.style.display = 'block';
     if (connectedAccountEl) connectedAccountEl.textContent = currentAccount;
+
+    // If template_id is configured, hide the search form and auto-load packs
+    if (config.template_id) {
+      const finderCard = container.querySelector('.unpack-finder-section > .card');
+      if (finderCard) {
+        finderCard.style.display = 'none';
+      }
+
+      // Auto-load packs with the configured template
+      setTimeout(() => {
+        loadUserPacks();
+      }, 100);
+    }
   }
 
   function showError(message) {
