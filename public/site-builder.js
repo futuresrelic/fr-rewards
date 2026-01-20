@@ -43,7 +43,8 @@ const AVAILABLE_MODULES = [
     description: 'Open mystery packs and unpackable NFTs',
     config: {
       collection: { type: 'text', label: 'Default Collection', default: 'futuresrelic', help: 'Pre-filter by collection (optional)' },
-      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false }
+      collection: { type: 'text', label: 'Default Collection', default: 'futuresrelic', help: 'Pre-filter by collection (optional)' },
+      template_id: { type: 'text', label: 'Template ID', default: '', help: 'Filter by template ID (e.g. 204194)' },
     }
   },
   {

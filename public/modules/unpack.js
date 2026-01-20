@@ -38,6 +38,11 @@ window.init_unpack = function(containerId, config = {}) {
     setupEventListeners();
 
     // Pre-fill collection if configured
+    
+    // Pre-fill template if configured
+    if (config.template_id && searchInput) {
+      searchInput.value = config.template_id;
+    }
     if (config.collection && collectionInput) {
       collectionInput.value = config.collection;
     }
@@ -175,27 +180,33 @@ window.init_unpack = function(containerId, config = {}) {
   }
 
   // Load user packs
+  // Load user packs
   async function loadUserPacks() {
     try {
       hideError();
-
-      const collection = collectionInput.value.trim();
-      if (!collection) {
-        showError('Please enter a collection name');
-        return;
-      }
-
       loadingSection.style.display = 'block';
       packsSection.style.display = 'none';
       noPacksSection.style.display = 'none';
 
-      const searchTerm = searchInput.value.trim().toLowerCase();
+      const collection = collectionInput.value.trim();
+      const searchTerm = searchInput.value.trim();
 
-      // Fetch user's assets from collection
+      if (!collection) {
+        showError('Please enter a collection name');
+        loadingSection.style.display = 'none';
+        return;
+      }
+
+      console.log(`📦 Loading packs for ${currentAccount} in collection: ${collection}`);
+
       const rpc = 'https://aa-wax-public1.neftyblocks.com';
-      let url = `${rpc}/atomicassets/v1/assets?owner=${currentAccount}&collection_name=${collection}&page=1&limit=1000&order=desc&sort=asset_id`;
+      let url = `${rpc}/atomicassets/v1/assets?owner=${currentAccount}&page=1&limit=1000&order=desc&sort=asset_id&collection_name=${collection}`;
 
-      console.log(`Fetching packs from: ${url}`);
+      // Add template filter if search term is provided
+      if (searchTerm) {
+        url += `&template_id=${searchTerm}`;
+      }
+
       const response = await fetch(url);
       const data = await response.json();
 
@@ -203,43 +214,50 @@ window.init_unpack = function(containerId, config = {}) {
         throw new Error('Failed to fetch assets');
       }
 
-      let assets = data.data || [];
+      const ownedPacks = data.data || [];
+      console.log(`📦 Found ${ownedPacks.length} owned packs`);
 
-      // Filter by search term if provided
-      if (searchTerm) {
-        assets = assets.filter(asset => {
-          const name = (asset.data?.name || asset.name || '').toLowerCase();
-          return name.includes(searchTerm);
-        });
-      }
+      // Fetch claimable packs (unpacked but not claimed) from atomicpacksx
+      let claimablePacks = [];
+      try {
+        const claimUrl = `${API_URL}/api/user/claimable-packs/${currentAccount}`;
+        const claimResponse = await fetch(claimUrl);
 
-      // Check which assets are unpackable by fetching their schemas
-      const unpackableAssets = [];
-      for (const asset of assets) {
-        if (asset.template && asset.schema) {
-          const isUnpackable = await checkIfUnpackable(collection, asset.schema.schema_name);
-          if (isUnpackable) {
-            unpackableAssets.push(asset);
+        if (claimResponse.ok) {
+          const claimData = await claimResponse.json();
+          if (claimData.success && claimData.claimable_packs) {
+            claimablePacks = claimData.claimable_packs;
+            console.log(`🎁 Found ${claimablePacks.length} claimable packs in atomicpacksx`);
+
+            // Mark each as claimable and add required fields
+            claimablePacks.forEach(pack => {
+              pack.is_claimable = true;
+              pack.asset_id = pack.pack_asset_id;
+              pack.template = {
+                template_id: pack.pack_template_id || 'Unknown'
+              };
+            });
           }
         }
+      } catch (error) {
+        console.warn('Could not fetch claimable packs:', error.message);
       }
 
-      userPacks = unpackableAssets;
+      // Combine owned packs and claimable packs
+      const allPacks = [...ownedPacks, ...claimablePacks];
 
+      userPacks = allPacks;
       loadingSection.style.display = 'none';
 
-      if (userPacks.length === 0) {
+      if (allPacks.length > 0) {
+        displayPacks(allPacks);
+      } else {
         noPacksSection.style.display = 'block';
-        return;
       }
-
-      displayPacks();
-      packsSection.style.display = 'block';
-
     } catch (error) {
       loadingSection.style.display = 'none';
-      showError('Failed to load packs: ' + error.message);
-      console.error('Error loading packs:', error);
+      showError('Error loading packs: ' + error.message);
+      console.error('Error:', error);
     }
   }
 
@@ -374,14 +392,16 @@ window.init_unpack = function(containerId, config = {}) {
       // Prepare unpack transaction
       const actions = [{
         account: 'atomicassets',
-        name: 'burnasset',
+        name: 'transfer',
         authorization: [{
           actor: currentAccount,
           permission: 'active'
         }],
         data: {
-          asset_owner: currentAccount,
-          asset_id: pack.asset_id
+          from: currentAccount,
+          to: 'atomicpacksx',
+          asset_ids: [pack.asset_id],
+          memo: 'unbox'
         }
       }];
 
