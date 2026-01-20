@@ -282,70 +282,109 @@ window.init_unpack = function(containerId, config = {}) {
     }
   }
 
-  // Display packs
-  function displayPacks() {
-    packCountEl.textContent = `(${userPacks.length} found)`;
+  // Display packs (matches packs.html beautiful layout)
+  function displayPacks(packs) {
+    packCountEl.textContent = `(${packs.length} found)`;
     packsGrid.innerHTML = '';
+    packsSection.style.display = 'block';
 
-    userPacks.forEach(pack => {
-      const assetId = pack.asset_id;
-      const name = pack.data?.name || pack.name || `Pack #${assetId}`;
-      const templateId = pack.template?.template_id || 'N/A';
+    // Group packs by template
+    const packsByTemplate = {};
+    packs.forEach(pack => {
+      const templateId = pack.template?.template_id || 'unknown';
+      if (!packsByTemplate[templateId]) {
+        packsByTemplate[templateId] = {
+          template: pack.template,
+          assets: []
+        };
+      }
+      packsByTemplate[templateId].assets.push(pack);
+    });
 
-      // Get image/video
+    // Display each template group
+    Object.values(packsByTemplate).forEach(({ template, assets }) => {
+      const packCard = document.createElement('div');
+      packCard.className = 'nft-card';
+      packCard.style.marginBottom = '25px';
+
+      // Get pack image/video
+      const packData = template?.immutable_data || assets[0]?.data || {};
       let mediaHtml = '📦';
-      if (pack.data?.img) {
-        const imgUrl = pack.data.img.startsWith('Qm')
-          ? `https://ipfs.io/ipfs/${pack.data.img}`
-          : pack.data.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
-        mediaHtml = `<img src="${imgUrl}" alt="${name}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 6px 6px 0 0;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'height: 200px; display: flex; align-items: center; justify-content: center; font-size: 4rem;\\'>📦</div>';">`;
-      } else if (pack.data?.video) {
-        const videoUrl = pack.data.video.startsWith('Qm')
-          ? `https://ipfs.io/ipfs/${pack.data.video}`
-          : pack.data.video.replace('ipfs://', 'https://ipfs.io/ipfs/');
-        mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 200px; object-fit: cover; border-radius: 6px 6px 0 0;" autoplay loop muted playsinline></video>`;
+
+      if (packData.video) {
+        const videoUrl = packData.video.startsWith('Qm')
+          ? `https://ipfs.io/ipfs/${packData.video}`
+          : packData.video.replace('ipfs://', 'https://ipfs.io/ipfs/');
+        mediaHtml = `<video src="${videoUrl}" class="nft-image" autoplay loop muted playsinline onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'font-size: 4rem;\\'>📦</div>';"></video>`;
+      } else if (packData.img) {
+        const imgUrl = packData.img.startsWith('Qm')
+          ? `https://ipfs.io/ipfs/${packData.img}`
+          : packData.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
+        mediaHtml = `<img src="${imgUrl}" alt="${packData.name || 'Pack'}" class="nft-image" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'font-size: 4rem;\\'>📦</div>';">`;
       }
 
-      const packCard = document.createElement('div');
-      packCard.className = 'unpack-pack-card';
-      packCard.style.cssText = 'background: var(--bg-dark); border-radius: 6px; border: 2px solid var(--border); transition: all 0.2s; cursor: pointer;';
       packCard.innerHTML = `
-        ${mediaHtml}
-        <div style="padding: 15px;">
-          <div style="font-weight: 600; margin-bottom: 8px; font-size: 1rem;">${name}</div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">
-            Asset #${assetId}
+        <div class="nft-header">
+          <div class="nft-icon">
+            ${mediaHtml}
           </div>
-          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
-            Template #${templateId}
+          <div class="nft-info">
+            <div class="nft-name">
+              ${packData.name || 'Pack'}
+              <span class="quantity-badge">×${assets.length}</span>
+            </div>
+            <div class="nft-template">Template ID: ${template?.template_id || 'Unknown'}</div>
           </div>
-          <button class="btn btn-success btn-sm" style="width: 100%;" onclick="event.stopPropagation();">
-            🎁 Unpack Now
-          </button>
+        </div>
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
+          <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.95rem;">Available Packs:</h4>
+          <div class="pack-instances" id="pack-instances-${template?.template_id || 'unknown'}"></div>
         </div>
       `;
 
-      // Hover effect
-      packCard.addEventListener('mouseenter', () => {
-        packCard.style.borderColor = 'var(--primary)';
-        packCard.style.transform = 'translateY(-2px)';
-      });
-      packCard.addEventListener('mouseleave', () => {
-        packCard.style.borderColor = 'var(--border)';
-        packCard.style.transform = 'translateY(0)';
-      });
-
-      // Unpack button click
-      const unpackBtn = packCard.querySelector('button');
-      unpackBtn.addEventListener('click', () => showUnpackConfirmation(pack));
-
       packsGrid.appendChild(packCard);
+
+      // Add individual pack buttons
+      const instancesContainer = packCard.querySelector(`#pack-instances-${template?.template_id || 'unknown'}`);
+      assets.forEach((asset, index) => {
+        const packInstance = document.createElement('div');
+        packInstance.style.marginBottom = '10px';
+
+        const isClaimable = asset.is_claimable === true;
+        const rollCount = asset.roll_count || 0;
+
+        packInstance.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div>
+              <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                Pack #${index + 1}
+                ${isClaimable ? `<span style="color: orange; margin-left: 8px;">● ${rollCount} rolls ready</span>` : ''}
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted);">Asset ID: ${asset.asset_id}</div>
+              ${isClaimable ? '<div style="font-size: 0.75rem; color: orange; margin-top: 3px;">Already unpacked - click to claim contents</div>' : ''}
+            </div>
+            <button class="btn btn-sm ${isClaimable ? 'btn-warning' : 'btn-success'}" style="min-width: 160px;">
+              ${isClaimable ? '🎁 Claim Contents' : '📦 Unpack'}
+            </button>
+          </div>
+        `;
+
+        instancesContainer.appendChild(packInstance);
+
+        // Add event listener
+        const actionBtn = packInstance.querySelector('button');
+        if (isClaimable) {
+          actionBtn.addEventListener('click', () => claimPack(asset, packData.name || 'Pack', actionBtn));
+        } else {
+          actionBtn.addEventListener('click', () => showUnpackConfirmation(asset, packData.name || 'Pack'));
+        }
+      });
     });
   }
 
   // Show unpack confirmation
-  function showUnpackConfirmation(pack) {
-    const name = pack.data?.name || pack.name || `Pack #${pack.asset_id}`;
+  function showUnpackConfirmation(pack, packName) {
+    const name = packName || pack.data?.name || pack.name || `Pack #${pack.asset_id}`;
     const modalContent = container.querySelector('.unpack-modal-content');
     const modalTitle = container.querySelector('.unpack-modal-title');
 
@@ -358,7 +397,7 @@ window.init_unpack = function(containerId, config = {}) {
           <div style="color: var(--text-secondary); margin-top: 5px;">Asset #${pack.asset_id}</div>
         </div>
         <div style="padding: 15px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid var(--error);">
-          <strong>⚠️ Warning:</strong> Unpacking will burn this asset and reveal what's inside. This cannot be undone!
+          <strong>⚠️ Warning:</strong> Unpacking will transfer this pack to atomicpacksx and reveal what's inside!
         </div>
       </div>
       <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -374,14 +413,14 @@ window.init_unpack = function(containerId, config = {}) {
     const confirmBtn = modalContent.querySelector('.unpack-confirm-btn');
     const cancelBtn = modalContent.querySelector('.unpack-cancel-btn');
 
-    confirmBtn.addEventListener('click', () => executeUnpack(pack));
+    confirmBtn.addEventListener('click', () => executeUnpack(pack, name));
     cancelBtn.addEventListener('click', hideUnpackModal);
 
     unpackModal.style.display = 'block';
   }
 
   // Execute unpack
-  async function executeUnpack(pack) {
+  async function executeUnpack(pack, packName) {
     try {
       hideUnpackModal();
       showProcessingModal('Unpacking...', 'Please sign the transaction in your wallet...');
@@ -389,7 +428,7 @@ window.init_unpack = function(containerId, config = {}) {
       // Get wallet API
       const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
 
-      // Prepare unpack transaction
+      // Prepare unpack transaction (transfer to atomicpacksx with memo 'unbox')
       const actions = [{
         account: 'atomicassets',
         name: 'transfer',
@@ -408,21 +447,21 @@ window.init_unpack = function(containerId, config = {}) {
       // Execute unpack
       const result = await walletApi.transact({ actions }, {
         blocksBehind: 3,
-        expireSeconds: 30
+        expireSeconds: 90
       });
 
-      const txId = result.transaction_id;
+      const txId = result.transaction_id || result.transactionId || 'completed';
 
-      // Wait a moment for blockchain to process
+      // Wait for blockchain to process
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       showProcessingModal('✅ Unpack Complete!', `
-        <p style="margin: 15px 0; color: #4ade80;">Successfully unpacked!</p>
+        <p style="margin: 15px 0; color: #4ade80;">Successfully unpacked ${packName}!</p>
         <p style="font-size: 0.85rem;">
           TX: <a href="https://waxblock.io/transaction/${txId}" target="_blank" style="color: var(--primary);">${txId.substr(0, 16)}...</a>
         </p>
         <p style="margin-top: 15px; color: var(--text-secondary); font-size: 0.9rem;">
-          Check your wallet for the new assets! 🎉
+          The pack has been unpacked! Reload to claim the contents. 🎉
         </p>
         <button class="btn btn-primary unpack-close-btn" style="margin-top: 15px;">Close & Refresh</button>
       `);
@@ -440,6 +479,83 @@ window.init_unpack = function(containerId, config = {}) {
       hideProcessingModal();
       showError('Unpack failed: ' + error.message);
       console.error('Unpack error:', error);
+    }
+  }
+
+  // Claim pack contents that have already been unpacked
+  async function claimPack(asset, packName, button) {
+    try {
+      button.disabled = true;
+      button.textContent = 'Claiming...';
+
+      console.log(`🎁 Claiming ${packName} (Asset ID: ${asset.asset_id})`);
+
+      const rollIds = asset.roll_ids || [];
+
+      // Get wallet API
+      const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
+
+      // Prepare claim transaction
+      const actions = [{
+        account: 'atomicpacksx',
+        name: 'claimunboxed',
+        authorization: [{
+          actor: currentAccount,
+          permission: 'active'
+        }],
+        data: {
+          pack_asset_id: asset.asset_id.toString(),
+          origin_roll_ids: rollIds
+        }
+      }];
+
+      // Execute claim
+      const result = await walletApi.transact({ actions }, {
+        blocksBehind: 3,
+        expireSeconds: 90
+      });
+
+      const txId = result.transaction_id || result.transactionId || 'completed';
+
+      // Success!
+      button.textContent = '✅ Claimed!';
+      button.style.background = '#4ade80';
+
+      showProcessingModal('✅ Claim Complete!', `
+        <p style="margin: 15px 0; color: #4ade80;">Successfully claimed ${rollIds.length} NFTs from ${packName}!</p>
+        <p style="font-size: 0.85rem;">
+          TX: <a href="https://waxblock.io/transaction/${txId}" target="_blank" style="color: var(--primary);">${txId.substr(0, 16)}...</a>
+        </p>
+        <p style="margin-top: 15px; color: var(--text-secondary); font-size: 0.9rem;">
+          Check your wallet for the new assets! 🎉
+        </p>
+        <button class="btn btn-primary unpack-close-btn" style="margin-top: 15px;">Close & Refresh</button>
+      `);
+
+      // Close button with refresh
+      const closeBtn = container.querySelector('.unpack-close-btn');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          hideProcessingModal();
+          // Reload with multiple attempts (API needs time to update)
+          let attempts = 0;
+          const reloadInterval = setInterval(async () => {
+            attempts++;
+            console.log(`🔄 Refreshing pack list (attempt ${attempts}/3)...`);
+            await loadUserPacks();
+
+            if (attempts >= 3) {
+              clearInterval(reloadInterval);
+            }
+          }, 4000);
+        });
+      }
+
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = '🎁 Claim Contents';
+      showError('Claim failed: ' + error.message);
+      console.error('Claim error:', error);
     }
   }
 
