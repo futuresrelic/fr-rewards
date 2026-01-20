@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 3: The Backstory - Future's Relic</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .story-container { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+    .story-header { text-align: center; margin-bottom: 3rem; }
+    .story-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; color: var(--primary); }
+    .story-header .subtitle { font-size: 1.2rem; color: var(--text-secondary); }
+    .narrative { background: var(--bg-secondary); border-left: 4px solid var(--primary); padding: 2rem; margin-bottom: 3rem; border-radius: 8px; line-height: 1.8; font-size: 1.05rem; }
+    .narrative h2 { margin-top: 0; color: var(--primary); }
+    .action-module { margin-bottom: 3rem; }
+    .nav-buttons { display: flex; justify-content: space-between; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <div class="story-container">
+    <div class="story-header">
+      <h1>Phase 3: The Backstory</h1>
+      <p class="subtitle">Reconstructing the Discovery</p>
+    </div>
+
+    <div class="narrative">
+      <h2>The First Contact</h2>
+      <p>
+        "It started with this <strong>Telegram</strong>. No return address. Just a message stamped 'INSTANT. ENCRYPTED. WORLDWIDE.'
+      </p>
+      <p>
+        <em>'FILM SET REMAINS FOUND IN DESERT... DONATING FINDS TO YOUR LABS.'</em>
+      </p>
+      <p>
+        The sender signed only as <strong>A Curious Traveller</strong>. Days later, this <strong>Postal Card</strong> arrived, confirming three distinct filming locations buried in the dunes. He mentioned Customs might be a problem. He was right. But who is he?"
+      </p>
+    </div>
+
+    <div class="action-module">
+      <div
+        id="claim-module"
+        data-module="claim-rewards"
+        data-config='{"collection":"futuresrelic","auto_connect":true,"title":"Your Documents"}'
+      ></div>
+    </div>
+
+    <div class="nav-buttons">
+      <a href="/story/phase2.html" class="btn btn-secondary">← Phase 2</a>
+      <a href="/story/phase4.html" class="btn btn-primary">Continue to Phase 4 →</a>
+    </div>
+  </div>
+
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>

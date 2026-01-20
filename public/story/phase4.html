@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 4: The Reveal - Future's Relic</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .story-container { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+    .story-header { text-align: center; margin-bottom: 3rem; }
+    .story-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; color: var(--primary); }
+    .story-header .subtitle { font-size: 1.2rem; color: var(--text-secondary); }
+    .narrative { background: var(--bg-secondary); border-left: 4px solid var(--primary); padding: 2rem; margin-bottom: 3rem; border-radius: 8px; line-height: 1.8; font-size: 1.05rem; }
+    .narrative h2 { margin-top: 0; color: var(--primary); }
+    .action-module { margin-bottom: 3rem; }
+    .nav-buttons { display: flex; justify-content: space-between; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <div class="story-container">
+    <div class="story-header">
+      <h1>Phase 4: The Reveal</h1>
+      <p class="subtitle">Action: Unpack the "Letter from Mr. Curious"</p>
+    </div>
+
+    <div class="narrative">
+      <h2>Name to a Face</h2>
+      <p>
+        "The final piece of the puzzle arrived in this sealed envelope. Go ahead, open the <strong>Letter</strong>.
+      </p>
+      <p>
+        Inside is a <strong>Note</strong> (pay attention to the color—that's the rarity) and the official <strong>Shipping Slip</strong>. Look closely at the manifest for the <em>Waxing Moon</em>. To get these crates across international borders, our 'Curious Traveller' finally had to sign his legal name.
+      </p>
+      <p>
+        <strong>Mr. Curious.</strong>
+      </p>
+      <p>
+        The Shipping Slip confirms six crates: Single and Triple Canisters from three locations. The first two shipments are here. The third... is complicated. But we have work to do."
+      </p>
+    </div>
+
+    <div class="action-module">
+      <div
+        id="unpack-module"
+        data-module="unpack"
+        data-config='{"collection":"futuresrelic","auto_connect":true}'
+      ></div>
+    </div>
+
+    <div class="nav-buttons">
+      <a href="/story/phase3.html" class="btn btn-secondary">← Phase 3</a>
+      <a href="/story/phase5.html" class="btn btn-primary">Continue to Phase 5 →</a>
+    </div>
+  </div>
+
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>

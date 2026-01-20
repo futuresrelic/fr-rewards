@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 2: Orientation - Future's Relic</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .story-container { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+    .story-header { text-align: center; margin-bottom: 3rem; }
+    .story-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; color: var(--primary); }
+    .story-header .subtitle { font-size: 1.2rem; color: var(--text-secondary); }
+    .narrative { background: var(--bg-secondary); border-left: 4px solid var(--primary); padding: 2rem; margin-bottom: 3rem; border-radius: 8px; line-height: 1.8; font-size: 1.05rem; }
+    .narrative h2 { margin-top: 0; color: var(--primary); }
+    .action-module { margin-bottom: 3rem; }
+    .nav-buttons { display: flex; justify-content: space-between; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <div class="story-container">
+    <div class="story-header">
+      <h1>Phase 2: Orientation</h1>
+      <p class="subtitle">Action: Unpack the "Help Wanted" Pack</p>
+    </div>
+
+    <div class="narrative">
+      <h2>Your Starter Kit</h2>
+      <p>
+        "You're hired. Don't get excited; you're an Intern.
+      </p>
+      <p>
+        Inside this Help Wanted Pack, you'll find your survival gear: the <strong>Precision Intern Package</strong>. It contains your Intern Card (don't lose it), a stack of the original documents sent by our mysterious contact, and—if you're lucky—a <strong>Studio Instrument</strong> salvaged from the first shipment.
+      </p>
+      <p>
+        Whether you pull a Splicer, a Slate, or a Pencil, take care of it. You'll need it to graduate later. Now, let's look at why we're all here."
+      </p>
+    </div>
+
+    <div class="action-module">
+      <div
+        id="unpack-module"
+        data-module="unpack"
+        data-config='{"collection":"futuresrelic","auto_connect":true}'
+      ></div>
+    </div>
+
+    <div class="nav-buttons">
+      <a href="/story/phase1.html" class="btn btn-secondary">← Phase 1</a>
+      <a href="/story/phase3.html" class="btn btn-primary">Continue to Phase 3 →</a>
+    </div>
+  </div>
+
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>
