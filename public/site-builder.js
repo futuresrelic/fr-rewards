@@ -5,6 +5,7 @@
 
 // Available modules configuration
 const AVAILABLE_MODULES = [
+const AVAILABLE_MODULES = [
   {
     id: 'claim-rewards',
     name: 'Claim Rewards',
@@ -48,79 +49,24 @@ const AVAILABLE_MODULES = [
   },
   {
     id: 'blend-array',
-  },
-  {
-    id: 'nefty-drop',
-    name: 'NeftyBlocks Drop',
-    icon: '🎁',
-    description: 'Embed NeftyBlocks drops for users to claim',
-    config: {
-      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
-      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
-    }
     name: 'Blend Array',
-  },
-  {
-    id: 'nefty-drop',
-    name: 'NeftyBlocks Drop',
-    icon: '🎁',
-    description: 'Embed NeftyBlocks drops for users to claim',
-    config: {
-      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
-      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
-    }
     icon: '🔀',
-  },
-  {
-    id: 'nefty-drop',
-    name: 'NeftyBlocks Drop',
-    icon: '🎁',
-    description: 'Embed NeftyBlocks drops for users to claim',
-    config: {
-      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
-      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
-    }
     description: 'NeftyBlocks blend detector and executor',
-  },
-  {
-    id: 'nefty-drop',
-    name: 'NeftyBlocks Drop',
-    icon: '🎁',
-    description: 'Embed NeftyBlocks drops for users to claim',
     config: {
       collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
-      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
-    }
-    config: {
-  },
-  {
-    id: 'nefty-drop',
-    name: 'NeftyBlocks Drop',
-    icon: '🎁',
-    description: 'Embed NeftyBlocks drops for users to claim',
-    config: {
-      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
-      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
-    }
-      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-  },
-  {
-    id: 'nefty-drop',
-    name: 'NeftyBlocks Drop',
-    icon: '🎁',
-    description: 'Embed NeftyBlocks drops for users to claim',
-    config: {
-      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
-      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
-    }
       blend_ids: { type: 'text', label: 'Blend IDs', default: '', help: 'Comma-separated NeftyBlocks blend IDs' },
       auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false }
+    }
+  },
+  {
+    id: 'nefty-drop',
+    name: 'NeftyBlocks Drop',
+    icon: '🎁',
+    description: 'Embed NeftyBlocks drops for users to claim',
+    config: {
+      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
+      limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
     }
   }
 ];
