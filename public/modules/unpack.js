@@ -55,22 +55,30 @@ window.init_unpack = function(containerId, config = {}) {
 
   // Wait for wallet libraries
   async function waitForLibraries() {
+    // Wait for WaxJS to load
+    let waxAttempts = 0;
+    while (!(window.WaxJS || window.waxjs?.WaxJS) && waxAttempts < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      waxAttempts++;
+    }
+
     if (window.WaxJS || window.waxjs?.WaxJS) {
       console.log('✅ WaxJS loaded');
     } else {
-      console.error('❌ WaxJS not loaded');
+      console.error('❌ WaxJS not loaded after waiting');
     }
 
-    let attempts = 0;
-    while (!window.AnchorWallet && attempts < 50) {
+    // Wait for Anchor to load
+    let anchorAttempts = 0;
+    while (!window.AnchorWallet && anchorAttempts < 50) {
       await new Promise(resolve => setTimeout(resolve, 100));
-      attempts++;
+      anchorAttempts++;
     }
 
     if (window.AnchorWallet) {
       console.log('✅ Anchor wallet loaded');
     } else {
-      console.warn('⚠️ Anchor wallet not loaded');
+      console.warn('⚠️ Anchor wallet not loaded after waiting');
     }
 
     return true;
@@ -104,6 +112,11 @@ window.init_unpack = function(containerId, config = {}) {
           if (restored) {
             anchor = window.AnchorWallet;
             currentAccount = restored;
+            showConnectedState();
+          } else {
+            // Session couldn't be restored, clear storage
+            localStorage.removeItem('wax_account');
+            localStorage.removeItem('wax_wallet');
           }
         } catch (error) {
           console.warn('Could not restore Anchor session:', error);
@@ -111,9 +124,28 @@ window.init_unpack = function(containerId, config = {}) {
           localStorage.removeItem('wax_wallet');
           return;
         }
+      } else if (savedWallet === 'wcw') {
+        // Initialize WaxJS for auto-login
+        const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
+        if (WaxJS) {
+          try {
+            wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
+            const autoLoginAccount = await wax.login();
+            if (autoLoginAccount === savedAccount) {
+              currentAccount = autoLoginAccount;
+              showConnectedState();
+            } else {
+              // Account mismatch, clear storage
+              localStorage.removeItem('wax_account');
+              localStorage.removeItem('wax_wallet');
+            }
+          } catch (error) {
+            console.warn('Could not auto-login with WaxJS:', error);
+            localStorage.removeItem('wax_account');
+            localStorage.removeItem('wax_wallet');
+          }
+        }
       }
-
-      showConnectedState();
     }
   }
 
@@ -425,6 +457,19 @@ window.init_unpack = function(containerId, config = {}) {
       hideUnpackModal();
       showProcessingModal('Unpacking...', 'Please sign the transaction in your wallet...');
 
+      // Check wallet is connected
+      if (!currentAccount || !currentWalletType) {
+        throw new Error('Wallet not connected. Please connect your wallet first.');
+      }
+
+      if (currentWalletType === 'anchor' && !anchor) {
+        throw new Error('Anchor wallet not initialized. Please reconnect your wallet.');
+      }
+
+      if (currentWalletType === 'wcw' && !wax) {
+        throw new Error('WaxJS wallet not initialized. Please reconnect your wallet.');
+      }
+
       // Get wallet API
       const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
 
@@ -489,6 +534,19 @@ window.init_unpack = function(containerId, config = {}) {
       button.textContent = 'Claiming...';
 
       console.log(`🎁 Claiming ${packName} (Asset ID: ${asset.asset_id})`);
+
+      // Check wallet is connected
+      if (!currentAccount || !currentWalletType) {
+        throw new Error('Wallet not connected. Please connect your wallet first.');
+      }
+
+      if (currentWalletType === 'anchor' && !anchor) {
+        throw new Error('Anchor wallet not initialized. Please reconnect your wallet.');
+      }
+
+      if (currentWalletType === 'wcw' && !wax) {
+        throw new Error('WaxJS wallet not initialized. Please reconnect your wallet.');
+      }
 
       const rollIds = asset.roll_ids || [];
 
