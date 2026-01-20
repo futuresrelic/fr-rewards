@@ -336,8 +336,8 @@ window.init_claim_rewards = function(containerId, config = {}) {
             </div>
             <div class="nft-template">Template ID: ${templateId}</div>
           </div>
-          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
-            <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.95rem;">Available Rewards:</h4>
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
+            <h4 style="margin: 0 0 15px 0; color: var(--text-secondary); font-size: 0.95rem;">Available Rewards:</h4>
             ${rewardsHtml}
           </div>
         </div>
