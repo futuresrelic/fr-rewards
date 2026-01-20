@@ -856,24 +856,35 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
 
     const blends = [];
 
-    // Fetch each blend schema from NeftyBlocks
+    // Fetch each blend schema from blend.nefty contract on-chain
+    const { JsonRpc } = require('eosjs');
+    const rpcEndpoint = new JsonRpc('https://wax.greymass.com', { fetch });
+
     for (const blendId of blend_ids) {
       try {
-        console.log(`   Fetching blend #${blendId}...`);
+        console.log(`   Fetching blend #${blendId} from blockchain...`);
 
-        // Fetch blend schema from NeftyBlocks API
-        const blendResponse = await fetch(`https://neftyblocks.com/api/v1/blends/${blendId}`);
+        // Query blend.nefty contract for blend data
+        const blendResult = await rpcEndpoint.get_table_rows({
+          json: true,
+          code: 'blend.nefty',
+          scope: 'blend.nefty',
+          table: 'blends',
+          lower_bound: blendId,
+          upper_bound: blendId,
+          limit: 1
+        });
 
-        if (!blendResponse.ok) {
-          console.warn(`   ⚠️ Blend #${blendId} not found or not accessible`);
+        if (!blendResult.rows || blendResult.rows.length === 0) {
+          console.warn(`   ⚠️ Blend #${blendId} not found on blockchain`);
           continue;
         }
 
-        const blendData = await blendResponse.json();
-        const blend = blendData.data;
+        const blend = blendResult.rows[0];
 
-        if (!blend || blend.collection?.collection_name !== collection) {
-          console.warn(`   ⚠️ Blend #${blendId} is not for collection ${collection}`);
+        // Check if blend matches the requested collection
+        if (blend.collection_name !== collection) {
+          console.warn(`   ⚠️ Blend #${blendId} is for collection ${blend.collection_name}, not ${collection}`);
           continue;
         }
 
@@ -883,12 +894,25 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
 
         if (blend.ingredients && Array.isArray(blend.ingredients)) {
           for (const ing of blend.ingredients) {
-            const templateId = ing.template_id || ing.template?.template_id;
+            const templateId = ing.template_id;
             const amount = parseInt(ing.amount || 1);
 
             if (templateId) {
+              // Fetch template data for display name
+              let templateName = `Template #${templateId}`;
+              try {
+                const templateRes = await fetch(`https://aa-wax-public1.neftyblocks.com/atomicassets/v1/templates/${collection}/${templateId}`);
+                if (templateRes.ok) {
+                  const templateData = await templateRes.json();
+                  templateName = templateData.data.immutable_data?.name || templateName;
+                }
+              } catch (err) {
+                console.warn(`   Could not fetch template ${templateId} name:`, err.message);
+              }
+
               ingredients.push({
                 template_id: templateId,
+                name: templateName,
                 amount: amount,
                 owned: 0 // Will be populated below
               });
@@ -899,16 +923,34 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
 
         // Parse results (what you get after blend)
         const results = [];
-        if (blend.results && Array.isArray(blend.results)) {
-          for (const res of blend.results) {
-            const templateId = res.template_id || res.template?.template_id;
-            const amount = parseInt(res.amount || 1);
+        if (blend.rolls && Array.isArray(blend.rolls)) {
+          for (const roll of blend.rolls) {
+            if (roll.outcomes && Array.isArray(roll.outcomes)) {
+              for (const outcome of roll.outcomes) {
+                const templateId = outcome.template_id;
+                if (templateId) {
+                  // Fetch template data
+                  let templateName = `Template #${templateId}`;
+                  let templateImg = null;
+                  try {
+                    const templateRes = await fetch(`https://aa-wax-public1.neftyblocks.com/atomicassets/v1/templates/${collection}/${templateId}`);
+                    if (templateRes.ok) {
+                      const templateData = await templateRes.json();
+                      templateName = templateData.data.immutable_data?.name || templateName;
+                      templateImg = templateData.data.immutable_data?.img || null;
+                    }
+                  } catch (err) {
+                    console.warn(`   Could not fetch template ${templateId}:`, err.message);
+                  }
 
-            if (templateId) {
-              results.push({
-                template_id: templateId,
-                amount: amount
-              });
+                  results.push({
+                    template_id: templateId,
+                    name: templateName,
+                    img: templateImg,
+                    odds: outcome.odds
+                  });
+                }
+              }
             }
           }
         }
@@ -916,15 +958,18 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
         // Add to blends list
         blends.push({
           blend_id: blendId,
-          name: blend.name || `Blend #${blendId}`,
-          description: blend.description || '',
+          name: blend.display_data || `Blend #${blendId}`,
+          description: `Requires ${totalRequired} ingredients`,
           collection: collection,
           ingredients: ingredients,
           results: results,
           total_required: totalRequired,
           can_execute: false, // Will be calculated after checking user's assets
-          missing_ingredients: []
+          missing_ingredients: [],
+          contract: 'blend.nefty'
         });
+
+        console.log(`   ✅ Loaded blend #${blendId}: ${blend.display_data || 'Unnamed'}`);
 
       } catch (error) {
         console.error(`   ❌ Error fetching blend #${blendId}:`, error.message);
