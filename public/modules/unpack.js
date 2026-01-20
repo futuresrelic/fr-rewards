@@ -406,7 +406,7 @@ window.init_unpack = function(containerId, config = {}) {
         // Add event listener
         const actionBtn = packInstance.querySelector('button');
         if (isClaimable) {
-          actionBtn.addEventListener('click', () => claimPack(asset, packData.name || 'Pack', actionBtn));
+          actionBtn.addEventListener('click', () => claimPack(asset, packData.name || 'Pack', packData, actionBtn));
         } else {
           actionBtn.addEventListener('click', () => showUnpackConfirmation(asset, packData.name || 'Pack'));
         }
@@ -420,13 +420,32 @@ window.init_unpack = function(containerId, config = {}) {
     const modalContent = container.querySelector('.unpack-modal-content');
     const modalTitle = container.querySelector('.unpack-modal-title');
 
+    // Get pack image
+    const packData = pack.template?.immutable_data || pack.data || {};
+    let packImageHtml = '';
+    if (packData.video) {
+      const videoUrl = packData.video.startsWith('Qm')
+        ? `https://ipfs.io/ipfs/${packData.video}`
+        : packData.video.replace('ipfs://', 'https://ipfs.io/ipfs/');
+      packImageHtml = `<video src="${videoUrl}" style="width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin: 0 auto 20px; display: block;" autoplay loop muted playsinline></video>`;
+    } else if (packData.img) {
+      const imgUrl = packData.img.startsWith('Qm')
+        ? `https://ipfs.io/ipfs/${packData.img}`
+        : packData.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
+      packImageHtml = `<img src="${imgUrl}" alt="${name}" style="width: 180px; height: 180px; object-fit: cover; border-radius: 8px; margin: 0 auto 20px; display: block;">`;
+    } else {
+      packImageHtml = `<div style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; font-size: 4rem; margin: 0 auto 20px; background: var(--bg-dark); border-radius: 8px;">📦</div>`;
+    }
+
     modalTitle.textContent = 'Unpack Confirmation';
     modalContent.innerHTML = `
       <div style="margin: 20px 0;">
+        ${packImageHtml}
         <p style="margin-bottom: 15px;">You are about to unpack:</p>
         <div style="padding: 15px; background: var(--bg-dark); border-radius: 8px; margin-bottom: 15px;">
           <strong style="font-size: 1.1rem;">${name}</strong>
           <div style="color: var(--text-secondary); margin-top: 5px;">Asset #${pack.asset_id}</div>
+          <div style="color: var(--text-secondary); margin-top: 5px;">Template #${pack.template?.template_id || 'Unknown'}</div>
         </div>
         <div style="padding: 15px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid var(--error);">
           <strong>⚠️ Warning:</strong> Unpacking will transfer this pack to atomicpacksx and reveal what's inside!
@@ -445,14 +464,14 @@ window.init_unpack = function(containerId, config = {}) {
     const confirmBtn = modalContent.querySelector('.unpack-confirm-btn');
     const cancelBtn = modalContent.querySelector('.unpack-cancel-btn');
 
-    confirmBtn.addEventListener('click', () => executeUnpack(pack, name));
+    confirmBtn.addEventListener('click', () => executeUnpack(pack, name, packData));
     cancelBtn.addEventListener('click', hideUnpackModal);
 
     unpackModal.style.display = 'block';
   }
 
   // Execute unpack
-  async function executeUnpack(pack, packName) {
+  async function executeUnpack(pack, packName, packData) {
     try {
       hideUnpackModal();
       showProcessingModal('Unpacking...', 'Please sign the transaction in your wallet...');
@@ -500,15 +519,33 @@ window.init_unpack = function(containerId, config = {}) {
       // Wait for blockchain to process
       await new Promise(resolve => setTimeout(resolve, 3000));
 
+      // Build pack image HTML for success modal
+      let packImageHtml = '';
+      if (packData && packData.video) {
+        const videoUrl = packData.video.startsWith('Qm')
+          ? `https://ipfs.io/ipfs/${packData.video}`
+          : packData.video.replace('ipfs://', 'https://ipfs.io/ipfs/');
+        packImageHtml = `<video src="${videoUrl}" style="width: 150px; height: 150px; object-fit: cover; border-radius: 8px; margin: 0 auto 15px; display: block;" autoplay loop muted playsinline></video>`;
+      } else if (packData && packData.img) {
+        const imgUrl = packData.img.startsWith('Qm')
+          ? `https://ipfs.io/ipfs/${packData.img}`
+          : packData.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
+        packImageHtml = `<img src="${imgUrl}" alt="${packName}" style="width: 150px; height: 150px; object-fit: cover; border-radius: 8px; margin: 0 auto 15px; display: block;">`;
+      } else {
+        packImageHtml = `<div style="width: 150px; height: 150px; display: flex; align-items: center; justify-content: center; font-size: 3rem; margin: 0 auto 15px; background: var(--bg-dark); border-radius: 8px;">📦</div>`;
+      }
+
       showProcessingModal('✅ Unpack Complete!', `
-        <p style="margin: 15px 0; color: #4ade80;">Successfully unpacked ${packName}!</p>
-        <p style="font-size: 0.85rem;">
+        ${packImageHtml}
+        <p style="margin: 15px 0; color: #4ade80; font-size: 1.1rem;">Successfully unpacked ${packName}!</p>
+        <p style="font-size: 0.85rem; color: var(--text-secondary);">Template #${pack.template?.template_id || 'Unknown'}</p>
+        <p style="font-size: 0.85rem; margin-top: 15px;">
           TX: <a href="https://waxblock.io/transaction/${txId}" target="_blank" style="color: var(--primary);">${txId.substr(0, 16)}...</a>
         </p>
         <p style="margin-top: 15px; color: var(--text-secondary); font-size: 0.9rem;">
           The pack has been unpacked! Reload to claim the contents. 🎉
         </p>
-        <button class="btn btn-primary unpack-close-btn" style="margin-top: 15px;">Close & Refresh</button>
+        <button class="btn btn-primary unpack-close-btn" style="margin-top: 15px; width: 100%;">Close & Refresh</button>
       `);
 
       // Close button
@@ -528,7 +565,7 @@ window.init_unpack = function(containerId, config = {}) {
   }
 
   // Claim pack contents that have already been unpacked
-  async function claimPack(asset, packName, button) {
+  async function claimPack(asset, packName, packData, button) {
     try {
       button.disabled = true;
       button.textContent = 'Claiming...';
@@ -594,10 +631,26 @@ window.init_unpack = function(containerId, config = {}) {
       button.textContent = '✅ Claimed!';
       button.style.background = '#4ade80';
 
-      // Build assets display HTML
+      // Build pack image HTML
+      let packImageHtml = '';
+      if (packData && packData.video) {
+        const videoUrl = packData.video.startsWith('Qm')
+          ? `https://ipfs.io/ipfs/${packData.video}`
+          : packData.video.replace('ipfs://', 'https://ipfs.io/ipfs/');
+        packImageHtml = `<video src="${videoUrl}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px; margin: 0 auto 15px; display: block;" autoplay loop muted playsinline></video>`;
+      } else if (packData && packData.img) {
+        const imgUrl = packData.img.startsWith('Qm')
+          ? `https://ipfs.io/ipfs/${packData.img}`
+          : packData.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
+        packImageHtml = `<img src="${imgUrl}" alt="${packName}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px; margin: 0 auto 15px; display: block;">`;
+      } else {
+        packImageHtml = `<div style="width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; font-size: 3rem; margin: 0 auto 15px; background: var(--bg-dark); border-radius: 8px;">📦</div>`;
+      }
+
+      // Build claimed assets display HTML
       let assetsHtml = '';
       if (claimableAssets.length > 0) {
-        assetsHtml = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0;">';
+        assetsHtml = '<div style="margin-bottom: 10px; padding-bottom: 15px; border-bottom: 1px solid var(--border);"><p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 15px;">Claimed NFTs:</p><div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">';
         claimableAssets.forEach(nft => {
           let mediaHtml = '🎁';
           if (nft.video) {
@@ -620,11 +673,12 @@ window.init_unpack = function(containerId, config = {}) {
             </div>
           `;
         });
-        assetsHtml += '</div>';
+        assetsHtml += '</div></div>';
       }
 
       showProcessingModal('✅ Claim Complete!', `
-        <p style="margin: 15px 0 20px; color: #4ade80; font-size: 1.1rem;">Successfully claimed ${rollIds.length} NFT${rollIds.length > 1 ? 's' : ''} from ${packName}!</p>
+        ${packImageHtml}
+        <p style="margin: 0 0 20px; color: #4ade80; font-size: 1.1rem;">Successfully claimed ${rollIds.length} NFT${rollIds.length > 1 ? 's' : ''} from ${packName}!</p>
         ${assetsHtml}
         <p style="font-size: 0.85rem; margin-top: 15px;">
           TX: <a href="https://waxblock.io/transaction/${txId}" target="_blank" style="color: var(--primary);">${txId.substr(0, 16)}...</a>
@@ -654,6 +708,7 @@ window.init_unpack = function(containerId, config = {}) {
     } catch (error) {
       button.disabled = false;
       button.textContent = '🎁 Claim Contents';
+      hideProcessingModal();
       showError('Claim failed: ' + error.message);
       console.error('Claim error:', error);
     }
