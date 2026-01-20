@@ -42,9 +42,9 @@ const AVAILABLE_MODULES = [
     icon: '📦',
     description: 'Open mystery packs and unpackable NFTs',
     config: {
-      collection: { type: 'text', label: 'Default Collection', default: 'futuresrelic', help: 'Pre-filter by collection (optional)' },
-      collection: { type: 'text', label: 'Default Collection', default: 'futuresrelic', help: 'Pre-filter by collection (optional)' },
+      collection: { type: 'text', label: 'Default Collection', default: 'futuresrelic', help: 'Pre-filter by collection' },
       template_id: { type: 'text', label: 'Template ID', default: '', help: 'Filter by template ID (e.g. 204194)' },
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false }
     }
   },
   {
@@ -75,10 +75,11 @@ const AVAILABLE_MODULES = [
 let pageModules = []; // Array of {id, moduleType, config}
 let selectedModuleIndex = null;
 let nextModuleId = 1;
+let currentEditingFilepath = null; // Track which page we're editing
 
 // DOM Elements
 let moduleGallery, canvasEmpty, canvasModules, configEmpty, configPanel, configTitle, configForm;
-let clearBtn, saveBtn, loadBtn, exportBtn, codeModal, closeCodeModal;
+let clearBtn, saveBtn, loadBtn, editPageBtn, exportBtn, codeModal, closeCodeModal;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -93,6 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
   clearBtn = document.getElementById('clearBtn');
   saveBtn = document.getElementById('saveBtn');
   loadBtn = document.getElementById('loadBtn');
+  editPageBtn = document.getElementById('editPageBtn');
   exportBtn = document.getElementById('exportBtn');
   codeModal = document.getElementById('codeModal');
   closeCodeModal = document.getElementById('closeCodeModal');
@@ -102,8 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Setup event listeners
   clearBtn.addEventListener('click', clearAll);
-  saveBtn.addEventListener('click', saveConfiguration);
+  saveBtn.addEventListener('click', saveToCurrentPage);
   loadBtn.addEventListener('click', loadConfiguration);
+  editPageBtn.addEventListener('click', editExistingPage);
   exportBtn.addEventListener('click', exportCode);
   closeCodeModal.addEventListener('click', () => codeModal.style.display = 'none');
 
@@ -434,6 +437,72 @@ function loadConfiguration() {
   });
 
   input.click();
+}
+
+// Edit Existing Page - Load HTML page for editing
+async function editExistingPage() {
+  const filepath = prompt('Enter the path to the page you want to edit:\n\nExamples:\n• story/phase2.html\n• rewards-hub.html\n• index.html', 'story/phase2.html');
+
+  if (!filepath) return;
+
+  try {
+    const response = await fetch(`/api/page/load/${filepath}`);
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to load page');
+    }
+
+    // Load the modules into the canvas
+    pageModules = data.modules;
+    selectedModuleIndex = null;
+    nextModuleId = Math.max(...pageModules.map(m => m.id), 0) + 1;
+    currentEditingFilepath = data.filepath;
+
+    renderCanvas();
+    renderConfigPanel();
+
+    // Update save button text to show we're editing
+    saveBtn.textContent = `💾 Save to ${filepath}`;
+    saveBtn.classList.remove('btn-secondary');
+    saveBtn.classList.add('btn-success');
+
+    alert(`✓ Loaded ${filepath} for editing!\n\n${pageModules.length} module(s) found.`);
+  } catch (error) {
+    alert(`❌ Failed to load page:\n${error.message}\n\nMake sure the file path is correct.`);
+    console.error('Load page error:', error);
+  }
+}
+
+// Save to Current Page
+async function saveToCurrentPage() {
+  // If we're editing an existing page, save directly to it
+  if (currentEditingFilepath) {
+    try {
+      const response = await fetch('/api/page/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filepath: currentEditingFilepath,
+          modules: pageModules
+        })
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to save page');
+      }
+
+      alert(`✓ Saved changes to ${currentEditingFilepath}!`);
+    } catch (error) {
+      alert(`❌ Failed to save page:\n${error.message}`);
+      console.error('Save page error:', error);
+    }
+  } else {
+    // Otherwise, just save to localStorage like before
+    saveConfiguration();
+  }
 }
 
 // Try to load saved config from localStorage

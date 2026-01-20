@@ -2984,6 +2984,128 @@ app.get('/api/pack/unbox-details/:pack_asset_id', async (req, res) => {
 });
 
 /**
+ * GET /api/page/load/:filepath
+ * Load an HTML page for editing in Site Builder
+ * Example: /api/page/load/story/phase2.html
+ */
+app.get('/api/page/load/:filepath(*)', async (req, res) => {
+  try {
+    const filepath = req.params.filepath;
+
+    // Security: only allow loading from public directory
+    const fs = require('fs');
+    const path = require('path');
+    const fullPath = path.join(__dirname, 'public', filepath);
+
+    // Prevent directory traversal
+    if (!fullPath.startsWith(path.join(__dirname, 'public'))) {
+      return res.status(403).json({ error: 'Access denied', success: false });
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found', success: false });
+    }
+
+    // Read the file
+    const htmlContent = fs.readFileSync(fullPath, 'utf8');
+
+    // Parse modules from HTML
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(htmlContent);
+    const modules = [];
+
+    $('[data-module]').each((index, element) => {
+      const $el = $(element);
+      const moduleType = $el.attr('data-module');
+      const configStr = $el.attr('data-config') || '{}';
+
+      try {
+        const config = JSON.parse(configStr);
+        modules.push({
+          id: index + 1,
+          moduleType: moduleType,
+          config: config
+        });
+      } catch (err) {
+        console.warn(`Could not parse config for module ${moduleType}:`, err);
+      }
+    });
+
+    res.json({
+      success: true,
+      filepath: filepath,
+      modules: modules,
+      html: htmlContent
+    });
+
+  } catch (error) {
+    console.error('Error loading page:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/page/save
+ * Save edited page back to file
+ * Body: { filepath: 'story/phase2.html', modules: [...] }
+ */
+app.post('/api/page/save', async (req, res) => {
+  try {
+    const { filepath, modules } = req.body;
+
+    if (!filepath || !modules) {
+      return res.status(400).json({ error: 'filepath and modules are required', success: false });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const fullPath = path.join(__dirname, 'public', filepath);
+
+    // Security: only allow saving to public directory
+    if (!fullPath.startsWith(path.join(__dirname, 'public'))) {
+      return res.status(403).json({ error: 'Access denied', success: false });
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found', success: false });
+    }
+
+    // Read current HTML
+    const htmlContent = fs.readFileSync(fullPath, 'utf8');
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(htmlContent);
+
+    // Update each module's config
+    $('[data-module]').each((index, element) => {
+      const $el = $(element);
+      const moduleInUpdate = modules[index];
+
+      if (moduleInUpdate) {
+        // Update the data-config attribute
+        $el.attr('data-config', JSON.stringify(moduleInUpdate.config));
+      }
+    });
+
+    // Write back to file
+    fs.writeFileSync(fullPath, $.html(), 'utf8');
+
+    console.log(`✅ Saved page: ${filepath}`);
+
+    res.json({
+      success: true,
+      message: 'Page saved successfully',
+      filepath: filepath
+    });
+
+  } catch (error) {
+    console.error('Error saving page:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * POST /api/pack/check-claimable
  * Check which pack asset IDs are in the unboxassets table (ready to claim)
  * Body: { asset_ids: [id1, id2, ...] }
