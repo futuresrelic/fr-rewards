@@ -40,58 +40,81 @@
         </div>
 
         <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; font-weight: 600;">Result Template ID:</label>
+          <label style="display: block; margin-bottom: 5px; font-weight: 600;">NeftyBlocks Blend IDs:</label>
           <input
-            type="number"
-            class="blend-result-template-input"
-            placeholder="Template ID of what you'll receive"
+            type="text"
+            class="blend-ids-input"
+            placeholder="e.g., 12345, 12346, 12347"
             style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);"
           />
           <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
-            Enter the template ID for the NFT you want to receive after blending
+            Enter comma-separated NeftyBlocks blend IDs to check which ones you can complete
           </small>
         </div>
 
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; font-weight: 600;">Required NFTs to Blend:</label>
-          <input
-            type="number"
-            class="blend-required-count-input"
-            placeholder="e.g., 3"
-            min="2"
-            value="3"
-            style="width: 100%; padding: 10px; background: var(--bg-dark); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);"
-          />
-          <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
-            How many NFTs must be selected to perform the blend
-          </small>
-        </div>
-
-        <button class="blend-load-assets-btn btn btn-primary">
-          📦 Load My NFTs
+        <button class="blend-load-blends-btn btn btn-primary">
+          🔍 Load Available Blends
         </button>
       </div>
 
       <!-- Loading State -->
       <div class="blend-loading" style="display: none; text-align: center; padding: 40px;">
         <div class="loader" style="margin: 0 auto 15px;"></div>
-        <p>Loading your NFTs...</p>
+        <p>Loading blends and analyzing your assets...</p>
       </div>
 
-      <!-- Assets Selection -->
-      <div class="blend-assets-section" style="display: none;">
+      <!-- Blends Grid -->
+      <div class="blend-blends-section" style="display: none;">
+        <div class="card">
+          <h3 style="margin-bottom: 15px;">Available Blends <span class="blend-count" style="color: var(--text-secondary); font-size: 0.9rem;"></span></h3>
+
+          <div class="blend-blends-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+            <!-- Blends will be loaded here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- No Blends State -->
+      <div class="blend-no-blends" style="display: none; text-align: center; padding: 40px; color: var(--text-secondary);">
+        <p>No blends available or you don't have the required ingredients.</p>
+        <small>Make sure you've entered valid NeftyBlocks blend IDs and own the necessary NFTs.</small>
+      </div>
+
+      <!-- Asset Selection for Chosen Blend -->
+      <div class="blend-asset-selection" style="display: none;">
         <div class="card">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h3 style="margin: 0;">Select NFTs to Blend <span class="blend-asset-count" style="color: var(--text-secondary); font-size: 0.9rem;"></span></h3>
-            <button class="blend-clear-selection-btn btn btn-secondary btn-sm">Clear Selection</button>
+            <button class="blend-back-btn btn btn-secondary btn-sm">
+              ← Back to Blends
+            </button>
+            <h3 style="margin: 0;">Select Assets for Blend</h3>
+          </div>
+
+          <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-dark); border-radius: 8px;">
+            <h4 style="margin-bottom: 10px; color: var(--primary);" class="blend-selected-name">Blend Name</h4>
+            <div class="blend-selected-description" style="color: var(--text-secondary); margin-bottom: 15px;"></div>
+
+            <div style="margin-bottom: 10px;">
+              <strong style="display: block; margin-bottom: 8px;">Required Ingredients:</strong>
+              <div class="blend-selected-ingredients" style="font-size: 0.9rem; color: var(--text-secondary);">
+                <!-- Ingredient summary -->
+              </div>
+            </div>
+
+            <div>
+              <strong style="display: block; margin-bottom: 8px;">You Will Receive:</strong>
+              <div class="blend-selected-results" style="font-size: 0.9rem; color: var(--success);">
+                <!-- Result summary -->
+              </div>
+            </div>
           </div>
 
           <div class="blend-selection-info" style="margin-bottom: 15px; padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid var(--primary);">
             <strong>Selected: <span class="blend-selected-count">0</span> / <span class="blend-required-count">0</span> NFT(s)</strong>
           </div>
 
-          <div class="blend-assets-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px;">
-            <!-- Assets will be loaded here -->
+          <div class="blend-ingredients-list" style="margin-bottom: 20px;">
+            <!-- Ingredient sections with asset grids will be loaded here -->
           </div>
 
           <div style="padding: 15px; background: rgba(239, 68, 68, 0.1); border-radius: 6px; border-left: 3px solid var(--error); margin-bottom: 15px;">
@@ -102,11 +125,6 @@
             🔀 Execute Blend
           </button>
         </div>
-      </div>
-
-      <!-- No Assets State -->
-      <div class="blend-no-assets" style="display: none; text-align: center; padding: 40px; color: var(--text-secondary);">
-        <p>No NFTs found in your wallet for this collection.</p>
       </div>
     </div>
   </div>

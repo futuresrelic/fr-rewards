@@ -1,6 +1,6 @@
 /**
- * Blend Array Module
- * Self-contained module for flexible NFT blending
+ * Blend Array Module - Enhanced with NeftyBlocks Integration
+ * Auto-detects available blends from NeftyBlocks schemas
  */
 
 window.init_blend_array = function(containerId, config = {}) {
@@ -16,24 +16,23 @@ window.init_blend_array = function(containerId, config = {}) {
   let anchor = null;
   let currentWalletType = null;
   let userAssets = [];
+  let availableBlends = [];
+  let selectedBlend = null;
   let selectedAssetIds = new Set();
-  let requiredCount = 3;
 
   // Get module elements
   const notConnectedSection = container.querySelector('.blend-not-connected');
   const connectedSection = container.querySelector('.blend-connected');
   const loadingSection = container.querySelector('.blend-loading');
-  const assetsSection = container.querySelector('.blend-assets-section');
-  const noAssetsSection = container.querySelector('.blend-no-assets');
+  const blendsSection = container.querySelector('.blend-blends-section');
+  const assetSelectionSection = container.querySelector('.blend-asset-selection');
+  const noBlendsSection = container.querySelector('.blend-no-blends');
   const errorSection = container.querySelector('.blend-error');
   const connectedAccountEl = container.querySelector('.blend-connected-account');
   const collectionInput = container.querySelector('.blend-collection-input');
-  const resultTemplateInput = container.querySelector('.blend-result-template-input');
-  const requiredCountInput = container.querySelector('.blend-required-count-input');
+  const blendIdsInput = container.querySelector('.blend-ids-input');
+  const blendsGrid = container.querySelector('.blend-blends-grid');
   const assetsGrid = container.querySelector('.blend-assets-grid');
-  const assetCountEl = container.querySelector('.blend-asset-count');
-  const selectedCountEl = container.querySelector('.blend-selected-count');
-  const requiredCountEl = container.querySelector('.blend-required-count');
   const processingModal = container.querySelector('.blend-processing-modal');
 
   // Initialize
@@ -45,12 +44,8 @@ window.init_blend_array = function(containerId, config = {}) {
     if (config.collection && collectionInput) {
       collectionInput.value = config.collection;
     }
-    if (config.result_template && resultTemplateInput) {
-      resultTemplateInput.value = config.result_template;
-    }
-    if (config.required_count && requiredCountInput) {
-      requiredCountInput.value = config.required_count;
-      requiredCount = config.required_count;
+    if (config.blend_ids && blendIdsInput) {
+      blendIdsInput.value = config.blend_ids.join(',');
     }
 
     // Auto-connect if configured
@@ -87,23 +82,16 @@ window.init_blend_array = function(containerId, config = {}) {
     const connectWcwBtn = container.querySelector('.blend-connect-wcw');
     const connectAnchorBtn = container.querySelector('.blend-connect-anchor');
     const disconnectBtn = container.querySelector('.blend-disconnect-btn');
-    const loadAssetsBtn = container.querySelector('.blend-load-assets-btn');
-    const clearSelectionBtn = container.querySelector('.blend-clear-selection-btn');
+    const loadBlendsBtn = container.querySelector('.blend-load-blends-btn');
+    const backBtn = container.querySelector('.blend-back-btn');
     const executeBtn = container.querySelector('.blend-execute-btn');
 
     if (connectWcwBtn) connectWcwBtn.addEventListener('click', () => connectWallet('wcw'));
     if (connectAnchorBtn) connectAnchorBtn.addEventListener('click', () => connectWallet('anchor'));
     if (disconnectBtn) disconnectBtn.addEventListener('click', disconnect);
-    if (loadAssetsBtn) loadAssetsBtn.addEventListener('click', loadUserAssets);
-    if (clearSelectionBtn) clearSelectionBtn.addEventListener('click', clearSelection);
+    if (loadBlendsBtn) loadBlendsBtn.addEventListener('click', loadBlends);
+    if (backBtn) backBtn.addEventListener('click', () => showBlendsSection());
     if (executeBtn) executeBtn.addEventListener('click', executeBlend);
-
-    if (requiredCountInput) {
-      requiredCountInput.addEventListener('change', (e) => {
-        requiredCount = parseInt(e.target.value) || 3;
-        updateRequiredCount();
-      });
-    }
   }
 
   // Check for existing session
@@ -193,12 +181,12 @@ window.init_blend_array = function(containerId, config = {}) {
     localStorage.removeItem('wax_account');
     localStorage.removeItem('wax_wallet');
     userAssets = [];
-    selectedAssetIds.clear();
+    availableBlends = [];
     showNotConnectedState();
   }
 
-  // Load user assets
-  async function loadUserAssets() {
+  // Load blends from NeftyBlocks
+  async function loadBlends() {
     try {
       hideError();
 
@@ -208,148 +196,275 @@ window.init_blend_array = function(containerId, config = {}) {
         return;
       }
 
-      const resultTemplate = resultTemplateInput.value.trim();
-      if (!resultTemplate) {
-        showError('Please enter a result template ID');
+      const blendIdsStr = blendIdsInput.value.trim();
+      if (!blendIdsStr) {
+        showError('Please enter blend IDs (comma-separated)');
         return;
       }
 
-      requiredCount = parseInt(requiredCountInput.value) || 3;
-      if (requiredCount < 2) {
-        showError('Required count must be at least 2');
+      const blendIds = blendIdsStr.split(',').map(id => id.trim()).filter(id => id);
+      if (blendIds.length === 0) {
+        showError('Please enter at least one blend ID');
         return;
       }
 
       loadingSection.style.display = 'block';
-      assetsSection.style.display = 'none';
-      noAssetsSection.style.display = 'none';
+      blendsSection.style.display = 'none';
+      noBlendsSection.style.display = 'none';
 
       // Fetch user's assets
-      const rpc = 'https://aa-wax-public1.neftyblocks.com';
-      let url = `${rpc}/atomicassets/v1/assets?owner=${currentAccount}&collection_name=${collection}&page=1&limit=1000&order=desc&sort=asset_id`;
+      console.log(`📦 Fetching assets for ${currentAccount} from ${collection}...`);
+      const assetsResponse = await fetch(`${API_URL}/api/assets/${currentAccount}?collection_name=${collection}&live=true`);
+      const assetsData = await assetsResponse.json();
 
-      console.log(`Fetching assets from: ${url}`);
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (!response.ok) {
+      if (!assetsData.success) {
         throw new Error('Failed to fetch assets');
       }
 
-      userAssets = data.data || [];
+      userAssets = assetsData.data || [];
+      console.log(`✅ Loaded ${userAssets.length} assets`);
+
+      // Fetch blend schemas from NeftyBlocks
+      console.log(`🔍 Fetching ${blendIds.length} blend schemas from NeftyBlocks...`);
+      const blendsResponse = await fetch(`${API_URL}/api/blends/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          collection: collection,
+          blend_ids: blendIds,
+          account: currentAccount
+        })
+      });
+
+      const blendsData = await blendsResponse.json();
+
+      if (!blendsResponse.ok) {
+        throw new Error(blendsData.error || 'Failed to fetch blend data');
+      }
+
+      availableBlends = blendsData.blends || [];
+      console.log(`✅ Analyzed ${availableBlends.length} blends`);
 
       loadingSection.style.display = 'none';
 
-      if (userAssets.length === 0) {
-        noAssetsSection.style.display = 'block';
+      if (availableBlends.length === 0) {
+        noBlendsSection.style.display = 'block';
         return;
       }
 
-      displayAssets();
-      assetsSection.style.display = 'block';
+      displayBlends();
+      blendsSection.style.display = 'block';
 
     } catch (error) {
       loadingSection.style.display = 'none';
-      showError('Failed to load assets: ' + error.message);
-      console.error('Error loading assets:', error);
+      showError('Failed to load blends: ' + error.message);
+      console.error('Error loading blends:', error);
     }
   }
 
-  // Display assets
-  function displayAssets() {
-    assetCountEl.textContent = `(${userAssets.length} found)`;
-    requiredCountEl.textContent = requiredCount;
-    assetsGrid.innerHTML = '';
+  // Display available blends
+  function displayBlends() {
+    blendsGrid.innerHTML = '';
 
-    userAssets.forEach(asset => {
-      const assetId = asset.asset_id;
-      const name = asset.data?.name || asset.name || `Asset #${assetId}`;
-      const templateId = asset.template?.template_id || 'N/A';
+    availableBlends.forEach(blend => {
+      const canExecute = blend.can_execute;
+      const missingCount = blend.missing_ingredients?.length || 0;
 
-      // Get image/video
-      let mediaHtml = '📦';
-      if (asset.data?.img) {
-        const imgUrl = asset.data.img.startsWith('Qm')
-          ? `https://ipfs.io/ipfs/${asset.data.img}`
-          : asset.data.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
-        mediaHtml = `<img src="${imgUrl}" alt="${name}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 6px 6px 0 0;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'height: 120px; display: flex; align-items: center; justify-content: center; font-size: 2rem;\\'>📦</div>';">`;
-      } else if (asset.data?.video) {
-        const videoUrl = asset.data.video.startsWith('Qm')
-          ? `https://ipfs.io/ipfs/${asset.data.video}`
-          : asset.data.video.replace('ipfs://', 'https://ipfs.io/ipfs/');
-        mediaHtml = `<video src="${videoUrl}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 6px 6px 0 0;" autoplay loop muted playsinline></video>`;
-      }
-
-      const assetCard = document.createElement('div');
-      assetCard.className = 'blend-asset-card';
-      assetCard.dataset.assetId = assetId;
-      assetCard.style.cssText = 'background: var(--bg-dark); border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: all 0.2s;';
-      assetCard.innerHTML = `
-        ${mediaHtml}
-        <div style="padding: 8px;">
-          <div style="font-weight: 600; margin-bottom: 3px; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${name}</div>
-          <div style="font-size: 0.75rem; color: var(--text-secondary);">
-            #${assetId}
-          </div>
-          <div style="font-size: 0.75rem; color: var(--text-secondary);">
-            Mint #${asset.template_mint || 'N/A'}
-          </div>
-        </div>
+      const blendCard = document.createElement('div');
+      blendCard.className = 'blend-blend-card';
+      blendCard.style.cssText = `
+        background: var(--bg-dark);
+        border-radius: 8px;
+        padding: 20px;
+        border: 2px solid ${canExecute ? 'var(--success)' : 'var(--border)'};
+        cursor: ${canExecute ? 'pointer' : 'not-allowed'};
+        opacity: ${canExecute ? '1' : '0.6'};
+        transition: all 0.2s;
       `;
 
-      assetCard.addEventListener('click', () => toggleAssetSelection(assetId));
-      assetsGrid.appendChild(assetCard);
+      if (canExecute) {
+        blendCard.addEventListener('mouseenter', () => {
+          blendCard.style.transform = 'translateY(-2px)';
+          blendCard.style.borderColor = 'var(--primary)';
+        });
+        blendCard.addEventListener('mouseleave', () => {
+          blendCard.style.transform = 'translateY(0)';
+          blendCard.style.borderColor = 'var(--success)';
+        });
+        blendCard.addEventListener('click', () => selectBlend(blend));
+      }
+
+      // Build ingredients display
+      let ingredientsHtml = blend.ingredients.map(ing => {
+        const hasEnough = ing.owned >= ing.amount;
+        return `
+          <div style="display: flex; justify-content: space-between; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 5px;">
+            <span>Template #${ing.template_id}</span>
+            <span style="color: ${hasEnough ? '#4ade80' : '#f87171'};">${ing.owned}/${ing.amount}</span>
+          </div>
+        `;
+      }).join('');
+
+      // Build result display
+      let resultHtml = blend.results.map(res => {
+        return `<div style="color: var(--success); font-weight: 600;">• ${res.amount}x Template #${res.template_id}</div>`;
+      }).join('');
+
+      blendCard.innerHTML = `
+        <div style="display: flex; justify-content: between; align-items: start; margin-bottom: 15px;">
+          <div>
+            <h3 style="margin: 0 0 5px 0;">Blend #${blend.blend_id}</h3>
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">
+              ${canExecute ? '✅ Can Execute' : `❌ Missing ${missingCount} ingredient(s)`}
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+          <h4 style="margin: 0 0 8px 0; font-size: 0.9rem; color: var(--text-secondary);">Ingredients:</h4>
+          ${ingredientsHtml}
+        </div>
+
+        <div>
+          <h4 style="margin: 0 0 8px 0; font-size: 0.9rem; color: var(--text-secondary);">Result:</h4>
+          ${resultHtml}
+        </div>
+
+        ${canExecute ? `
+          <button class="btn btn-success btn-sm" style="width: 100%; margin-top: 15px;" onclick="event.stopPropagation();">
+            🔀 Select This Blend
+          </button>
+        ` : ''}
+      `;
+
+      blendsGrid.appendChild(blendCard);
+    });
+  }
+
+  // Select a blend and show asset selection
+  function selectBlend(blend) {
+    selectedBlend = blend;
+    selectedAssetIds.clear();
+
+    const blendNameEl = container.querySelector('.blend-selected-name');
+    const ingredientsListEl = container.querySelector('.blend-ingredients-list');
+    const selectedCountEl = container.querySelector('.blend-selected-count');
+    const requiredCountEl = container.querySelector('.blend-required-count');
+
+    if (blendNameEl) blendNameEl.textContent = `Blend #${blend.blend_id}`;
+
+    // Calculate total required assets
+    const totalRequired = blend.ingredients.reduce((sum, ing) => sum + ing.amount, 0);
+    if (requiredCountEl) requiredCountEl.textContent = totalRequired;
+    if (selectedCountEl) selectedCountEl.textContent = '0';
+
+    // Group user assets by template ID
+    const assetsByTemplate = {};
+    userAssets.forEach(asset => {
+      const templateId = asset.template?.template_id;
+      if (templateId) {
+        if (!assetsByTemplate[templateId]) {
+          assetsByTemplate[templateId] = [];
+        }
+        assetsByTemplate[templateId].push(asset);
+      }
     });
 
-    updateSelectedCount();
+    // Display ingredients with asset selection
+    if (ingredientsListEl) {
+      ingredientsListEl.innerHTML = '';
+
+      blend.ingredients.forEach(ing => {
+        const templateAssets = assetsByTemplate[ing.template_id] || [];
+
+        const ingSection = document.createElement('div');
+        ingSection.style.cssText = 'margin-bottom: 20px; padding: 15px; background: var(--bg-dark); border-radius: 8px;';
+        ingSection.innerHTML = `
+          <h4 style="margin: 0 0 10px 0;">Template #${ing.template_id} - Need ${ing.amount}</h4>
+          <div class="template-assets-grid-${ing.template_id}" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px;"></div>
+        `;
+
+        ingredientsListEl.appendChild(ingSection);
+
+        const gridEl = ingSection.querySelector(`.template-assets-grid-${ing.template_id}`);
+
+        // Show assets for this template
+        templateAssets.slice(0, ing.amount * 2).forEach(asset => {
+          const assetBox = document.createElement('div');
+          assetBox.className = `blend-asset-box-${asset.asset_id}`;
+          assetBox.dataset.assetId = asset.asset_id;
+          assetBox.dataset.templateId = ing.template_id;
+          assetBox.style.cssText = `
+            padding: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 2px solid transparent;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+          `;
+
+          assetBox.innerHTML = `
+            <div style="font-weight: 600;">#${asset.asset_id}</div>
+            <div style="color: var(--text-secondary);">Mint #${asset.template_mint || 'N/A'}</div>
+          `;
+
+          assetBox.addEventListener('click', () => toggleAssetSelection(asset, ing));
+
+          gridEl.appendChild(assetBox);
+        });
+      });
+    }
+
+    showAssetSelectionSection();
   }
 
   // Toggle asset selection
-  function toggleAssetSelection(assetId) {
-    const card = container.querySelector(`.blend-asset-card[data-asset-id="${assetId}"]`);
-    if (!card) return;
+  function toggleAssetSelection(asset, ingredient) {
+    const assetBox = container.querySelector(`.blend-asset-box-${asset.asset_id}`);
+    if (!assetBox) return;
 
-    if (selectedAssetIds.has(assetId)) {
-      selectedAssetIds.delete(assetId);
-      card.style.borderColor = 'transparent';
-      card.style.background = 'var(--bg-dark)';
+    // Count how many of this template are already selected
+    const selectedFromTemplate = Array.from(selectedAssetIds).filter(id => {
+      const box = container.querySelector(`.blend-asset-box-${id}`);
+      return box && box.dataset.templateId === ingredient.template_id.toString();
+    }).length;
+
+    if (selectedAssetIds.has(asset.asset_id)) {
+      // Deselect
+      selectedAssetIds.delete(asset.asset_id);
+      assetBox.style.borderColor = 'transparent';
+      assetBox.style.background = 'rgba(255,255,255,0.05)';
     } else {
-      // Check if we can add more
-      if (selectedAssetIds.size >= requiredCount) {
-        showError(`You can only select ${requiredCount} NFTs for this blend`);
+      // Check if we can select more of this template
+      if (selectedFromTemplate >= ingredient.amount) {
+        showError(`Can only select ${ingredient.amount} of Template #${ingredient.template_id}`);
         return;
       }
-      selectedAssetIds.add(assetId);
-      card.style.borderColor = 'var(--primary)';
-      card.style.background = 'rgba(59, 130, 246, 0.1)';
+
+      selectedAssetIds.add(asset.asset_id);
+      assetBox.style.borderColor = 'var(--primary)';
+      assetBox.style.background = 'rgba(59, 130, 246, 0.2)';
     }
 
-    updateSelectedCount();
+    updateSelectionCount();
   }
 
-  // Clear selection
-  function clearSelection() {
-    selectedAssetIds.clear();
-    container.querySelectorAll('.blend-asset-card').forEach(card => {
-      card.style.borderColor = 'transparent';
-      card.style.background = 'var(--bg-dark)';
-    });
-    updateSelectedCount();
-  }
-
-  // Update selected count
-  function updateSelectedCount() {
-    selectedCountEl.textContent = selectedAssetIds.size;
+  // Update selection count
+  function updateSelectionCount() {
+    const selectedCountEl = container.querySelector('.blend-selected-count');
     const executeBtn = container.querySelector('.blend-execute-btn');
-    if (executeBtn) {
-      executeBtn.disabled = selectedAssetIds.size !== requiredCount;
-    }
-  }
 
-  // Update required count
-  function updateRequiredCount() {
-    requiredCountEl.textContent = requiredCount;
-    clearSelection();
+    if (selectedCountEl) {
+      selectedCountEl.textContent = selectedAssetIds.size;
+    }
+
+    const totalRequired = selectedBlend.ingredients.reduce((sum, ing) => sum + ing.amount, 0);
+
+    if (executeBtn) {
+      executeBtn.disabled = selectedAssetIds.size !== totalRequired;
+    }
   }
 
   // Execute blend
@@ -357,89 +472,70 @@ window.init_blend_array = function(containerId, config = {}) {
     try {
       hideError();
 
-      const collection = collectionInput.value.trim();
-      const resultTemplate = parseInt(resultTemplateInput.value.trim());
-
-      if (!collection || !resultTemplate) {
-        showError('Please fill in collection and result template');
+      if (!selectedBlend) {
+        showError('No blend selected');
         return;
       }
 
-      if (selectedAssetIds.size !== requiredCount) {
-        showError(`Please select exactly ${requiredCount} NFTs`);
+      const totalRequired = selectedBlend.ingredients.reduce((sum, ing) => sum + ing.amount, 0);
+      if (selectedAssetIds.size !== totalRequired) {
+        showError(`Please select exactly ${totalRequired} assets`);
         return;
       }
 
-      showProcessingModal('Step 1: Burning NFTs', 'Please sign the transaction in your wallet...');
+      showProcessingModal('Executing Blend', 'Please sign the transaction in your wallet...');
 
       // Get wallet API
       const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
 
-      // Prepare burn actions for all selected assets
-      const assetIds = Array.from(selectedAssetIds);
-      const burnActions = assetIds.map(assetId => ({
-        account: 'atomicassets',
-        name: 'burnasset',
+      // Prepare blend transaction for NeftyBlocks contract
+      const assetIdsArray = Array.from(selectedAssetIds);
+      const actions = [{
+        account: 'blend.nefty',
+        name: 'claimblend',
         authorization: [{
           actor: currentAccount,
           permission: 'active'
         }],
         data: {
-          asset_owner: currentAccount,
-          asset_id: assetId
+          claimer: currentAccount,
+          blend_id: parseInt(selectedBlend.blend_id),
+          asset_ids: assetIdsArray
         }
-      }));
+      }];
 
-      // Execute burns
-      const burnResult = await walletApi.transact({ actions: burnActions }, {
+      console.log('Executing NeftyBlocks blend:', {
+        blend_id: selectedBlend.blend_id,
+        asset_count: assetIdsArray.length,
+        assets: assetIdsArray
+      });
+
+      // Execute blend transaction
+      const result = await walletApi.transact({ actions }, {
         blocksBehind: 3,
         expireSeconds: 30
       });
 
-      const burnTxId = burnResult.transaction_id;
-      console.log(`✅ Burned ${assetIds.length} NFTs: ${burnTxId}`);
+      const txId = result.transaction_id;
+      console.log('✅ Blend successful! TX:', txId);
 
-      // Wait for blockchain confirmation
-      showProcessingModal('Step 2: Minting Result', 'Creating your new NFT...');
+      // Wait a moment for blockchain to process
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Call backend to mint result
-      const mintResponse = await fetch(`${API_URL}/api/blend/mint`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          account: currentAccount,
-          collection: collection,
-          template_id: resultTemplate,
-          burn_transaction_id: burnTxId,
-          burned_asset_ids: assetIds
-        })
-      });
-
-      const mintData = await mintResponse.json();
-
-      if (!mintResponse.ok) {
-        throw new Error(mintData.error || 'Mint failed');
-      }
-
       showProcessingModal('✅ Blend Complete!', `
-        <p style="margin: 15px 0; color: #4ade80;">Successfully blended ${assetIds.length} NFTs!</p>
+        <p style="margin: 15px 0; color: #4ade80;">Successfully executed blend!</p>
         <p style="font-size: 0.85rem;">
-          Burn TX: <a href="https://waxblock.io/transaction/${burnTxId}" target="_blank" style="color: var(--primary);">${burnTxId.substr(0, 16)}...</a>
+          TX: <a href="https://waxblock.io/transaction/${txId}" target="_blank" style="color: var(--primary);">${txId.substr(0, 16)}...</a>
         </p>
-        <p style="font-size: 0.85rem;">
-          Mint TX: <a href="https://waxblock.io/transaction/${mintData.transaction_id}" target="_blank" style="color: var(--primary);">${mintData.transaction_id.substr(0, 16)}...</a>
-        </p>
+        <p style="margin-top: 10px;">Check your wallet for the new NFT! 🎉</p>
         <button class="btn btn-primary blend-close-btn" style="margin-top: 15px;">Close & Refresh</button>
       `);
 
-      // Close button
       const closeBtn = container.querySelector('.blend-close-btn');
       if (closeBtn) {
         closeBtn.addEventListener('click', () => {
           hideProcessingModal();
-          clearSelection();
-          loadUserAssets();
+          loadBlends(); // Reload
         });
       }
 
@@ -448,6 +544,17 @@ window.init_blend_array = function(containerId, config = {}) {
       showError('Blend failed: ' + error.message);
       console.error('Blend error:', error);
     }
+  }
+
+  // Section navigation
+  function showBlendsSection() {
+    blendsSection.style.display = 'block';
+    assetSelectionSection.style.display = 'none';
+  }
+
+  function showAssetSelectionSection() {
+    blendsSection.style.display = 'none';
+    assetSelectionSection.style.display = 'block';
   }
 
   // Modal helpers

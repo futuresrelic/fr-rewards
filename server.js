@@ -831,6 +831,228 @@ app.post('/api/blend/mint', strictLimiter, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/blends/analyze
+ * Analyze NeftyBlocks blends against user's assets
+ */
+app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
+  try {
+    const { collection, blend_ids, account } = req.body;
+
+    // Validate required fields
+    if (!collection || !blend_ids || !Array.isArray(blend_ids) || !account) {
+      return res.status(400).json({ error: 'Missing required fields: collection, blend_ids (array), account' });
+    }
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    console.log(`🔍 Blend Analysis Request:`);
+    console.log(`   Collection: ${collection}`);
+    console.log(`   Blend IDs: ${blend_ids.join(', ')}`);
+    console.log(`   Account: ${account}`);
+
+    const blends = [];
+
+    // Fetch each blend schema from NeftyBlocks
+    for (const blendId of blend_ids) {
+      try {
+        console.log(`   Fetching blend #${blendId}...`);
+
+        // Fetch blend schema from NeftyBlocks API
+        const blendResponse = await fetch(`https://neftyblocks.com/api/v1/blends/${blendId}`);
+
+        if (!blendResponse.ok) {
+          console.warn(`   ⚠️ Blend #${blendId} not found or not accessible`);
+          continue;
+        }
+
+        const blendData = await blendResponse.json();
+        const blend = blendData.data;
+
+        if (!blend || blend.collection?.collection_name !== collection) {
+          console.warn(`   ⚠️ Blend #${blendId} is not for collection ${collection}`);
+          continue;
+        }
+
+        // Parse ingredients (what you need to burn)
+        const ingredients = [];
+        let totalRequired = 0;
+
+        if (blend.ingredients && Array.isArray(blend.ingredients)) {
+          for (const ing of blend.ingredients) {
+            const templateId = ing.template_id || ing.template?.template_id;
+            const amount = parseInt(ing.amount || 1);
+
+            if (templateId) {
+              ingredients.push({
+                template_id: templateId,
+                amount: amount,
+                owned: 0 // Will be populated below
+              });
+              totalRequired += amount;
+            }
+          }
+        }
+
+        // Parse results (what you get after blend)
+        const results = [];
+        if (blend.results && Array.isArray(blend.results)) {
+          for (const res of blend.results) {
+            const templateId = res.template_id || res.template?.template_id;
+            const amount = parseInt(res.amount || 1);
+
+            if (templateId) {
+              results.push({
+                template_id: templateId,
+                amount: amount
+              });
+            }
+          }
+        }
+
+        // Add to blends list
+        blends.push({
+          blend_id: blendId,
+          name: blend.name || `Blend #${blendId}`,
+          description: blend.description || '',
+          collection: collection,
+          ingredients: ingredients,
+          results: results,
+          total_required: totalRequired,
+          can_execute: false, // Will be calculated after checking user's assets
+          missing_ingredients: []
+        });
+
+      } catch (error) {
+        console.error(`   ❌ Error fetching blend #${blendId}:`, error.message);
+      }
+    }
+
+    if (blends.length === 0) {
+      return res.json({
+        success: true,
+        blends: [],
+        message: 'No valid blends found'
+      });
+    }
+
+    // Fetch user's assets from AtomicAssets API
+    console.log(`   Fetching assets for ${account}...`);
+    const rpc = 'https://aa-wax-public1.neftyblocks.com';
+    const assetsUrl = `${rpc}/atomicassets/v1/assets?owner=${account}&collection_name=${collection}&page=1&limit=1000&order=desc&sort=asset_id`;
+    const assetsResponse = await fetch(assetsUrl);
+    const assetsData = await assetsResponse.json();
+
+    if (!assetsResponse.ok) {
+      throw new Error('Failed to fetch user assets');
+    }
+
+    const userAssets = assetsData.data || [];
+
+    // Group user's assets by template ID
+    const assetsByTemplate = {};
+    userAssets.forEach(asset => {
+      const templateId = asset.template?.template_id;
+      if (templateId) {
+        if (!assetsByTemplate[templateId]) {
+          assetsByTemplate[templateId] = 0;
+        }
+        assetsByTemplate[templateId]++;
+      }
+    });
+
+    // Check each blend against user's assets
+    for (const blend of blends) {
+      let canExecute = true;
+      const missingIngredients = [];
+
+      for (const ing of blend.ingredients) {
+        const owned = assetsByTemplate[ing.template_id] || 0;
+        ing.owned = owned;
+
+        if (owned < ing.amount) {
+          canExecute = false;
+          missingIngredients.push({
+            template_id: ing.template_id,
+            needed: ing.amount,
+            owned: owned,
+            missing: ing.amount - owned
+          });
+        }
+      }
+
+      blend.can_execute = canExecute;
+      blend.missing_ingredients = missingIngredients;
+    }
+
+    console.log(`   ✅ Analyzed ${blends.length} blend(s)`);
+    console.log(`   ✅ ${blends.filter(b => b.can_execute).length} blend(s) available`);
+
+    res.json({
+      success: true,
+      blends: blends,
+      total_assets: userAssets.length
+    });
+
+  } catch (error) {
+    console.error('Error in blend analysis:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/blends/execute
+ * Execute a NeftyBlocks blend (client sends signed transaction)
+ * Note: This is a placeholder - actual blend execution should be done client-side
+ * with user's wallet signing the transaction to NeftyBlocks contract
+ */
+app.post('/api/blends/execute', strictLimiter, async (req, res) => {
+  try {
+    const { account, collection, blend_id, asset_ids } = req.body;
+
+    // Validate required fields
+    if (!account || !collection || !blend_id || !asset_ids || !Array.isArray(asset_ids)) {
+      return res.status(400).json({ error: 'Missing required fields: account, collection, blend_id, asset_ids' });
+    }
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    console.log(`🔀 Blend Execute Request:`);
+    console.log(`   Account: ${account}`);
+    console.log(`   Collection: ${collection}`);
+    console.log(`   Blend ID: ${blend_id}`);
+    console.log(`   Asset IDs: ${asset_ids.join(', ')}`);
+
+    // Note: NeftyBlocks blends are executed client-side via the blends contract
+    // The user's wallet must sign the transaction
+    // This endpoint serves as a verification/logging point
+
+    // Return instructions for client-side execution
+    res.json({
+      success: true,
+      message: 'Blend should be executed client-side',
+      blend_contract: 'blend.nefty',
+      blend_action: 'claimblend',
+      blend_data: {
+        claimer: account,
+        blend_id: parseInt(blend_id),
+        asset_ids: asset_ids
+      },
+      note: 'User must sign this transaction with their wallet'
+    });
+
+  } catch (error) {
+    console.error('Error in blend execute:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== ADMIN ENDPOINTS ====================
 
 /**
