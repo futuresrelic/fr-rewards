@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Builder Templates - Future Relic</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .templates-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .templates-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .templates-header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+      color: var(--primary);
+    }
+
+    .templates-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    .template-card {
+      background: var(--bg-secondary);
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .template-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+    }
+
+    .template-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .template-name {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+
+    .template-description {
+      color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+
+    .template-modules {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .template-module-badge {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 4px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.85rem;
+      color: var(--primary);
+    }
+
+    .template-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-bottom: 2rem;
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="templates-container">
+    <a href="/site-builder.html" class="back-link">← Back to Site Builder</a>
+
+    <div class="templates-header">
+      <h1>📚 Site Builder Templates</h1>
+      <p style="color: var(--text-secondary); font-size: 1.1rem;">
+        Start with a pre-built template and customize it to your needs
+      </p>
+    </div>
+
+    <div class="templates-grid">
+      <!-- Complete Hub Template -->
+      <div class="template-card" onclick="loadTemplate('complete-hub.json')">
+        <div class="template-icon">🎁</div>
+        <div class="template-name">Complete Rewards Hub</div>
+        <div class="template-description">
+          All modules in one comprehensive page - claim rewards, unpack, craft, and blend
+        </div>
+        <div class="template-modules">
+          <span class="template-module-badge">🎁 Claims</span>
+          <span class="template-module-badge">📦 Unpack</span>
+          <span class="template-module-badge">🏭 Craft</span>
+          <span class="template-module-badge">🔀 Blend</span>
+        </div>
+        <div class="template-actions">
+          <button class="btn btn-primary" onclick="loadTemplate('complete-hub.json'); event.stopPropagation();">
+            Load Template
+          </button>
+          <a href="/rewards-hub.html" class="btn btn-secondary" onclick="event.stopPropagation();">
+            View Live Demo
+          </a>
+        </div>
+      </div>
+
+      <!-- Simple Claims Template -->
+      <div class="template-card" onclick="loadTemplate('simple-claims.json')">
+        <div class="template-icon">🎯</div>
+        <div class="template-name">Simple Claims Page</div>
+        <div class="template-description">
+          Just the claim rewards module - perfect for a dedicated rewards page
+        </div>
+        <div class="template-modules">
+          <span class="template-module-badge">🎁 Claims</span>
+        </div>
+        <div class="template-actions">
+          <button class="btn btn-primary" onclick="loadTemplate('simple-claims.json'); event.stopPropagation();">
+            Load Template
+          </button>
+        </div>
+      </div>
+
+      <!-- Crafting Station Template -->
+      <div class="template-card" onclick="loadTemplate('crafting-station.json')">
+        <div class="template-icon">🏭</div>
+        <div class="template-name">Crafting Station</div>
+        <div class="template-description">
+          Focused on crafting and blending - unpack packs, craft NFTs, and execute blends
+        </div>
+        <div class="template-modules">
+          <span class="template-module-badge">📦 Unpack</span>
+          <span class="template-module-badge">🏭 Craft</span>
+          <span class="template-module-badge">🔀 Blend</span>
+        </div>
+        <div class="template-actions">
+          <button class="btn btn-primary" onclick="loadTemplate('crafting-station.json'); event.stopPropagation();">
+            Load Template
+          </button>
+        </div>
+      </div>
+
+      <!-- Asset Manager Template -->
+      <div class="template-card" onclick="loadTemplate('asset-manager.json')">
+        <div class="template-icon">💼</div>
+        <div class="template-name">Asset Manager</div>
+        <div class="template-description">
+          Manage your NFT collection - unpack, transfer, and organize your assets
+        </div>
+        <div class="template-modules">
+          <span class="template-module-badge">📦 Unpack</span>
+          <span class="template-module-badge">↔️ Transfer</span>
+        </div>
+        <div class="template-actions">
+          <button class="btn btn-primary" onclick="loadTemplate('asset-manager.json'); event.stopPropagation();">
+            Load Template
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="text-align: center; padding: 2rem;">
+      <h2 style="margin-bottom: 1rem;">💡 How to Use Templates</h2>
+      <p style="color: var(--text-secondary); line-height: 1.8;">
+        1. Click "Load Template" on any card above<br>
+        2. The template will open in the Site Builder<br>
+        3. Customize the modules to your needs<br>
+        4. Export the code or save your configuration
+      </p>
+    </div>
+  </div>
+
+  <script>
+    function loadTemplate(filename) {
+      // Download the template and redirect to Site Builder with it loaded
+      fetch(`/templates/${filename}`)
+        .then(response => response.json())
+        .then(config => {
+          // Save to localStorage so Site Builder can load it
+          localStorage.setItem('fr_site_builder_config', JSON.stringify(config));
+          // Redirect to Site Builder
+          window.location.href = '/site-builder.html';
+        })
+        .catch(error => {
+          console.error('Failed to load template:', error);
+          alert('Failed to load template. Please try again.');
+        });
+    }
+  </script>
+</body>
+</html>

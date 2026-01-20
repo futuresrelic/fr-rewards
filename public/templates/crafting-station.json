@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "name": "Crafting Station",
+  "description": "Focused on crafting and blending - unpack packs, craft NFTs, and execute blends",
+  "modules": [
+    {
+      "id": 1,
+      "moduleType": "unpack",
+      "config": {
+        "collection": "futuresrelic",
+        "auto_connect": true
+      }
+    },
+    {
+      "id": 2,
+      "moduleType": "factory-craft",
+      "config": {
+        "collection": "futuresrelic",
+        "auto_connect": true
+      }
+    },
+    {
+      "id": 3,
+      "moduleType": "blend-array",
+      "config": {
+        "collection": "futuresrelic",
+        "blend_ids": "",
+        "auto_connect": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "name": "Asset Manager",
+  "description": "Manage your NFT collection - unpack, transfer, and organize your assets",
+  "modules": [
+    {
+      "id": 1,
+      "moduleType": "unpack",
+      "config": {
+        "collection": "",
+        "auto_connect": true
+      }
+    },
+    {
+      "id": 2,
+      "moduleType": "transfer-mode",
+      "config": {
+        "collection": "",
+        "auto_connect": true
+      }
+    }
+  ]
+}

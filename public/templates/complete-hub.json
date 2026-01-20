@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "name": "Complete Rewards Hub",
+  "description": "All modules in one comprehensive page - claim rewards, unpack, craft, and blend",
+  "modules": [
+    {
+      "id": 1,
+      "moduleType": "claim-rewards",
+      "config": {
+        "collection": "futuresrelic",
+        "auto_connect": true,
+        "title": "Claim Day"
+      }
+    },
+    {
+      "id": 2,
+      "moduleType": "unpack",
+      "config": {
+        "collection": "futuresrelic",
+        "auto_connect": true
+      }
+    },
+    {
+      "id": 3,
+      "moduleType": "factory-craft",
+      "config": {
+        "collection": "futuresrelic",
+        "auto_connect": true
+      }
+    },
+    {
+      "id": 4,
+      "moduleType": "blend-array",
+      "config": {
+        "collection": "futuresrelic",
+        "blend_ids": "",
+        "auto_connect": true
+      }
+    }
+  ],
+  "timestamp": "2026-01-20T00:40:08.852Z"
+}

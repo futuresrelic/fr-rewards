@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "name": "Simple Claims Page",
+  "description": "Just the claim rewards module - perfect for a dedicated rewards page",
+  "modules": [
+    {
+      "id": 1,
+      "moduleType": "claim-rewards",
+      "config": {
+        "collection": "futuresrelic",
+        "auto_connect": false,
+        "title": ""
+      }
+    }
+  ]
+}

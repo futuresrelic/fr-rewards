@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rewards Hub - Future Relic</title>
+  <link rel="stylesheet" href="/styles.css">
+
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      min-height: 100vh;
+    }
+
+    .hub-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .hub-header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding: 3rem 2rem;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
+      border-radius: 16px;
+      border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .hub-header h1 {
+      font-size: 3rem;
+      margin: 0 0 1rem 0;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hub-header p {
+      font-size: 1.2rem;
+      color: var(--text-secondary);
+      margin: 0;
+    }
+
+    .hub-nav {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 3rem;
+      flex-wrap: wrap;
+    }
+
+    .hub-nav a {
+      padding: 0.75rem 1.5rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      text-decoration: none;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .hub-nav a:hover {
+      background: var(--primary);
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .module-section {
+      margin-bottom: 3rem;
+      padding: 2rem;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+
+    .module-section-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .module-section-icon {
+      font-size: 2.5rem;
+    }
+
+    .module-section-title {
+      flex: 1;
+    }
+
+    .module-section-title h2 {
+      margin: 0 0 0.25rem 0;
+      color: var(--primary);
+    }
+
+    .module-section-title p {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 3rem;
+    }
+
+    .stat-card {
+      background: var(--bg-secondary);
+      padding: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-label {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+      .hub-header h1 {
+        font-size: 2rem;
+      }
+
+      .hub-header p {
+        font-size: 1rem;
+      }
+
+      .module-section {
+        padding: 1rem;
+      }
+    }
+  </style>
+
+  <!-- Wallet Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/waxjs@1.0.0/dist-web/waxjs.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/anchor-link@3.4.4/dist/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/anchor-link-browser-transport@3.4.4/dist/index.min.js"></script>
+</head>
+<body>
+  <div class="hub-container">
+    <!-- Header -->
+    <div class="hub-header">
+      <h1>🎁 Future Relic Rewards Hub</h1>
+      <p>Your one-stop destination for claiming rewards, crafting, unpacking, and blending</p>
+    </div>
+
+    <!-- Navigation -->
+    <div class="hub-nav">
+      <a href="/index.html">🏠 Home</a>
+      <a href="/story.html">📖 Story Mode</a>
+      <a href="/site-builder.html">🛠️ Site Builder</a>
+      <a href="/admin.html">⚙️ Admin Panel</a>
+    </div>
+
+    <!-- Section 1: Claim Rewards -->
+    <div class="module-section">
+      <div class="module-section-header">
+        <div class="module-section-icon">🎁</div>
+        <div class="module-section-title">
+          <h2>Claim Day</h2>
+          <p>Check your eligibility and claim NFT rewards based on your owned assets</p>
+        </div>
+      </div>
+      <div
+        id="module-1"
+        data-module="claim-rewards"
+        data-config="{&quot;collection&quot;:&quot;futuresrelic&quot;,&quot;auto_connect&quot;:true,&quot;title&quot;:&quot;Claim Day&quot;}"
+      ></div>
+    </div>
+
+    <!-- Section 2: Unpack Mystery Packs -->
+    <div class="module-section">
+      <div class="module-section-header">
+        <div class="module-section-icon">📦</div>
+        <div class="module-section-title">
+          <h2>Unpack Mystery Packs</h2>
+          <p>Open your mystery packs and discover what's inside</p>
+        </div>
+      </div>
+      <div
+        id="module-2"
+        data-module="unpack"
+        data-config="{&quot;collection&quot;:&quot;futuresrelic&quot;,&quot;auto_connect&quot;:true}"
+      ></div>
+    </div>
+
+    <!-- Section 3: Factory Craft -->
+    <div class="module-section">
+      <div class="module-section-header">
+        <div class="module-section-icon">🏭</div>
+        <div class="module-section-title">
+          <h2>Factory Craft</h2>
+          <p>Craft new NFTs using your existing assets as ingredients</p>
+        </div>
+      </div>
+      <div
+        id="module-3"
+        data-module="factory-craft"
+        data-config="{&quot;collection&quot;:&quot;futuresrelic&quot;,&quot;auto_connect&quot;:true}"
+      ></div>
+    </div>
+
+    <!-- Section 4: Blend Array -->
+    <div class="module-section">
+      <div class="module-section-header">
+        <div class="module-section-icon">🔀</div>
+        <div class="module-section-title">
+          <h2>NeftyBlocks Blends</h2>
+          <p>Discover and execute available NeftyBlocks blends with your assets</p>
+        </div>
+      </div>
+      <div
+        id="module-4"
+        data-module="blend-array"
+        data-config="{&quot;collection&quot;:&quot;futuresrelic&quot;,&quot;blend_ids&quot;:&quot;&quot;,&quot;auto_connect&quot;:true}"
+      ></div>
+    </div>
+
+    <!-- Footer -->
+    <div style="text-align: center; margin-top: 4rem; padding: 2rem; color: var(--text-secondary);">
+      <p>Built with the Future Relic Modular Platform</p>
+      <p style="font-size: 0.85rem; margin-top: 0.5rem;">
+        <a href="/site-builder.html" style="color: var(--primary);">Create your own page with Site Builder</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Module Loader -->
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>
