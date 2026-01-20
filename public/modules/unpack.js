@@ -38,7 +38,7 @@ window.init_unpack = function(containerId, config = {}) {
     setupEventListeners();
 
     // Pre-fill collection if configured
-    
+
     // Pre-fill template if configured
     if (config.template_id && searchInput) {
       searchInput.value = config.template_id;
@@ -47,10 +47,8 @@ window.init_unpack = function(containerId, config = {}) {
       collectionInput.value = config.collection;
     }
 
-    // Auto-connect if configured
-    if (config.auto_connect) {
-      checkExistingSession();
-    }
+    // ALWAYS check for existing session to persist login across pages
+    checkExistingSession();
   })();
 
   // Wait for wallet libraries
@@ -131,18 +129,23 @@ window.init_unpack = function(containerId, config = {}) {
           try {
             wax = new WaxLib.WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
             const autoLoginAccount = await wax.login();
-            if (autoLoginAccount === savedAccount) {
-              currentAccount = autoLoginAccount;
-              showConnectedState();
-            } else {
-              // Account mismatch, clear storage
-              localStorage.removeItem('wax_account');
-              localStorage.removeItem('wax_wallet');
+            if (autoLoginAccount) {
+              if (autoLoginAccount === savedAccount) {
+                currentAccount = autoLoginAccount;
+                showConnectedState();
+                console.log('✅ Auto-logged in with WCW:', currentAccount);
+              } else {
+                // Account mismatch, update to new account
+                currentAccount = autoLoginAccount;
+                localStorage.setItem('wax_account', autoLoginAccount);
+                showConnectedState();
+                console.log('✅ Auto-logged in with different WCW account:', currentAccount);
+              }
             }
           } catch (error) {
-            console.warn('Could not auto-login with WaxJS:', error);
-            localStorage.removeItem('wax_account');
-            localStorage.removeItem('wax_wallet');
+            console.log('⚠️ WCW auto-login not available (session expired or user not logged in)');
+            console.log('💡 User can click connect button to log in again');
+            // Don't clear storage - let user reconnect easily
           }
         }
       }
