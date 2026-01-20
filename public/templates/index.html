@@ -6,6 +6,10 @@
   <title>Site Builder Templates - Future Relic</title>
   <link rel="stylesheet" href="/styles.css">
   <style>
+    body {
+      background: var(--bg-primary);
+    }
+
     .templates-container {
       max-width: 1200px;
       margin: 0 auto;
@@ -15,12 +19,22 @@
     .templates-header {
       text-align: center;
       margin-bottom: 3rem;
+      padding: 2rem;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      border: 1px solid var(--border);
     }
 
     .templates-header h1 {
       font-size: 2.5rem;
       margin-bottom: 1rem;
-      color: var(--primary);
+      color: #60a5fa;
+      font-weight: 700;
+    }
+
+    .templates-header p {
+      font-size: 1.1rem;
+      color: #d1d5db;
     }
 
     .templates-grid {
@@ -40,27 +54,29 @@
     }
 
     .template-card:hover {
-      border-color: var(--primary);
+      border-color: #60a5fa;
       transform: translateY(-4px);
-      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+      box-shadow: 0 8px 24px rgba(96, 165, 250, 0.3);
     }
 
     .template-icon {
       font-size: 3rem;
       margin-bottom: 1rem;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
     }
 
     .template-name {
       font-size: 1.3rem;
-      font-weight: 600;
+      font-weight: 700;
       margin-bottom: 0.5rem;
-      color: var(--text-primary);
+      color: #f3f4f6;
     }
 
     .template-description {
-      color: var(--text-secondary);
+      color: #d1d5db;
       margin-bottom: 1.5rem;
       line-height: 1.6;
+      font-size: 0.95rem;
     }
 
     .template-modules {
@@ -71,12 +87,13 @@
     }
 
     .template-module-badge {
-      background: rgba(59, 130, 246, 0.1);
-      border: 1px solid rgba(59, 130, 246, 0.3);
+      background: rgba(96, 165, 250, 0.15);
+      border: 1px solid rgba(96, 165, 250, 0.4);
       border-radius: 4px;
       padding: 0.25rem 0.75rem;
       font-size: 0.85rem;
-      color: var(--primary);
+      color: #93c5fd;
+      font-weight: 500;
     }
 
     .template-actions {
@@ -87,13 +104,34 @@
     .back-link {
       display: inline-block;
       margin-bottom: 2rem;
-      color: var(--primary);
+      color: #60a5fa;
       text-decoration: none;
-      font-weight: 500;
+      font-weight: 600;
+      font-size: 1rem;
     }
 
     .back-link:hover {
+      color: #93c5fd;
       text-decoration: underline;
+    }
+
+    .info-card {
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .info-card h2 {
+      margin-bottom: 1rem;
+      color: #60a5fa;
+      font-weight: 700;
+    }
+
+    .info-card p {
+      color: #d1d5db;
+      line-height: 1.8;
     }
   </style>
 </head>
@@ -187,9 +225,9 @@
       </div>
     </div>
 
-    <div class="card" style="text-align: center; padding: 2rem;">
-      <h2 style="margin-bottom: 1rem;">💡 How to Use Templates</h2>
-      <p style="color: var(--text-secondary); line-height: 1.8;">
+    <div class="info-card">
+      <h2>💡 How to Use Templates</h2>
+      <p>
         1. Click "Load Template" on any card above<br>
         2. The template will open in the Site Builder<br>
         3. Customize the modules to your needs<br>
