@@ -489,7 +489,7 @@ function exportCode() {
 <script src="https://cdn.jsdelivr.net/npm/anchor-link-browser-transport@3.4.4/dist/index.min.js"></script>
 
 <!-- NeftyBlocks Web Components (for drop module) -->
-<script src="https://cdn.jsdelivr.net/npm/@neftyblocks/web-components@latest/dist/neftyblocks-drops/neftyblocks-drops.js" type="module"></script>`;
+<script src="https://cdn.jsdelivr.net/npm/@neftyblocks/drops@latest" type="module"></script>`;
 
   // Show in modal
   document.getElementById('htmlCode').textContent = html;
