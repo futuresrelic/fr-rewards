@@ -5,7 +5,6 @@
 
 // Available modules configuration
 const AVAILABLE_MODULES = [
-const AVAILABLE_MODULES = [
   {
     id: 'claim-rewards',
     name: 'Claim Rewards',
