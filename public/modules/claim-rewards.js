@@ -325,10 +325,10 @@ window.init_claim_rewards = function(containerId, config = {}) {
       }
 
       nftCard.innerHTML = `
+        <div class="nft-icon">
+          ${nftMediaHtml}
+        </div>
         <div class="nft-header">
-          <div class="nft-icon">
-            ${nftMediaHtml}
-          </div>
           <div class="nft-info">
             <div class="nft-name">
               ${asset.name || 'Template #' + templateId}
@@ -336,10 +336,10 @@ window.init_claim_rewards = function(containerId, config = {}) {
             </div>
             <div class="nft-template">Template ID: ${templateId}</div>
           </div>
-        </div>
-        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
-          <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.95rem;">Available Rewards:</h4>
-          ${rewardsHtml}
+          <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
+            <h4 style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.95rem;">Available Rewards:</h4>
+            ${rewardsHtml}
+          </div>
         </div>
       `;
 
