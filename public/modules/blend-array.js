@@ -45,13 +45,14 @@ window.init_blend_array = function(containerId, config = {}) {
       collectionInput.value = config.collection;
     }
     if (config.blend_ids && blendIdsInput) {
-      blendIdsInput.value = config.blend_ids.join(',');
+      // Handle both string and array formats
+      blendIdsInput.value = Array.isArray(config.blend_ids)
+        ? config.blend_ids.join(',')
+        : config.blend_ids;
     }
 
-    // Auto-connect if configured
-    if (config.auto_connect) {
-      checkExistingSession();
-    }
+    // ALWAYS check for existing session to persist login
+    checkExistingSession();
   })();
 
   // Wait for wallet libraries
@@ -109,16 +110,33 @@ window.init_blend_array = function(containerId, config = {}) {
           if (restored) {
             anchor = window.AnchorWallet;
             currentAccount = restored;
+            showConnectedState();
+            console.log('✅ Auto-logged in with Anchor:', currentAccount);
           }
         } catch (error) {
-          console.warn('Could not restore Anchor session:', error);
-          localStorage.removeItem('wax_account');
-          localStorage.removeItem('wax_wallet');
+          console.log('⚠️ Anchor auto-login not available');
           return;
         }
+      } else if (savedWallet === 'wcw') {
+        // Initialize WaxJS for auto-login
+        const WaxLib = window.waxjs?.WaxJS || window.WaxJS;
+        if (WaxLib) {
+          try {
+            wax = new WaxLib({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
+            const autoLoginAccount = await wax.login();
+            if (autoLoginAccount) {
+              currentAccount = autoLoginAccount;
+              if (autoLoginAccount !== savedAccount) {
+                localStorage.setItem('wax_account', autoLoginAccount);
+              }
+              showConnectedState();
+              console.log('✅ Auto-logged in with WCW:', currentAccount);
+            }
+          } catch (error) {
+            console.log('⚠️ WCW auto-login not available');
+          }
+        }
       }
-
-      showConnectedState();
     }
   }
 
@@ -580,6 +598,13 @@ window.init_blend_array = function(containerId, config = {}) {
     notConnectedSection.style.display = 'none';
     connectedSection.style.display = 'block';
     if (connectedAccountEl) connectedAccountEl.textContent = currentAccount;
+
+    // If blend_ids are configured, auto-load blends
+    if (config.blend_ids && config.collection) {
+      setTimeout(() => {
+        loadBlends();
+      }, 100);
+    }
   }
 
   function showError(message) {
