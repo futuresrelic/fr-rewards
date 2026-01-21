@@ -12,7 +12,7 @@ const AVAILABLE_MODULES = [
     description: 'Let users claim NFT rewards based on owned assets',
     config: {
       collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false, help: 'Automatically connect wallet on load' },
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true, help: 'Automatically connect wallet on load' },
       title: { type: 'text', label: 'Custom Title', default: '', help: 'Override module title (optional)' }
     }
   },
@@ -23,7 +23,9 @@ const AVAILABLE_MODULES = [
     description: 'Craft new NFTs using existing NFTs as ingredients',
     config: {
       collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false }
+      show_category: { type: 'text', label: 'Filter by Category', default: '', help: 'Show only recipes from this category (optional)' },
+      show_recipe_id: { type: 'text', label: 'Show Specific Recipe ID', default: '', help: 'Show only this recipe by ID (optional)' },
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true, help: 'Automatically restore session and load recipes' }
     }
   },
   {
@@ -33,7 +35,7 @@ const AVAILABLE_MODULES = [
     description: 'Transfer NFTs to other wallets',
     config: {
       collection: { type: 'text', label: 'Default Collection', default: '', help: 'Pre-filter by collection (optional)' },
-      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false }
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true }
     }
   },
   {
@@ -44,7 +46,7 @@ const AVAILABLE_MODULES = [
     config: {
       collection: { type: 'text', label: 'Default Collection', default: 'futuresrelic', help: 'Pre-filter by collection' },
       template_id: { type: 'text', label: 'Template ID', default: '', help: 'Filter by template ID (e.g. 204194)' },
-      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false }
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true }
     }
   },
   {
@@ -55,7 +57,7 @@ const AVAILABLE_MODULES = [
     config: {
       collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
       blend_ids: { type: 'text', label: 'Blend IDs', default: '', help: 'Comma-separated NeftyBlocks blend IDs' },
-      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false }
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true }
     }
   },
   {
