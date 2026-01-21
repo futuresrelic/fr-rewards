@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase Map - Site Structure Visualizer</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .phase-map-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .map-header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 2px solid var(--border);
+    }
+
+    .map-header h1 {
+      font-size: 2.5rem;
+      color: var(--primary);
+      margin-bottom: 0.5rem;
+    }
+
+    .map-header p {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+    }
+
+    .map-controls {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .map-controls button {
+      padding: 0.6rem 1.2rem;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+    }
+
+    .map-controls button:hover {
+      background: var(--primary-dark);
+      transform: translateY(-2px);
+    }
+
+    .map-stats {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 2rem;
+      padding: 1.5rem;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: bold;
+      color: var(--primary);
+    }
+
+    .tree-container {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 2rem;
+    }
+
+    .tree-node {
+      margin-left: 0;
+      margin-bottom: 0.5rem;
+    }
+
+    .tree-node.directory > .node-content {
+      font-weight: 600;
+      color: var(--primary);
+      cursor: pointer;
+      padding: 0.5rem;
+      border-radius: 4px;
+      transition: background 0.2s;
+      display: inline-block;
+    }
+
+    .tree-node.directory > .node-content:hover {
+      background: var(--bg-secondary);
+    }
+
+    .tree-node.file > .node-content {
+      padding: 0.6rem;
+      margin: 0.3rem 0;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      border-left: 3px solid var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      transition: all 0.2s;
+    }
+
+    .tree-node.file > .node-content:hover {
+      background: var(--bg-hover);
+      transform: translateX(5px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .node-icon {
+      font-size: 1.3rem;
+      min-width: 30px;
+      text-align: center;
+    }
+
+    .node-title {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .node-name {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .node-path {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-family: monospace;
+    }
+
+    .node-modules {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .module-tag {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      background: var(--primary);
+      color: white;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
+
+    .node-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .node-actions a {
+      padding: 0.4rem 0.8rem;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+
+    .node-actions a:hover {
+      background: var(--primary-dark);
+      transform: scale(1.05);
+    }
+
+    .node-actions .edit-btn {
+      background: #10b981;
+    }
+
+    .node-actions .edit-btn:hover {
+      background: #059669;
+    }
+
+    .tree-children {
+      margin-left: 2rem;
+      border-left: 2px solid var(--border);
+      padding-left: 1rem;
+      margin-top: 0.5rem;
+    }
+
+    .tree-children.collapsed {
+      display: none;
+    }
+
+    .expand-toggle {
+      cursor: pointer;
+      display: inline-block;
+      width: 20px;
+      text-align: center;
+      margin-right: 0.3rem;
+      user-select: none;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      font-size: 1.2rem;
+      color: var(--text-secondary);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--text-secondary);
+    }
+
+    .empty-state h2 {
+      color: var(--primary);
+      margin-bottom: 1rem;
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 300px;
+      padding: 0.6rem 1rem;
+      border: 2px solid var(--border);
+      border-radius: 6px;
+      font-size: 1rem;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .search-box:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="phase-map-container">
+    <div class="map-header">
+      <h1>🗺️ Phase Map</h1>
+      <p>Visualize and navigate your entire site structure</p>
+    </div>
+
+    <div class="map-controls">
+      <input type="text" id="searchBox" class="search-box" placeholder="🔍 Search pages, modules, or paths...">
+      <button onclick="expandAll()">📂 Expand All</button>
+      <button onclick="collapseAll()">📁 Collapse All</button>
+      <button onclick="loadSiteMap()">🔄 Refresh</button>
+      <button onclick="window.location.href='/site-builder.html'">🔧 Site Builder</button>
+    </div>
+
+    <div class="map-stats" id="mapStats" style="display: none;">
+      <div class="stat">
+        <div class="stat-label">Total Pages</div>
+        <div class="stat-value" id="totalPages">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Total Modules</div>
+        <div class="stat-value" id="totalModules">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Directories</div>
+        <div class="stat-value" id="totalDirectories">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Last Scanned</div>
+        <div class="stat-value" id="lastScanned" style="font-size: 1rem;">-</div>
+      </div>
+    </div>
+
+    <div id="treeContainer" class="tree-container">
+      <div class="loading">
+        <div>📡 Scanning site structure...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let siteMapData = null;
+    let expandedNodes = new Set();
+
+    // Load site map on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadSiteMap();
+
+      // Search functionality
+      document.getElementById('searchBox').addEventListener('input', (e) => {
+        filterTree(e.target.value);
+      });
+    });
+
+    async function loadSiteMap() {
+      const container = document.getElementById('treeContainer');
+      container.innerHTML = '<div class="loading">📡 Scanning site structure...</div>';
+
+      try {
+        const response = await fetch('/api/site-map/scan');
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to load site map');
+        }
+
+        siteMapData = data.siteMap;
+        updateStats(data);
+        renderTree(siteMapData);
+
+      } catch (error) {
+        console.error('Error loading site map:', error);
+        container.innerHTML = `
+          <div class="empty-state">
+            <h2>❌ Error Loading Site Map</h2>
+            <p>${error.message}</p>
+            <button onclick="loadSiteMap()" style="margin-top: 1rem; padding: 0.6rem 1.2rem; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer;">
+              Try Again
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    function updateStats(data) {
+      document.getElementById('mapStats').style.display = 'flex';
+
+      // Count pages, modules, and directories
+      let pageCount = 0;
+      let moduleCount = 0;
+      let dirCount = 0;
+
+      function countItems(items) {
+        items.forEach(item => {
+          if (item.type === 'file') {
+            pageCount++;
+            moduleCount += item.moduleCount || 0;
+          } else if (item.type === 'directory') {
+            dirCount++;
+            if (item.children) {
+              countItems(item.children);
+            }
+          }
+        });
+      }
+
+      countItems(data.siteMap);
+
+      document.getElementById('totalPages').textContent = pageCount;
+      document.getElementById('totalModules').textContent = moduleCount;
+      document.getElementById('totalDirectories').textContent = dirCount;
+
+      const scanTime = new Date(data.timestamp);
+      document.getElementById('lastScanned').textContent = scanTime.toLocaleTimeString();
+    }
+
+    function renderTree(items, parentPath = '') {
+      const container = document.getElementById('treeContainer');
+
+      if (!items || items.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <h2>📭 No Pages Found</h2>
+            <p>No HTML files were found in the public directory.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '<div id="treeRoot"></div>';
+      const root = document.getElementById('treeRoot');
+
+      function renderNode(item, parent) {
+        const nodeDiv = document.createElement('div');
+        nodeDiv.className = `tree-node ${item.type}`;
+        nodeDiv.dataset.path = item.path;
+
+        if (item.type === 'directory') {
+          const hasChildren = item.children && item.children.length > 0;
+          const isExpanded = expandedNodes.has(item.path);
+
+          const contentDiv = document.createElement('div');
+          contentDiv.className = 'node-content';
+
+          if (hasChildren) {
+            const toggle = document.createElement('span');
+            toggle.className = 'expand-toggle';
+            toggle.textContent = isExpanded ? '▼' : '▶';
+            toggle.onclick = () => toggleNode(item.path);
+            contentDiv.appendChild(toggle);
+          }
+
+          const icon = document.createElement('span');
+          icon.className = 'node-icon';
+          icon.textContent = isExpanded ? '📂' : '📁';
+          contentDiv.appendChild(icon);
+
+          const text = document.createTextNode(` ${item.name}`);
+          contentDiv.appendChild(text);
+
+          nodeDiv.appendChild(contentDiv);
+
+          if (hasChildren) {
+            const childrenDiv = document.createElement('div');
+            childrenDiv.className = `tree-children${isExpanded ? '' : ' collapsed'}`;
+            childrenDiv.id = `children-${item.path}`;
+
+            item.children.forEach(child => renderNode(child, childrenDiv));
+            nodeDiv.appendChild(childrenDiv);
+          }
+
+        } else if (item.type === 'file') {
+          const contentDiv = document.createElement('div');
+          contentDiv.className = 'node-content';
+
+          // Icon
+          const icon = document.createElement('span');
+          icon.className = 'node-icon';
+          icon.textContent = '📄';
+          contentDiv.appendChild(icon);
+
+          // Title and path
+          const titleDiv = document.createElement('div');
+          titleDiv.className = 'node-title';
+
+          const nameSpan = document.createElement('div');
+          nameSpan.className = 'node-name';
+          nameSpan.textContent = item.title;
+          titleDiv.appendChild(nameSpan);
+
+          const pathSpan = document.createElement('div');
+          pathSpan.className = 'node-path';
+          pathSpan.textContent = item.path;
+          titleDiv.appendChild(pathSpan);
+
+          contentDiv.appendChild(titleDiv);
+
+          // Modules
+          if (item.modules && item.modules.length > 0) {
+            const modulesDiv = document.createElement('div');
+            modulesDiv.className = 'node-modules';
+
+            const moduleIcons = {
+              'claim-rewards': '🎁',
+              'factory-craft': '🏭',
+              'blend-array': '🎨',
+              'transfer-mode': '📤',
+              'unpack': '📦',
+              'nefty-drop': '🎯',
+              'text-block': '📝',
+              'image-block': '🖼️'
+            };
+
+            item.modules.forEach(moduleType => {
+              const tag = document.createElement('span');
+              tag.className = 'module-tag';
+              const icon = moduleIcons[moduleType] || '⚙️';
+              tag.textContent = `${icon} ${moduleType}`;
+              modulesDiv.appendChild(tag);
+            });
+
+            contentDiv.appendChild(modulesDiv);
+          }
+
+          // Actions
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'node-actions';
+
+          const viewLink = document.createElement('a');
+          viewLink.href = `/${item.path}`;
+          viewLink.textContent = '👁️ View';
+          viewLink.target = '_blank';
+          actionsDiv.appendChild(viewLink);
+
+          const editLink = document.createElement('a');
+          editLink.href = `/site-builder.html?edit=${encodeURIComponent(item.path)}`;
+          editLink.className = 'edit-btn';
+          editLink.textContent = '✏️ Edit';
+          actionsDiv.appendChild(editLink);
+
+          contentDiv.appendChild(actionsDiv);
+          nodeDiv.appendChild(contentDiv);
+        }
+
+        parent.appendChild(nodeDiv);
+      }
+
+      items.forEach(item => renderNode(item, root));
+    }
+
+    function toggleNode(path) {
+      if (expandedNodes.has(path)) {
+        expandedNodes.delete(path);
+      } else {
+        expandedNodes.add(path);
+      }
+      renderTree(siteMapData);
+    }
+
+    function expandAll() {
+      function addAllPaths(items) {
+        items.forEach(item => {
+          if (item.type === 'directory') {
+            expandedNodes.add(item.path);
+            if (item.children) {
+              addAllPaths(item.children);
+            }
+          }
+        });
+      }
+
+      addAllPaths(siteMapData);
+      renderTree(siteMapData);
+    }
+
+    function collapseAll() {
+      expandedNodes.clear();
+      renderTree(siteMapData);
+    }
+
+    function filterTree(query) {
+      const lowerQuery = query.toLowerCase().trim();
+
+      if (!lowerQuery) {
+        // No filter, show everything
+        document.querySelectorAll('.tree-node').forEach(node => {
+          node.style.display = '';
+        });
+        return;
+      }
+
+      // Filter nodes
+      document.querySelectorAll('.tree-node').forEach(node => {
+        const path = node.dataset.path || '';
+        const content = node.textContent.toLowerCase();
+
+        if (content.includes(lowerQuery) || path.toLowerCase().includes(lowerQuery)) {
+          node.style.display = '';
+          // Expand parent directories
+          let parent = node.closest('.tree-children');
+          while (parent) {
+            parent.classList.remove('collapsed');
+            parent = parent.parentElement.closest('.tree-children');
+          }
+        } else {
+          node.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>

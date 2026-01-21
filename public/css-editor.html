@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSS Visual Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: #fff;
+            color: #667eea;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 500px 1fr;
+            min-height: calc(100vh - 180px);
+            gap: 0;
+        }
+
+        .controls-panel {
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            max-height: calc(100vh - 180px);
+        }
+
+        .controls-inner {
+            padding: 2rem;
+        }
+
+        .category {
+            margin-bottom: 2rem;
+        }
+
+        .category-header {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .category-icon {
+            font-size: 1.5rem;
+        }
+
+        .control-group {
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #e8e8e8;
+        }
+
+        .control-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        .variable-name {
+            font-family: 'Courier New', monospace;
+            color: #667eea;
+            font-size: 0.85rem;
+            margin-left: 0.25rem;
+        }
+
+        .control-input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .control-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        input[type="color"] {
+            height: 50px;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+
+        .color-input-group {
+            display: grid;
+            grid-template-columns: 70px 1fr;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .range-input-group {
+            display: grid;
+            grid-template-columns: 1fr 80px;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+
+        .range-value {
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #667eea;
+            padding: 0.5rem;
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+        }
+
+        .preview-panel {
+            background: #fafafa;
+            overflow-y: auto;
+            max-height: calc(100vh - 180px);
+            padding: 2rem;
+        }
+
+        .preview-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .preview-section h3 {
+            margin-bottom: 1.5rem;
+            color: #667eea;
+            font-size: 1.25rem;
+        }
+
+        .status-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideIn 0.3s ease;
+            z-index: 2000;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .status-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .status-error {
+            background: #ef4444;
+            color: white;
+        }
+
+        .status-loading {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Preview Styles - Will be updated dynamically */
+        .preview-colors {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 1rem;
+        }
+
+        .color-swatch {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            display: flex;
+            align-items: flex-end;
+            padding: 0.5rem;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .preview-typography {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .preview-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .preview-card {
+            border: 1px solid var(--border-color, #e0e0e0);
+            border-radius: var(--border-radius, 8px);
+            padding: 1.5rem;
+            background: var(--card-bg, white);
+        }
+
+        .search-box {
+            margin-bottom: 1.5rem;
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 1rem;
+            border-bottom: 1px solid #e0e0e0;
+            z-index: 100;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .control-group.hidden {
+            display: none;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 2rem;
+            color: #999;
+            font-style: italic;
+        }
+
+        @media (max-width: 1024px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+
+            .controls-panel {
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+                max-height: none;
+            }
+
+            .preview-panel {
+                max-height: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 CSS Visual Editor</h1>
+        <p>Customize your site's appearance with visual controls</p>
+        <div class="header-actions">
+            <button class="btn btn-primary" id="saveBtn">
+                <span>💾</span> Save Changes
+            </button>
+            <button class="btn btn-secondary" id="reloadBtn">
+                <span>🔄</span> Reload CSS
+            </button>
+            <button class="btn btn-secondary" id="resetBtn">
+                <span>↩️</span> Reset to Original
+            </button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="controls-panel">
+            <div class="search-box">
+                <input type="text" class="search-input" id="searchInput" placeholder="🔍 Search variables...">
+            </div>
+            <div class="controls-inner" id="controlsContainer">
+                <p style="text-align: center; color: #999; padding: 2rem;">Loading CSS variables...</p>
+            </div>
+        </div>
+
+        <div class="preview-panel" id="previewPanel">
+            <div class="preview-section">
+                <h3>🎨 Color Palette</h3>
+                <div class="preview-colors" id="previewColors"></div>
+            </div>
+
+            <div class="preview-section">
+                <h3>📝 Typography</h3>
+                <div class="preview-typography" id="previewTypography">
+                    <h1 style="margin: 0;">Heading 1</h1>
+                    <h2 style="margin: 0;">Heading 2</h2>
+                    <h3 style="margin: 0;">Heading 3</h3>
+                    <p>This is a paragraph with normal text. It demonstrates the body font family, size, and line height settings.</p>
+                    <p style="font-weight: bold;">This is bold text to show font weight variations.</p>
+                </div>
+            </div>
+
+            <div class="preview-section">
+                <h3>🔘 Interactive Elements</h3>
+                <div class="preview-buttons">
+                    <button class="btn btn-primary">Primary Button</button>
+                    <button class="btn btn-secondary">Secondary Button</button>
+                    <input type="text" class="control-input" placeholder="Text input field" style="width: 250px;">
+                </div>
+            </div>
+
+            <div class="preview-section">
+                <h3>📦 Layout & Spacing</h3>
+                <div class="preview-card">
+                    <h4 style="margin-bottom: 1rem;">Sample Card</h4>
+                    <p>This card demonstrates border radius, padding, and background colors from your CSS variables.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let originalCSS = '';
+        let currentCSS = '';
+        let cssVariables = new Map();
+
+        // Category definitions with icons and variable patterns
+        const categories = {
+            colors: {
+                name: 'Colors',
+                icon: '🎨',
+                patterns: [/color/i, /^--primary/, /^--secondary/, /^--accent/, /^--bg-/, /^--text-/, /^--border-color/],
+                order: 1
+            },
+            spacing: {
+                name: 'Spacing & Layout',
+                icon: '📏',
+                patterns: [/spacing/i, /padding/i, /margin/i, /gap/i, /^--container-/, /^--section-/],
+                order: 2
+            },
+            typography: {
+                name: 'Typography',
+                icon: '📝',
+                patterns: [/font/i, /text/i, /line-height/i, /letter-spacing/i],
+                order: 3
+            },
+            borders: {
+                name: 'Borders & Radius',
+                icon: '⬛',
+                patterns: [/border/i, /radius/i, /outline/i],
+                order: 4
+            },
+            shadows: {
+                name: 'Shadows & Effects',
+                icon: '✨',
+                patterns: [/shadow/i, /blur/i, /opacity/i],
+                order: 5
+            },
+            transitions: {
+                name: 'Animations',
+                icon: '⚡',
+                patterns: [/transition/i, /duration/i, /animation/i, /timing/i],
+                order: 6
+            },
+            other: {
+                name: 'Other Variables',
+                icon: '⚙️',
+                patterns: [],
+                order: 99
+            }
+        };
+
+        // Detect variable type and create appropriate input
+        function detectVariableType(name, value) {
+            const trimmedValue = value.trim();
+            
+            // Color detection
+            if (trimmedValue.startsWith('#') || 
+                trimmedValue.startsWith('rgb') || 
+                trimmedValue.startsWith('hsl') ||
+                /color/i.test(name)) {
+                return 'color';
+            }
+            
+            // Numeric with units
+            if (/^-?\d+\.?\d*(px|em|rem|%|vh|vw|pt|ch|ex)$/.test(trimmedValue)) {
+                return 'size';
+            }
+            
+            // Pure number
+            if (/^-?\d+\.?\d*$/.test(trimmedValue)) {
+                return 'number';
+            }
+            
+            return 'text';
+        }
+
+        // Categorize a variable
+        function categorizeVariable(name) {
+            for (const [key, category] of Object.entries(categories)) {
+                if (key === 'other') continue;
+                for (const pattern of category.patterns) {
+                    if (pattern.test(name)) {
+                        return key;
+                    }
+                }
+            }
+            return 'other';
+        }
+
+        // Parse CSS to extract variables
+        function parseCSS(cssText) {
+            cssVariables.clear();
+            const rootMatch = cssText.match(/:root\s*{([^}]*)}/s);
+            
+            if (!rootMatch) {
+                console.error('No :root block found in CSS');
+                return;
+            }
+
+            const rootContent = rootMatch[1];
+            const variableRegex = /(--[\w-]+)\s*:\s*([^;]+);/g;
+            let match;
+
+            while ((match = variableRegex.exec(rootContent)) !== null) {
+                const name = match[1];
+                const value = match[2].trim();
+                const type = detectVariableType(name, value);
+                const category = categorizeVariable(name);
+
+                cssVariables.set(name, {
+                    value,
+                    type,
+                    category,
+                    originalValue: value
+                });
+            }
+
+            console.log(`Parsed ${cssVariables.size} CSS variables`);
+        }
+
+        // Create control for a variable
+        function createControl(name, varData) {
+            const group = document.createElement('div');
+            group.className = 'control-group';
+            group.dataset.variableName = name;
+
+            const label = document.createElement('label');
+            label.className = 'control-label';
+            const displayName = name.replace(/^--/, '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            label.innerHTML = `${displayName} <span class="variable-name">${name}</span>`;
+            group.appendChild(label);
+
+            let inputHTML = '';
+
+            switch (varData.type) {
+                case 'color':
+                    inputHTML = `
+                        <div class="color-input-group">
+                            <input type="color" class="control-input" data-var="${name}" value="${normalizeColor(varData.value)}">
+                            <input type="text" class="control-input" data-var="${name}" value="${varData.value}">
+                        </div>
+                    `;
+                    break;
+
+                case 'size':
+                    const numMatch = varData.value.match(/^(-?\d+\.?\d*)(.*)/);
+                    if (numMatch) {
+                        const num = parseFloat(numMatch[1]);
+                        const unit = numMatch[2] || '';
+                        const max = unit === 'px' ? 500 : (unit === 'rem' || unit === 'em' ? 10 : 100);
+                        const step = unit === 'px' ? 1 : 0.1;
+                        inputHTML = `
+                            <div class="range-input-group">
+                                <input type="range" class="control-input" data-var="${name}" min="0" max="${max}" step="${step}" value="${num}">
+                                <input type="text" class="range-value" data-var="${name}" value="${varData.value}" readonly>
+                            </div>
+                        `;
+                    } else {
+                        inputHTML = `<input type="text" class="control-input" data-var="${name}" value="${varData.value}">`;
+                    }
+                    break;
+
+                case 'number':
+                    const numValue = parseFloat(varData.value);
+                    inputHTML = `
+                        <div class="range-input-group">
+                            <input type="range" class="control-input" data-var="${name}" min="0" max="10" step="0.1" value="${numValue}">
+                            <input type="text" class="range-value" data-var="${name}" value="${varData.value}" readonly>
+                        </div>
+                    `;
+                    break;
+
+                default:
+                    inputHTML = `<input type="text" class="control-input" data-var="${name}" value="${varData.value}">`;
+            }
+
+            group.innerHTML += inputHTML;
+            return group;
+        }
+
+        // Normalize color to hex format for color input
+        function normalizeColor(color) {
+            const temp = document.createElement('div');
+            temp.style.color = color;
+            document.body.appendChild(temp);
+            const computed = window.getComputedStyle(temp).color;
+            document.body.removeChild(temp);
+
+            const match = computed.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+            if (match) {
+                return '#' + [1, 2, 3].map(i => {
+                    const hex = parseInt(match[i]).toString(16);
+                    return hex.length === 1 ? '0' + hex : hex;
+                }).join('');
+            }
+            return color.startsWith('#') ? color : '#000000';
+        }
+
+        // Render controls
+        function renderControls() {
+            const container = document.getElementById('controlsContainer');
+            container.innerHTML = '';
+
+            // Group variables by category
+            const grouped = {};
+            for (const [name, data] of cssVariables) {
+                if (!grouped[data.category]) {
+                    grouped[data.category] = [];
+                }
+                grouped[data.category].push({ name, data });
+            }
+
+            // Sort categories
+            const sortedCategories = Object.keys(grouped).sort((a, b) => {
+                return categories[a].order - categories[b].order;
+            });
+
+            // Render each category
+            for (const categoryKey of sortedCategories) {
+                const category = categories[categoryKey];
+                const variables = grouped[categoryKey];
+
+                if (variables.length === 0) continue;
+
+                const categoryDiv = document.createElement('div');
+                categoryDiv.className = 'category';
+
+                const header = document.createElement('div');
+                header.className = 'category-header';
+                header.innerHTML = `<span class="category-icon">${category.icon}</span> ${category.name}`;
+                categoryDiv.appendChild(header);
+
+                // Sort variables alphabetically within category
+                variables.sort((a, b) => a.name.localeCompare(b.name));
+
+                for (const { name, data } of variables) {
+                    categoryDiv.appendChild(createControl(name, data));
+                }
+
+                container.appendChild(categoryDiv);
+            }
+
+            attachEventListeners();
+            updatePreview();
+        }
+
+        // Attach event listeners to controls
+        function attachEventListeners() {
+            const inputs = document.querySelectorAll('[data-var]');
+            
+            inputs.forEach(input => {
+                const varName = input.dataset.var;
+                const varData = cssVariables.get(varName);
+
+                if (input.type === 'color') {
+                    input.addEventListener('input', (e) => {
+                        const hexValue = e.target.value;
+                        varData.value = hexValue;
+                        // Update text input
+                        const textInput = e.target.parentElement.querySelector('input[type="text"]');
+                        if (textInput) textInput.value = hexValue;
+                        updatePreview();
+                    });
+                } else if (input.type === 'range') {
+                    input.addEventListener('input', (e) => {
+                        const num = e.target.value;
+                        const originalValue = varData.originalValue;
+                        const unitMatch = originalValue.match(/[a-z%]+$/i);
+                        const unit = unitMatch ? unitMatch[0] : '';
+                        const newValue = num + unit;
+                        varData.value = newValue;
+                        // Update display
+                        const valueDisplay = e.target.parentElement.querySelector('.range-value');
+                        if (valueDisplay) valueDisplay.value = newValue;
+                        updatePreview();
+                    });
+                } else {
+                    input.addEventListener('input', (e) => {
+                        varData.value = e.target.value;
+                        // Update color picker if this is a text input for color
+                        const colorInput = e.target.parentElement.querySelector('input[type="color"]');
+                        if (colorInput) {
+                            try {
+                                colorInput.value = normalizeColor(e.target.value);
+                            } catch (err) {
+                                // Invalid color
+                            }
+                        }
+                        updatePreview();
+                    });
+                }
+            });
+        }
+
+        // Update live preview
+        function updatePreview() {
+            // Apply CSS variables to the document
+            const root = document.documentElement;
+            for (const [name, data] of cssVariables) {
+                root.style.setProperty(name, data.value);
+            }
+
+            // Update color swatches
+            updateColorSwatches();
+        }
+
+        // Update color swatches in preview
+        function updateColorSwatches() {
+            const container = document.getElementById('previewColors');
+            container.innerHTML = '';
+
+            for (const [name, data] of cssVariables) {
+                if (data.type === 'color') {
+                    const swatch = document.createElement('div');
+                    swatch.className = 'color-swatch';
+                    swatch.style.background = data.value;
+                    swatch.textContent = name.replace(/^--/, '');
+                    container.appendChild(swatch);
+                }
+            }
+        }
+
+        // Reconstruct CSS with updated variables
+        function reconstructCSS() {
+            let newRootContent = '';
+            
+            for (const [name, data] of cssVariables) {
+                newRootContent += `  ${name}: ${data.value};\n`;
+            }
+
+            // Replace the :root block in the original CSS
+            const newCSS = currentCSS.replace(
+                /:root\s*{[^}]*}/s,
+                `:root {\n${newRootContent}}`
+            );
+
+            return newCSS;
+        }
+
+        // Show status message
+        function showStatus(message, type = 'success') {
+            const existing = document.querySelector('.status-message');
+            if (existing) existing.remove();
+
+            const status = document.createElement('div');
+            status.className = `status-message status-${type}`;
+            status.textContent = message;
+            document.body.appendChild(status);
+
+            if (type !== 'loading') {
+                setTimeout(() => status.remove(), 3000);
+            }
+
+            return status;
+        }
+
+        // Load CSS from server
+        async function loadCSS() {
+            try {
+                const response = await fetch('/api/css/load');
+                if (!response.ok) throw new Error('Failed to load CSS');
+                
+                const data = await response.json();
+                currentCSS = originalCSS = data.css;
+                
+                parseCSS(currentCSS);
+                renderControls();
+                
+                showStatus('CSS loaded successfully!', 'success');
+            } catch (error) {
+                console.error('Error loading CSS:', error);
+                showStatus('Error loading CSS: ' + error.message, 'error');
+            }
+        }
+
+        // Save CSS to server
+        async function saveCSS() {
+            const statusMsg = showStatus('Saving changes...', 'loading');
+            
+            try {
+                const updatedCSS = reconstructCSS();
+                
+                const response = await fetch('/api/css/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ css: updatedCSS })
+                });
+
+                if (!response.ok) throw new Error('Failed to save CSS');
+                
+                const result = await response.json();
+                currentCSS = updatedCSS;
+                
+                statusMsg.remove();
+                showStatus('Changes saved successfully!', 'success');
+            } catch (error) {
+                console.error('Error saving CSS:', error);
+                statusMsg.remove();
+                showStatus('Error saving CSS: ' + error.message, 'error');
+            }
+        }
+
+        // Reset to original CSS
+        function resetCSS() {
+            if (confirm('Reset all changes to original values?')) {
+                currentCSS = originalCSS;
+                parseCSS(currentCSS);
+                renderControls();
+                showStatus('Reset to original values', 'success');
+            }
+        }
+
+        // Search functionality
+        function setupSearch() {
+            const searchInput = document.getElementById('searchInput');
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const groups = document.querySelectorAll('.control-group');
+                let visibleCount = 0;
+
+                groups.forEach(group => {
+                    const varName = group.dataset.variableName.toLowerCase();
+                    const label = group.querySelector('.control-label').textContent.toLowerCase();
+                    
+                    if (varName.includes(query) || label.includes(query)) {
+                        group.classList.remove('hidden');
+                        visibleCount++;
+                    } else {
+                        group.classList.add('hidden');
+                    }
+                });
+
+                // Show/hide categories based on visible controls
+                document.querySelectorAll('.category').forEach(category => {
+                    const visibleInCategory = category.querySelectorAll('.control-group:not(.hidden)').length;
+                    category.style.display = visibleInCategory > 0 ? 'block' : 'none';
+                });
+
+                // Show no results message
+                const existing = document.querySelector('.no-results');
+                if (existing) existing.remove();
+
+                if (visibleCount === 0 && query) {
+                    const noResults = document.createElement('div');
+                    noResults.className = 'no-results';
+                    noResults.textContent = 'No variables found matching "' + query + '"';
+                    document.getElementById('controlsContainer').appendChild(noResults);
+                }
+            });
+        }
+
+        // Initialize
+        document.getElementById('saveBtn').addEventListener('click', saveCSS);
+        document.getElementById('reloadBtn').addEventListener('click', loadCSS);
+        document.getElementById('resetBtn').addEventListener('click', resetCSS);
+        
+        setupSearch();
+        loadCSS();
+    </script>
+</body>
+</html>

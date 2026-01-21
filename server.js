@@ -3182,7 +3182,11 @@ app.post('/api/page/save', async (req, res) => {
     const container = moduleElements[0].parentNode;
 
     // Remove all existing module elements
-    moduleElements.forEach(el => el.remove());
+    moduleElements.forEach(el => {
+      if (el.parentNode) {
+        el.parentNode.removeChild(el);
+      }
+    });
 
     // Module type to name mapping for comments
     const MODULE_NAMES = {
@@ -3289,8 +3293,8 @@ app.post('/api/page/save', async (req, res) => {
         }
       } else {
         // If CSS is empty, remove the style tag
-        if (customCSSElement) {
-          customCSSElement.remove();
+        if (customCSSElement && customCSSElement.parentNode) {
+          customCSSElement.parentNode.removeChild(customCSSElement);
         }
       }
     }
@@ -3536,6 +3540,186 @@ app.post('/api/story-index/save', async (req, res) => {
 
   } catch (error) {
     console.error('Error saving story index:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/site-map/scan
+ * Scan the entire public directory to build a site map with all pages and their modules
+ */
+app.get('/api/site-map/scan', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { parse } = require('node-html-parser');
+
+    const publicDir = path.join(__dirname, 'public');
+
+    // Recursively scan directory for HTML files
+    function scanDirectory(dir, basePath = '') {
+      const items = [];
+
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          const relativePath = basePath ? `${basePath}/${entry.name}` : entry.name;
+
+          // Skip node_modules, .git, etc
+          if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+            continue;
+          }
+
+          if (entry.isDirectory()) {
+            const children = scanDirectory(fullPath, relativePath);
+            if (children.length > 0) {
+              items.push({
+                type: 'directory',
+                name: entry.name,
+                path: relativePath,
+                children: children
+              });
+            }
+          } else if (entry.isFile() && entry.name.endsWith('.html')) {
+            // Parse the HTML file to extract modules
+            try {
+              const htmlContent = fs.readFileSync(fullPath, 'utf8');
+              const root = parse(htmlContent);
+
+              // Extract title
+              const titleEl = root.querySelector('title');
+              const title = titleEl ? titleEl.text : entry.name;
+
+              // Extract modules
+              const moduleElements = root.querySelectorAll('[data-module]');
+              const modules = [];
+
+              moduleElements.forEach(el => {
+                const moduleType = el.getAttribute('data-module');
+                if (moduleType) {
+                  modules.push(moduleType);
+                }
+              });
+
+              items.push({
+                type: 'file',
+                name: entry.name,
+                path: relativePath,
+                title: title,
+                modules: modules,
+                moduleCount: modules.length
+              });
+            } catch (err) {
+              console.warn(`Could not parse ${relativePath}:`, err.message);
+              items.push({
+                type: 'file',
+                name: entry.name,
+                path: relativePath,
+                title: entry.name,
+                modules: [],
+                moduleCount: 0,
+                error: 'Could not parse file'
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Error scanning ${dir}:`, err);
+      }
+
+      return items;
+    }
+
+    const siteMap = scanDirectory(publicDir);
+
+    res.json({
+      success: true,
+      siteMap: siteMap,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error scanning site map:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/css/load
+ * Load the global styles.css file
+ */
+app.get('/api/css/load', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const cssPath = path.join(__dirname, 'public', 'styles.css');
+
+    if (!fs.existsSync(cssPath)) {
+      return res.status(404).json({ error: 'styles.css not found', success: false });
+    }
+
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+
+    // Parse CSS variables from :root
+    const cssVars = {};
+    const rootMatch = cssContent.match(/:root\s*\{([^}]+)\}/);
+    if (rootMatch) {
+      const varsContent = rootMatch[1];
+      const varMatches = varsContent.matchAll(/--([a-z-]+)\s*:\s*([^;]+);/g);
+      for (const match of varMatches) {
+        cssVars[match[1]] = match[2].trim();
+      }
+    }
+
+    res.json({
+      success: true,
+      cssContent: cssContent,
+      cssVars: cssVars
+    });
+
+  } catch (error) {
+    console.error('Error loading CSS:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/css/save
+ * Save updated CSS content
+ * Body: { cssContent: "..." }
+ */
+app.post('/api/css/save', async (req, res) => {
+  try {
+    const { cssContent } = req.body;
+
+    if (!cssContent) {
+      return res.status(400).json({ error: 'cssContent is required', success: false });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const cssPath = path.join(__dirname, 'public', 'styles.css');
+
+    // Backup current CSS
+    const backupPath = path.join(__dirname, 'public', 'styles.css.backup');
+    if (fs.existsSync(cssPath)) {
+      fs.copyFileSync(cssPath, backupPath);
+    }
+
+    // Write new CSS
+    fs.writeFileSync(cssPath, cssContent, 'utf8');
+
+    console.log('✅ Saved CSS file');
+
+    res.json({
+      success: true,
+      message: 'CSS saved successfully'
+    });
+
+  } catch (error) {
+    console.error('Error saving CSS:', error);
     res.status(500).json({ error: error.message, success: false });
   }
 });
