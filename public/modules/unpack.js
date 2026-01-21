@@ -128,23 +128,32 @@ window.init_unpack = function(containerId, config = {}) {
         if (WaxLib) {
           try {
             wax = new WaxLib.WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
-            const autoLoginAccount = await wax.login();
-            if (autoLoginAccount) {
-              if (autoLoginAccount === savedAccount) {
-                currentAccount = autoLoginAccount;
-                showConnectedState();
-                console.log('✅ Auto-logged in with WCW:', currentAccount);
-              } else {
-                // Account mismatch, update to new account
-                currentAccount = autoLoginAccount;
-                localStorage.setItem('wax_account', autoLoginAccount);
-                showConnectedState();
-                console.log('✅ Auto-logged in with different WCW account:', currentAccount);
+
+            // Check if auto-login is available before calling login()
+            const isAutoLoginAvailable = await wax.isAutoLoginAvailable();
+
+            if (isAutoLoginAvailable) {
+              const autoLoginAccount = await wax.login();
+              if (autoLoginAccount) {
+                if (autoLoginAccount === savedAccount) {
+                  currentAccount = autoLoginAccount;
+                  showConnectedState();
+                  console.log('✅ Auto-logged in with WCW:', currentAccount);
+                } else {
+                  // Account mismatch, update to new account
+                  currentAccount = autoLoginAccount;
+                  localStorage.setItem('wax_account', autoLoginAccount);
+                  showConnectedState();
+                  console.log('✅ Auto-logged in with different WCW account:', currentAccount);
+                }
               }
+            } else {
+              console.log('⚠️ WCW auto-login not available (user needs to connect manually)');
+              // Don't call login() - it would show the popup
+              // User will need to click connect button
             }
           } catch (error) {
-            console.log('⚠️ WCW auto-login not available (session expired or user not logged in)');
-            console.log('💡 User can click connect button to log in again');
+            console.log('⚠️ WCW auto-login failed:', error.message);
             // Don't clear storage - let user reconnect easily
           }
         }

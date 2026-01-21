@@ -123,17 +123,27 @@ window.init_blend_array = function(containerId, config = {}) {
         if (WaxLib) {
           try {
             wax = new WaxLib({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
-            const autoLoginAccount = await wax.login();
-            if (autoLoginAccount) {
-              currentAccount = autoLoginAccount;
-              if (autoLoginAccount !== savedAccount) {
-                localStorage.setItem('wax_account', autoLoginAccount);
+
+            // Check if auto-login is available before calling login()
+            const isAutoLoginAvailable = await wax.isAutoLoginAvailable();
+
+            if (isAutoLoginAvailable) {
+              const autoLoginAccount = await wax.login();
+              if (autoLoginAccount) {
+                currentAccount = autoLoginAccount;
+                if (autoLoginAccount !== savedAccount) {
+                  localStorage.setItem('wax_account', autoLoginAccount);
+                }
+                showConnectedState();
+                console.log('✅ Auto-logged in with WCW:', currentAccount);
               }
-              showConnectedState();
-              console.log('✅ Auto-logged in with WCW:', currentAccount);
+            } else {
+              console.log('⚠️ WCW auto-login not available (user needs to connect manually)');
+              // Don't call login() - it would show the popup
+              // User will need to click connect button
             }
           } catch (error) {
-            console.log('⚠️ WCW auto-login not available');
+            console.log('⚠️ WCW auto-login failed:', error.message);
           }
         }
       }
@@ -312,13 +322,39 @@ window.init_blend_array = function(containerId, config = {}) {
         blendCard.addEventListener('click', () => selectBlend(blend));
       }
 
-      // Build ingredients display
+      // Build result image display (show first result's image)
+      let resultImageHtml = '';
+      if (blend.results && blend.results[0]) {
+        const result = blend.results[0];
+        if (result.img) {
+          const imgUrl = result.img.startsWith('Qm')
+            ? `https://ipfs.io/ipfs/${result.img}`
+            : result.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
+          resultImageHtml = `
+            <div style="text-align: center; margin-bottom: 15px;">
+              <img src="${imgUrl}" alt="${result.name}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px; border: 2px solid var(--primary);">
+            </div>
+          `;
+        }
+      }
+
+      // Build ingredients display with small images
       let ingredientsHtml = blend.ingredients.map(ing => {
         const hasEnough = ing.owned >= ing.amount;
+        let imgHtml = '';
+        if (ing.img) {
+          const imgUrl = ing.img.startsWith('Qm')
+            ? `https://ipfs.io/ipfs/${ing.img}`
+            : ing.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
+          imgHtml = `<img src="${imgUrl}" alt="${ing.name}" style="width: 32px; height: 32px; object-fit: cover; border-radius: 4px; margin-right: 8px;">`;
+        }
         return `
-          <div style="display: flex; justify-content: space-between; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 5px;">
-            <span>${ing.name || `Template #${ing.template_id}`}</span>
-            <span style="color: ${hasEnough ? '#4ade80' : '#f87171'};">${ing.owned}/${ing.amount}</span>
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 5px;">
+            <div style="display: flex; align-items: center; flex: 1;">
+              ${imgHtml}
+              <span style="font-size: 0.85rem;">${ing.name || `Template #${ing.template_id}`}</span>
+            </div>
+            <span style="color: ${hasEnough ? '#4ade80' : '#f87171'}; font-weight: 600;">${ing.owned}/${ing.amount}</span>
           </div>
         `;
       }).join('');
@@ -326,16 +362,16 @@ window.init_blend_array = function(containerId, config = {}) {
       // Build result display
       let resultHtml = blend.results.map(res => {
         const probability = res.total_odds ? `${((res.odds / res.total_odds) * 100).toFixed(1)}%` : '100%';
-        return `<div style="color: var(--success); font-weight: 600;">• ${res.name || `Template #${res.template_id}`} (${probability})</div>`;
+        return `<div style="color: var(--success); font-weight: 600; font-size: 0.9rem;">• ${res.name || `Template #${res.template_id}`} (${probability})</div>`;
       }).join('');
 
       blendCard.innerHTML = `
-        <div style="display: flex; justify-content: between; align-items: start; margin-bottom: 15px;">
-          <div>
-            <h3 style="margin: 0 0 5px 0;">Blend #${blend.blend_id}</h3>
-            <div style="font-size: 0.85rem; color: var(--text-secondary);">
-              ${canExecute ? '✅ Can Execute' : `❌ Missing ${missingCount} ingredient(s)`}
-            </div>
+        ${resultImageHtml}
+
+        <div style="margin-bottom: 15px;">
+          <h3 style="margin: 0 0 5px 0;">Blend #${blend.blend_id}</h3>
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">
+            ${canExecute ? '✅ Can Execute' : `❌ Missing ${missingCount} ingredient(s)`}
           </div>
         </div>
 
@@ -396,25 +432,49 @@ window.init_blend_array = function(containerId, config = {}) {
       blend.ingredients.forEach(ing => {
         const templateAssets = assetsByTemplate[ing.template_id] || [];
 
+        // Sort by mint number DESCENDING (highest first - low mints are valuable!)
+        const sortedAssets = templateAssets.sort((a, b) => {
+          const mintA = parseInt(a.template_mint) || 0;
+          const mintB = parseInt(b.template_mint) || 0;
+          return mintB - mintA; // Descending (highest mint first)
+        });
+
+        // Show at least 5 assets or more if available (minimum of needed + 3 extra)
+        const assetsToShow = Math.max(5, ing.amount + 3);
+        const displayAssets = sortedAssets.slice(0, Math.min(assetsToShow, sortedAssets.length));
+
         const ingSection = document.createElement('div');
         ingSection.style.cssText = 'margin-bottom: 20px; padding: 15px; background: var(--bg-dark); border-radius: 8px;';
+
+        // Get image for ingredient
+        let ingImg = '';
+        if (ing.img) {
+          const imgUrl = ing.img.startsWith('Qm')
+            ? `https://ipfs.io/ipfs/${ing.img}`
+            : ing.img.replace('ipfs://', 'https://ipfs.io/ipfs/');
+          ingImg = `<img src="${imgUrl}" alt="${ing.name}" style="width: 40px; height: 40px; object-fit: cover; border-radius: 6px; margin-right: 10px; vertical-align: middle;">`;
+        }
+
         ingSection.innerHTML = `
-          <h4 style="margin: 0 0 10px 0;">Template #${ing.template_id} - Need ${ing.amount}</h4>
-          <div class="template-assets-grid-${ing.template_id}" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px;"></div>
+          <h4 style="margin: 0 0 10px 0; display: flex; align-items: center;">
+            ${ingImg}
+            <span>${ing.name || `Template #${ing.template_id}`} - Need ${ing.amount}</span>
+          </h4>
+          <div class="template-assets-grid-${ing.template_id}" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;"></div>
         `;
 
         ingredientsListEl.appendChild(ingSection);
 
         const gridEl = ingSection.querySelector(`.template-assets-grid-${ing.template_id}`);
 
-        // Show assets for this template
-        templateAssets.slice(0, ing.amount * 2).forEach(asset => {
+        // Show assets for this template with images
+        displayAssets.forEach(asset => {
           const assetBox = document.createElement('div');
           assetBox.className = `blend-asset-box-${asset.asset_id}`;
           assetBox.dataset.assetId = asset.asset_id;
           assetBox.dataset.templateId = ing.template_id;
           assetBox.style.cssText = `
-            padding: 8px;
+            padding: 10px;
             background: rgba(255,255,255,0.05);
             border: 2px solid transparent;
             border-radius: 6px;
@@ -424,9 +484,24 @@ window.init_blend_array = function(containerId, config = {}) {
             transition: all 0.2s;
           `;
 
+          // Get asset image
+          let assetImgHtml = '';
+          if (asset.data && (asset.data.img || asset.data.video)) {
+            const mediaUrl = (asset.data.img || asset.data.video).startsWith('Qm')
+              ? `https://ipfs.io/ipfs/${asset.data.img || asset.data.video}`
+              : (asset.data.img || asset.data.video).replace('ipfs://', 'https://ipfs.io/ipfs/');
+
+            if (asset.data.video) {
+              assetImgHtml = `<video src="${mediaUrl}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; margin-bottom: 5px;" muted loop autoplay playsinline></video>`;
+            } else {
+              assetImgHtml = `<img src="${mediaUrl}" alt="Asset" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; margin-bottom: 5px;">`;
+            }
+          }
+
           assetBox.innerHTML = `
-            <div style="font-weight: 600;">#${asset.asset_id}</div>
-            <div style="color: var(--text-secondary);">Mint #${asset.template_mint || 'N/A'}</div>
+            ${assetImgHtml}
+            <div style="font-weight: 600; font-size: 0.7rem;">#${asset.asset_id}</div>
+            <div style="color: var(--text-secondary); font-size: 0.7rem;">Mint #${asset.template_mint || 'N/A'}</div>
           `;
 
           assetBox.addEventListener('click', () => toggleAssetSelection(asset, ing));
@@ -511,7 +586,7 @@ window.init_blend_array = function(containerId, config = {}) {
       const assetIdsArray = Array.from(selectedAssetIds);
       const actions = [{
         account: 'blend.nefty',
-        name: 'claimblend',
+        name: 'logblend',  // NeftyBlends action is 'logblend', not 'claimblend'
         authorization: [{
           actor: currentAccount,
           permission: 'active'
