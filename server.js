@@ -3115,10 +3115,18 @@ app.get('/api/page/load/:filepath(*)', async (req, res) => {
       }
     });
 
+    // Extract custom CSS if present
+    let customCSS = '';
+    const customCSSElement = root.querySelector('#custom-page-css');
+    if (customCSSElement) {
+      customCSS = customCSSElement.innerHTML || '';
+    }
+
     res.json({
       success: true,
       filepath: filepath,
       modules: modules,
+      customCSS: customCSS,
       html: htmlContent
     });
 
@@ -3135,7 +3143,7 @@ app.get('/api/page/load/:filepath(*)', async (req, res) => {
  */
 app.post('/api/page/save', async (req, res) => {
   try {
-    const { filepath, modules } = req.body;
+    const { filepath, modules, customCSS } = req.body;
 
     if (!filepath || !modules) {
       return res.status(400).json({ error: 'filepath and modules are required', success: false });
@@ -3183,7 +3191,9 @@ app.post('/api/page/save', async (req, res) => {
       'transfer-mode': 'Transfer Mode',
       'unpack': 'Unpack Module',
       'blend-array': 'Blend Array',
-      'nefty-drop': 'NeftyBlocks Drop'
+      'nefty-drop': 'NeftyBlocks Drop',
+      'text-block': 'Text Block',
+      'image-block': 'Image Block'
     };
 
     // Generate new module HTML elements
@@ -3194,16 +3204,61 @@ app.post('/api/page/save', async (req, res) => {
       const comment = parse(`<!-- ${moduleName} -->`);
       container.appendChild(comment.firstChild);
 
-      // Create module div with proper formatting
-      const configJson = JSON.stringify(module.config);
-      const escapedConfig = configJson.replace(/"/g, '&quot;');
+      let moduleHtml = '';
 
-      const moduleHtml = `
+      // Handle text-block specially
+      if (module.moduleType === 'text-block') {
+        const styles = {
+          normal: 'padding: 20px; line-height: 1.6;',
+          narrative: 'background: var(--bg-secondary); border-left: 4px solid var(--primary); padding: 2rem; border-radius: 8px; line-height: 1.8; font-size: 1.05rem;',
+          alert: 'background: #fef3c7; border: 2px solid #f59e0b; padding: 20px; border-radius: 8px; color: #92400e;',
+          quote: 'border-left: 4px solid var(--border); padding: 20px; font-style: italic; color: var(--text-secondary); margin: 20px 0;'
+        };
+        const style = styles[module.config.style] || styles.normal;
+        const className = module.config.style === 'narrative' ? ' class="narrative"' : '';
+        const configJson = JSON.stringify(module.config);
+        const escapedConfig = configJson.replace(/"/g, '&quot;');
+
+        moduleHtml = `
+      <div${className} id="module-${module.id}" data-module="text-block" data-config="${escapedConfig}" style="${style}">
+        ${module.config.heading ? `<h2 style="margin-top: 0; color: var(--primary);">${module.config.heading}</h2>` : ''}
+        ${module.config.content}
+      </div>`;
+      }
+      // Handle image-block specially
+      else if (module.moduleType === 'image-block') {
+        const textAlign = module.config.alignment || 'center';
+        const configJson = JSON.stringify(module.config);
+        const escapedConfig = configJson.replace(/"/g, '&quot;');
+
+        moduleHtml = `
+      <div id="module-${module.id}" data-module="image-block" data-config="${escapedConfig}" style="text-align: ${textAlign}; padding: 20px;">`;
+
+        if (module.config.image_url) {
+          moduleHtml += `
+        <img src="${module.config.image_url}" alt="${module.config.alt_text}" style="max-width: ${module.config.width}; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">`;
+        }
+
+        if (module.config.caption) {
+          moduleHtml += `
+        <p style="margin-top: 10px; font-size: 0.9rem; color: var(--text-secondary);">${module.config.caption}</p>`;
+        }
+
+        moduleHtml += `
+      </div>`;
+      }
+      // Handle regular modules
+      else {
+        const configJson = JSON.stringify(module.config);
+        const escapedConfig = configJson.replace(/"/g, '&quot;');
+
+        moduleHtml = `
       <div
         id="module-${module.id}"
         data-module="${module.moduleType}"
         data-config="${escapedConfig}"
       ></div>`;
+      }
 
       const moduleNode = parse(moduleHtml);
       container.appendChild(moduleNode.firstChild);
@@ -3213,6 +3268,32 @@ app.post('/api/page/save', async (req, res) => {
         container.appendChild(parse('\n\n').firstChild);
       }
     });
+
+    // Handle custom CSS
+    if (customCSS !== undefined) {
+      // Find or create custom CSS style tag
+      let customCSSElement = root.querySelector('#custom-page-css');
+
+      if (customCSS && customCSS.trim()) {
+        // If CSS is provided, create or update the style tag
+        if (!customCSSElement) {
+          // Create new style tag in <head>
+          const head = root.querySelector('head');
+          if (head) {
+            const styleNode = parse(`<style id="custom-page-css">\n${customCSS}\n  </style>`);
+            head.appendChild(styleNode.firstChild);
+          }
+        } else {
+          // Update existing style tag
+          customCSSElement.set_content(`\n${customCSS}\n  `);
+        }
+      } else {
+        // If CSS is empty, remove the style tag
+        if (customCSSElement) {
+          customCSSElement.remove();
+        }
+      }
+    }
 
     // Write back to file
     fs.writeFileSync(fullPath, root.toString(), 'utf8');
@@ -3227,6 +3308,234 @@ app.post('/api/page/save', async (req, res) => {
 
   } catch (error) {
     console.error('Error saving page:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/page/create
+ * Create a new phase page
+ * Body: { phaseNumber, phaseTitle, phaseSubtitle }
+ */
+app.post('/api/page/create', async (req, res) => {
+  try {
+    const { phaseNumber, phaseTitle, phaseSubtitle } = req.body;
+
+    if (!phaseNumber || !phaseTitle) {
+      return res.status(400).json({ error: 'phaseNumber and phaseTitle are required', success: false });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const filepath = `story/phase${phaseNumber}.html`;
+    const fullPath = path.join(__dirname, 'public', filepath);
+
+    // Check if file already exists
+    if (fs.existsSync(fullPath)) {
+      return res.status(400).json({ error: 'Phase file already exists. Use Edit Page instead.', success: false });
+    }
+
+    // Create phase template
+    const template = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${phaseTitle} - Future's Relic</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .story-container { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+    .story-header { text-align: center; margin-bottom: 3rem; }
+    .story-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; color: var(--primary); }
+    .story-header .subtitle { font-size: 1.2rem; color: var(--text-secondary); }
+    .action-module { margin-bottom: 3rem; }
+    .nav-buttons { display: flex; justify-content: space-between; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <div class="story-container">
+    <div class="story-header">
+      <h1>${phaseTitle}</h1>
+      <p class="subtitle">${phaseSubtitle || ''}</p>
+    </div>
+
+    <div class="action-module">
+      <!-- Modules will be added here -->
+
+    </div>
+
+    <div class="nav-buttons">
+      <a href="/story/phase${parseInt(phaseNumber) - 1}.html" class="btn btn-secondary">← Phase ${parseInt(phaseNumber) - 1}</a>
+      <a href="/story/index.html" class="btn btn-primary">Back to Story Index</a>
+    </div>
+  </div>
+
+  <!-- Wallet Libraries -->
+  <script src="/waxjs.js"></script>
+  <script src="/anchor-simple.js"></script>
+
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>
+`;
+
+    // Ensure story directory exists
+    const storyDir = path.join(__dirname, 'public', 'story');
+    if (!fs.existsSync(storyDir)) {
+      fs.mkdirSync(storyDir, { recursive: true });
+    }
+
+    // Write the file
+    fs.writeFileSync(fullPath, template, 'utf8');
+
+    console.log(`✅ Created new phase: ${filepath}`);
+
+    res.json({
+      success: true,
+      message: 'Phase created successfully',
+      filepath: filepath
+    });
+
+  } catch (error) {
+    console.error('Error creating phase:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * GET /api/story-index/load
+ * Load the story index page and parse phase cards
+ */
+app.get('/api/story-index/load', async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { parse } = require('node-html-parser');
+
+    const filepath = path.join(__dirname, 'public', 'story', 'index.html');
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Story index not found', success: false });
+    }
+
+    const htmlContent = fs.readFileSync(filepath, 'utf8');
+    const root = parse(htmlContent);
+
+    // Parse phase cards - look for .phase-card elements
+    const phaseCards = root.querySelectorAll('.phase-card');
+    const phases = [];
+
+    phaseCards.forEach(card => {
+      const link = card.closest('a')?.getAttribute('href') || '';
+      const title = card.querySelector('h2')?.text || '';
+      const action = card.querySelector('.action')?.text || '';
+      const preview = card.querySelector('p:not(.action)')?.text || '';
+
+      phases.push({
+        title: title.trim(),
+        action: action.trim(),
+        preview: preview.trim(),
+        link: link.trim()
+      });
+    });
+
+    res.json({
+      success: true,
+      phases: phases
+    });
+
+  } catch (error) {
+    console.error('Error loading story index:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
+ * POST /api/story-index/save
+ * Save updated phase cards to story index
+ * Body: { phases: [...] }
+ */
+app.post('/api/story-index/save', async (req, res) => {
+  try {
+    const { phases } = req.body;
+
+    if (!phases || !Array.isArray(phases)) {
+      return res.status(400).json({ error: 'phases array is required', success: false });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const { parse } = require('node-html-parser');
+
+    const filepath = path.join(__dirname, 'public', 'story', 'index.html');
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Story index not found', success: false });
+    }
+
+    const htmlContent = fs.readFileSync(filepath, 'utf8');
+    const root = parse(htmlContent);
+
+    // Find the container with phase cards
+    const firstCard = root.querySelector('.phase-card');
+    if (!firstCard) {
+      return res.status(400).json({ error: 'No phase cards found in story index', success: false });
+    }
+
+    // Find parent container (should be the .story-index div)
+    let container = firstCard.parentNode;
+    while (container && !container.querySelector('.intro')) {
+      container = container.parentNode;
+    }
+
+    if (!container) {
+      return res.status(400).json({ error: 'Could not find phase cards container', success: false });
+    }
+
+    // Remove all existing phase card links
+    container.querySelectorAll('a').forEach(link => {
+      if (link.querySelector('.phase-card')) {
+        link.remove();
+      }
+    });
+
+    // Find the buttons div (to insert before it)
+    const buttonsDiv = container.querySelector('div[style*="text-align: center"]');
+    const insertBeforeNode = buttonsDiv;
+
+    // Generate new phase cards
+    phases.forEach(phase => {
+      const cardHtml = `
+    <a href="${phase.link}" style="text-decoration: none; color: inherit;">
+      <div class="phase-card">
+        <h2>${phase.title}</h2>
+        <p class="action">${phase.action}</p>
+        <p>${phase.preview}</p>
+      </div>
+    </a>
+`;
+      const cardNode = parse(cardHtml);
+
+      if (insertBeforeNode) {
+        container.insertAdjacentHTML('beforeend', '\n');
+        insertBeforeNode.insertAdjacentHTML('beforebegin', cardHtml + '\n');
+      } else {
+        container.appendChild(cardNode.firstChild);
+      }
+    });
+
+    // Write back to file
+    fs.writeFileSync(filepath, root.toString(), 'utf8');
+
+    console.log('✅ Saved story index');
+
+    res.json({
+      success: true,
+      message: 'Story index saved successfully'
+    });
+
+  } catch (error) {
+    console.error('Error saving story index:', error);
     res.status(500).json({ error: error.message, success: false });
   }
 });

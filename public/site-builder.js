@@ -6,6 +6,30 @@
 // Available modules configuration
 const AVAILABLE_MODULES = [
   {
+    id: 'text-block',
+    name: 'Text Block',
+    icon: '📝',
+    description: 'Add paragraphs, headings, and narrative text',
+    config: {
+      heading: { type: 'text', label: 'Heading', default: '', help: 'Optional heading (leave empty for no heading)' },
+      content: { type: 'textarea', label: 'Content', default: 'Enter your text here...', help: 'The main text content (supports HTML)' },
+      style: { type: 'select', label: 'Style', default: 'normal', options: ['normal', 'narrative', 'alert', 'quote'], help: 'Visual style for the text block' }
+    }
+  },
+  {
+    id: 'image-block',
+    name: 'Image Block',
+    icon: '🖼️',
+    description: 'Add images with optional captions',
+    config: {
+      image_url: { type: 'text', label: 'Image URL', default: '', help: 'URL to the image file' },
+      alt_text: { type: 'text', label: 'Alt Text', default: 'Image', help: 'Alternative text for accessibility' },
+      caption: { type: 'text', label: 'Caption', default: '', help: 'Optional caption below the image' },
+      width: { type: 'select', label: 'Width', default: 'auto', options: ['auto', '300px', '500px', '100%'], help: 'Image width' },
+      alignment: { type: 'select', label: 'Alignment', default: 'center', options: ['left', 'center', 'right'], help: 'Image alignment' }
+    }
+  },
+  {
     id: 'claim-rewards',
     name: 'Claim Rewards',
     icon: '🎁',
@@ -78,10 +102,13 @@ let pageModules = []; // Array of {id, moduleType, config}
 let selectedModuleIndex = null;
 let nextModuleId = 1;
 let currentEditingFilepath = null; // Track which page we're editing
+let pageCustomCSS = ''; // Custom CSS for the page
 
 // DOM Elements
 let moduleGallery, canvasEmpty, canvasModules, configEmpty, configPanel, configTitle, configForm;
 let clearBtn, saveBtn, loadBtn, editPageBtn, exportBtn, codeModal, closeCodeModal;
+let cssEditorBtn, cssEditorModal, closeCssModal, applyCssBtn, cssEditor;
+let createPhaseBtn, manageIndexBtn, indexManagerModal, closeIndexModal, saveIndexBtn, addPhaseCardBtn, phaseCardsList;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -100,6 +127,18 @@ document.addEventListener('DOMContentLoaded', () => {
   exportBtn = document.getElementById('exportBtn');
   codeModal = document.getElementById('codeModal');
   closeCodeModal = document.getElementById('closeCodeModal');
+  cssEditorBtn = document.getElementById('cssEditorBtn');
+  cssEditorModal = document.getElementById('cssEditorModal');
+  closeCssModal = document.getElementById('closeCssModal');
+  applyCssBtn = document.getElementById('applyCssBtn');
+  cssEditor = document.getElementById('cssEditor');
+  createPhaseBtn = document.getElementById('createPhaseBtn');
+  manageIndexBtn = document.getElementById('manageIndexBtn');
+  indexManagerModal = document.getElementById('indexManagerModal');
+  closeIndexModal = document.getElementById('closeIndexModal');
+  saveIndexBtn = document.getElementById('saveIndexBtn');
+  addPhaseCardBtn = document.getElementById('addPhaseCardBtn');
+  phaseCardsList = document.getElementById('phaseCardsList');
 
   // Populate module gallery
   renderModuleGallery();
@@ -111,6 +150,14 @@ document.addEventListener('DOMContentLoaded', () => {
   editPageBtn.addEventListener('click', editExistingPage);
   exportBtn.addEventListener('click', exportCode);
   closeCodeModal.addEventListener('click', () => codeModal.style.display = 'none');
+  cssEditorBtn.addEventListener('click', openCssEditor);
+  closeCssModal.addEventListener('click', () => cssEditorModal.style.display = 'none');
+  applyCssBtn.addEventListener('click', applyCss);
+  createPhaseBtn.addEventListener('click', createNewPhase);
+  manageIndexBtn.addEventListener('click', openIndexManager);
+  closeIndexModal.addEventListener('click', () => indexManagerModal.style.display = 'none');
+  saveIndexBtn.addEventListener('click', saveStoryIndex);
+  addPhaseCardBtn.addEventListener('click', addNewPhaseCard);
 
   // Copy button handlers
   document.querySelectorAll('[data-copy]').forEach(btn => {
@@ -235,10 +282,42 @@ async function loadModulePreview(module) {
   if (!previewEl) return;
 
   try {
-    // Create config JSON
-    const configJson = JSON.stringify(module.config);
+    // Handle text-block preview
+    if (module.moduleType === 'text-block') {
+      const styles = {
+        normal: 'padding: 20px; line-height: 1.6;',
+        narrative: 'background: var(--bg-secondary); border-left: 4px solid var(--primary); padding: 20px; border-radius: 8px; line-height: 1.8;',
+        alert: 'background: #fef3c7; border: 2px solid #f59e0b; padding: 20px; border-radius: 8px; color: #92400e;',
+        quote: 'border-left: 4px solid var(--border); padding: 20px; font-style: italic; color: var(--text-secondary);'
+      };
+      const style = styles[module.config.style] || styles.normal;
 
-    // Use module loader to initialize
+      previewEl.innerHTML = `
+        <div style="${style}">
+          ${module.config.heading ? `<h2 style="margin-top: 0; color: var(--primary);">${module.config.heading}</h2>` : ''}
+          <div>${module.config.content}</div>
+        </div>
+      `;
+      return;
+    }
+
+    // Handle image-block preview
+    if (module.moduleType === 'image-block') {
+      const textAlign = module.config.alignment || 'center';
+      previewEl.innerHTML = `
+        <div style="text-align: ${textAlign}; padding: 20px;">
+          ${module.config.image_url ?
+            `<img src="${module.config.image_url}" alt="${module.config.alt_text}" style="max-width: ${module.config.width}; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">` :
+            `<div style="padding: 60px; background: #f3f4f6; border-radius: 8px; color: #9ca3af;">No image URL provided</div>`
+          }
+          ${module.config.caption ? `<p style="margin-top: 10px; font-size: 0.9rem; color: var(--text-secondary);">${module.config.caption}</p>` : ''}
+        </div>
+      `;
+      return;
+    }
+
+    // For all other modules, use the module loader
+    const configJson = JSON.stringify(module.config);
     previewEl.setAttribute('data-module', module.moduleType);
     previewEl.setAttribute('data-config', configJson);
 
@@ -294,6 +373,17 @@ function renderConfigPanel() {
       section.innerHTML = `
         <label class="config-label">${field.label}:</label>
         <textarea class="config-textarea" data-key="${key}">${module.config[key] || ''}</textarea>
+        ${field.help ? `<div class="config-help">${field.help}</div>` : ''}
+      `;
+    } else if (field.type === 'select') {
+      const options = field.options.map(opt =>
+        `<option value="${opt}" ${module.config[key] === opt ? 'selected' : ''}>${opt}</option>`
+      ).join('');
+      section.innerHTML = `
+        <label class="config-label">${field.label}:</label>
+        <select class="config-input" data-key="${key}">
+          ${options}
+        </select>
         ${field.help ? `<div class="config-help">${field.help}</div>` : ''}
       `;
     } else {
@@ -411,7 +501,8 @@ async function autoSave() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         filepath: currentEditingFilepath,
-        modules: pageModules
+        modules: pageModules,
+        customCSS: pageCustomCSS
       })
     });
 
@@ -519,6 +610,19 @@ async function editExistingPage() {
     nextModuleId = Math.max(...pageModules.map(m => m.id), 0) + 1;
     currentEditingFilepath = data.filepath;
 
+    // Load custom CSS if present
+    if (data.customCSS) {
+      pageCustomCSS = data.customCSS;
+      // Apply CSS to preview
+      let styleEl = document.getElementById('custom-page-css');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'custom-page-css';
+        document.head.appendChild(styleEl);
+      }
+      styleEl.textContent = pageCustomCSS;
+    }
+
     renderCanvas();
     renderConfigPanel();
 
@@ -544,7 +648,8 @@ async function saveToCurrentPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filepath: currentEditingFilepath,
-          modules: pageModules
+          modules: pageModules,
+          customCSS: pageCustomCSS
         })
       });
 
@@ -596,8 +701,45 @@ function exportCode() {
   let html = '';
   pageModules.forEach(module => {
     const moduleInfo = AVAILABLE_MODULES.find(m => m.id === module.moduleType);
-    const configJson = JSON.stringify(module.config).replace(/"/g, '&quot;');
 
+    // Handle text-block
+    if (module.moduleType === 'text-block') {
+      const styles = {
+        normal: 'padding: 20px; line-height: 1.6;',
+        narrative: 'background: var(--bg-secondary); border-left: 4px solid var(--primary); padding: 2rem; border-radius: 8px; line-height: 1.8; font-size: 1.05rem;',
+        alert: 'background: #fef3c7; border: 2px solid #f59e0b; padding: 20px; border-radius: 8px; color: #92400e;',
+        quote: 'border-left: 4px solid var(--border); padding: 20px; font-style: italic; color: var(--text-secondary); margin: 20px 0;'
+      };
+      const style = styles[module.config.style] || styles.normal;
+      const className = module.config.style === 'narrative' ? ' class="narrative"' : '';
+
+      html += `<!-- ${moduleInfo.name} -->\n`;
+      html += `<div${className} style="${style}">\n`;
+      if (module.config.heading) {
+        html += `  <h2 style="margin-top: 0; color: var(--primary);">${module.config.heading}</h2>\n`;
+      }
+      html += `  ${module.config.content}\n`;
+      html += `</div>\n\n`;
+      return;
+    }
+
+    // Handle image-block
+    if (module.moduleType === 'image-block') {
+      const textAlign = module.config.alignment || 'center';
+      html += `<!-- ${moduleInfo.name} -->\n`;
+      html += `<div style="text-align: ${textAlign}; padding: 20px;">\n`;
+      if (module.config.image_url) {
+        html += `  <img src="${module.config.image_url}" alt="${module.config.alt_text}" style="max-width: ${module.config.width}; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">\n`;
+      }
+      if (module.config.caption) {
+        html += `  <p style="margin-top: 10px; font-size: 0.9rem; color: var(--text-secondary);">${module.config.caption}</p>\n`;
+      }
+      html += `</div>\n\n`;
+      return;
+    }
+
+    // For all other modules, use data-module attributes
+    const configJson = JSON.stringify(module.config).replace(/"/g, '&quot;');
     html += `<!-- ${moduleInfo.name} -->\n`;
     html += `<div\n`;
     html += `  id="module-${module.id}"\n`;
@@ -625,4 +767,227 @@ function exportCode() {
   document.getElementById('htmlCode').textContent = html;
   document.getElementById('scriptsCode').textContent = scripts;
   codeModal.style.display = 'block';
+}
+
+// Open CSS Editor
+function openCssEditor() {
+  cssEditor.value = pageCustomCSS;
+  cssEditorModal.style.display = 'block';
+}
+
+// Apply CSS
+async function applyCss() {
+  pageCustomCSS = cssEditor.value;
+
+  // Apply CSS to preview
+  let styleEl = document.getElementById('custom-page-css');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'custom-page-css';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = pageCustomCSS;
+
+  // Show feedback
+  const originalText = applyCssBtn.textContent;
+  applyCssBtn.textContent = '✓ Applied!';
+  applyCssBtn.style.background = '#10b981';
+
+  // Auto-save if editing a page
+  if (currentEditingFilepath) {
+    try {
+      applyCssBtn.textContent = '💾 Auto-saving...';
+      await saveToCurrentPage();
+      applyCssBtn.textContent = '✓ Saved!';
+    } catch (error) {
+      applyCssBtn.textContent = '❌ Save failed';
+      console.error('CSS auto-save error:', error);
+    }
+  }
+
+  setTimeout(() => {
+    applyCssBtn.textContent = originalText;
+    applyCssBtn.style.background = '';
+  }, 1500);
+}
+
+// Create New Phase
+async function createNewPhase() {
+  const phaseNumber = prompt('Enter the phase number (e.g., 6, 7, 8):', '6');
+  if (!phaseNumber) return;
+
+  const phaseTitle = prompt('Enter the phase title:', `Phase ${phaseNumber}: The Adventure`);
+  if (!phaseTitle) return;
+
+  const phaseSubtitle = prompt('Enter the phase subtitle/action:', 'Action: Complete the challenge');
+  if (!phaseSubtitle) return;
+
+  try {
+    const response = await fetch('/api/page/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phaseNumber: phaseNumber,
+        phaseTitle: phaseTitle,
+        phaseSubtitle: phaseSubtitle
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to create phase');
+    }
+
+    // Load the new phase for editing
+    pageModules = [];
+    selectedModuleIndex = null;
+    nextModuleId = 1;
+    currentEditingFilepath = data.filepath;
+    pageCustomCSS = '';
+
+    renderCanvas();
+    renderConfigPanel();
+
+    // Update save button
+    saveBtn.textContent = `💾 Save to ${data.filepath}`;
+    saveBtn.classList.remove('btn-secondary');
+    saveBtn.classList.add('btn-success');
+
+    alert(`✓ Created new phase: ${data.filepath}\n\nNow add modules to build your phase!`);
+  } catch (error) {
+    alert(`❌ Failed to create phase:\n${error.message}`);
+    console.error('Create phase error:', error);
+  }
+}
+
+// Story Index Management
+let storyPhases = [];
+
+async function openIndexManager() {
+  try {
+    // Load current story index
+    const response = await fetch('/api/story-index/load');
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to load story index');
+    }
+
+    storyPhases = data.phases;
+    renderPhaseCards();
+    indexManagerModal.style.display = 'block';
+  } catch (error) {
+    alert(`❌ Failed to load story index:\n${error.message}`);
+    console.error('Load index error:', error);
+  }
+}
+
+function renderPhaseCards() {
+  phaseCardsList.innerHTML = '';
+
+  if (storyPhases.length === 0) {
+    phaseCardsList.innerHTML = '<p style="text-align: center; color: #9ca3af; padding: 40px;">No phases yet. Click "Add Phase Card" to create one.</p>';
+    return;
+  }
+
+  storyPhases.forEach((phase, index) => {
+    const card = document.createElement('div');
+    card.style.cssText = 'background: #ffffff; border: 2px solid #cbd5e1; border-radius: 8px; padding: 20px; display: flex; justify-content: space-between; align-items: start;';
+
+    card.innerHTML = `
+      <div style="flex: 1;">
+        <h3 style="margin: 0 0 10px 0; color: #1e293b;">${phase.title}</h3>
+        <p style="margin: 0 0 10px 0; font-size: 0.9rem; color: #64748b;"><strong>Action:</strong> ${phase.action}</p>
+        <p style="margin: 0; font-size: 0.9rem; color: #64748b;"><strong>Preview:</strong> ${phase.preview}</p>
+        <p style="margin: 10px 0 0 0; font-size: 0.85rem; color: #94a3b8;"><strong>Link:</strong> ${phase.link}</p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        ${index > 0 ? '<button class="btn btn-secondary btn-sm" data-action="up" data-index="' + index + '">↑</button>' : ''}
+        ${index < storyPhases.length - 1 ? '<button class="btn btn-secondary btn-sm" data-action="down" data-index="' + index + '">↓</button>' : ''}
+        <button class="btn btn-warning btn-sm" data-action="edit" data-index="${index}">✏️</button>
+        <button class="btn btn-error btn-sm" data-action="delete" data-index="${index}">🗑️</button>
+      </div>
+    `;
+
+    // Event listeners
+    card.querySelector('[data-action="edit"]')?.addEventListener('click', () => editPhaseCard(index));
+    card.querySelector('[data-action="delete"]')?.addEventListener('click', () => deletePhaseCard(index));
+    card.querySelector('[data-action="up"]')?.addEventListener('click', () => movePhaseCard(index, -1));
+    card.querySelector('[data-action="down"]')?.addEventListener('click', () => movePhaseCard(index, 1));
+
+    phaseCardsList.appendChild(card);
+  });
+}
+
+function addNewPhaseCard() {
+  const title = prompt('Phase Title:', 'Phase 6: The Adventure');
+  if (!title) return;
+
+  const action = prompt('Phase Action:', 'Action: Complete the challenge');
+  if (!action) return;
+
+  const preview = prompt('Phase Preview Text:', 'A brief description of this phase...');
+  if (!preview) return;
+
+  const link = prompt('Phase Link (relative path):', '/story/phase6.html');
+  if (!link) return;
+
+  storyPhases.push({ title, action, preview, link });
+  renderPhaseCards();
+}
+
+function editPhaseCard(index) {
+  const phase = storyPhases[index];
+
+  const title = prompt('Phase Title:', phase.title);
+  if (title === null) return;
+
+  const action = prompt('Phase Action:', phase.action);
+  if (action === null) return;
+
+  const preview = prompt('Phase Preview Text:', phase.preview);
+  if (preview === null) return;
+
+  const link = prompt('Phase Link:', phase.link);
+  if (link === null) return;
+
+  storyPhases[index] = { title, action, preview, link };
+  renderPhaseCards();
+}
+
+function deletePhaseCard(index) {
+  if (confirm(`Delete "${storyPhases[index].title}"?`)) {
+    storyPhases.splice(index, 1);
+    renderPhaseCards();
+  }
+}
+
+function movePhaseCard(index, direction) {
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= storyPhases.length) return;
+
+  [storyPhases[index], storyPhases[newIndex]] = [storyPhases[newIndex], storyPhases[index]];
+  renderPhaseCards();
+}
+
+async function saveStoryIndex() {
+  try {
+    const response = await fetch('/api/story-index/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phases: storyPhases })
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to save story index');
+    }
+
+    alert('✓ Story index saved successfully!');
+  } catch (error) {
+    alert(`❌ Failed to save story index:\n${error.message}`);
+    console.error('Save index error:', error);
+  }
 }
