@@ -582,11 +582,24 @@ window.init_blend_array = function(containerId, config = {}) {
       // Get wallet API
       const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
 
-      // Prepare NeftyBlocks blend transaction (2 actions)
-      // Action 1: Transfer assets to blend.nefty with memo "deposit"
-      // Action 2: Call nosecfuse to execute the blend
+      // Prepare NeftyBlocks blend transaction (3 actions)
+      // Action 1: announcedepo - Announce deposit to contract
+      // Action 2: atomicassets::transfer - Transfer assets to blend.nefty with memo "deposit"
+      // Action 3: nosecfuse - Execute the blend
       const assetIdsArray = Array.from(selectedAssetIds);
       const actions = [
+        {
+          account: 'blend.nefty',
+          name: 'announcedepo',
+          authorization: [{
+            actor: currentAccount,
+            permission: 'active'
+          }],
+          data: {
+            owner: currentAccount,
+            count: assetIdsArray.length
+          }
+        },
         {
           account: 'atomicassets',
           name: 'transfer',
