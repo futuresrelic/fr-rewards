@@ -3223,8 +3223,10 @@ app.post('/api/page/save', async (req, res) => {
       const moduleName = MODULE_NAMES[module.moduleType] || module.moduleType;
 
       // Create comment node
-      const comment = parse(`<!-- ${moduleName} -->`);
-      container.appendChild(comment.firstChild);
+      const commentParsed = parse(`<!-- ${moduleName} -->`);
+      if (commentParsed && commentParsed.firstChild) {
+        container.appendChild(commentParsed.firstChild);
+      }
 
       let moduleHtml = '';
 
@@ -3283,11 +3285,16 @@ app.post('/api/page/save', async (req, res) => {
       }
 
       const moduleNode = parse(moduleHtml);
-      container.appendChild(moduleNode.firstChild);
+      if (moduleNode && moduleNode.firstChild) {
+        container.appendChild(moduleNode.firstChild);
 
-      // Add newline if not last module
-      if (index < modules.length - 1) {
-        container.appendChild(parse('\n\n').firstChild);
+        // Add newline if not last module
+        if (index < modules.length - 1) {
+          const newlineParsed = parse('\n\n');
+          if (newlineParsed && newlineParsed.firstChild) {
+            container.appendChild(newlineParsed.firstChild);
+          }
+        }
       }
     });
 
@@ -3303,7 +3310,9 @@ app.post('/api/page/save', async (req, res) => {
           const head = root.querySelector('head');
           if (head) {
             const styleNode = parse(`<style id="custom-page-css">\n${customCSS}\n  </style>`);
-            head.appendChild(styleNode.firstChild);
+            if (styleNode && styleNode.firstChild) {
+              head.appendChild(styleNode.firstChild);
+            }
           }
         } else {
           // Update existing style tag
@@ -3516,8 +3525,8 @@ app.post('/api/story-index/save', async (req, res) => {
 
     // Remove all existing phase card links
     container.querySelectorAll('a').forEach(link => {
-      if (link.querySelector('.phase-card')) {
-        link.remove();
+      if (link.querySelector('.phase-card') && link.parentNode) {
+        link.parentNode.removeChild(link);
       }
     });
 
