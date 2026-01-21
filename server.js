@@ -3171,22 +3171,40 @@ app.post('/api/page/save', async (req, res) => {
     // Find all existing module elements
     const moduleElements = root.querySelectorAll('[data-module]');
 
-    if (moduleElements.length === 0) {
+    // Find the parent container
+    let container;
+    if (moduleElements.length > 0) {
+      // Use existing container if modules exist
+      container = moduleElements[0].parentNode;
+
+      // Remove all existing module elements
+      moduleElements.forEach(el => {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      });
+    } else {
+      // No existing modules - find a suitable container
+      // Try common containers: .action-module, main, body
+      container = root.querySelector('.action-module') ||
+                  root.querySelector('main') ||
+                  root.querySelector('body');
+
+      if (!container) {
+        return res.status(400).json({
+          error: 'Could not find a suitable container (.action-module, main, or body) to insert modules.',
+          success: false
+        });
+      }
+    }
+
+    // If no modules to save, return error
+    if (!modules || modules.length === 0) {
       return res.status(400).json({
-        error: 'No modules found in the page. Make sure the page has module divs with data-module attributes.',
+        error: 'No modules provided to save.',
         success: false
       });
     }
-
-    // Find the parent container (assumes all modules are in the same container)
-    const container = moduleElements[0].parentNode;
-
-    // Remove all existing module elements
-    moduleElements.forEach(el => {
-      if (el.parentNode) {
-        el.parentNode.removeChild(el);
-      }
-    });
 
     // Module type to name mapping for comments
     const MODULE_NAMES = {
@@ -3675,7 +3693,7 @@ app.get('/api/css/load', async (req, res) => {
 
     res.json({
       success: true,
-      cssContent: cssContent,
+      css: cssContent,
       cssVars: cssVars
     });
 
@@ -3688,14 +3706,14 @@ app.get('/api/css/load', async (req, res) => {
 /**
  * POST /api/css/save
  * Save updated CSS content
- * Body: { cssContent: "..." }
+ * Body: { css: "..." }
  */
 app.post('/api/css/save', async (req, res) => {
   try {
-    const { cssContent } = req.body;
+    const { css } = req.body;
 
-    if (!cssContent) {
-      return res.status(400).json({ error: 'cssContent is required', success: false });
+    if (!css) {
+      return res.status(400).json({ error: 'css is required', success: false });
     }
 
     const fs = require('fs');
@@ -3709,7 +3727,7 @@ app.post('/api/css/save', async (req, res) => {
     }
 
     // Write new CSS
-    fs.writeFileSync(cssPath, cssContent, 'utf8');
+    fs.writeFileSync(cssPath, css, 'utf8');
 
     console.log('✅ Saved CSS file');
 
