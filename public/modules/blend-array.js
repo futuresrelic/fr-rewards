@@ -317,7 +317,7 @@ window.init_blend_array = function(containerId, config = {}) {
         const hasEnough = ing.owned >= ing.amount;
         return `
           <div style="display: flex; justify-content: space-between; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 5px;">
-            <span>Template #${ing.template_id}</span>
+            <span>${ing.name || `Template #${ing.template_id}`}</span>
             <span style="color: ${hasEnough ? '#4ade80' : '#f87171'};">${ing.owned}/${ing.amount}</span>
           </div>
         `;
@@ -325,7 +325,8 @@ window.init_blend_array = function(containerId, config = {}) {
 
       // Build result display
       let resultHtml = blend.results.map(res => {
-        return `<div style="color: var(--success); font-weight: 600;">• ${res.amount}x Template #${res.template_id}</div>`;
+        const probability = res.total_odds ? `${((res.odds / res.total_odds) * 100).toFixed(1)}%` : '100%';
+        return `<div style="color: var(--success); font-weight: 600;">• ${res.name || `Template #${res.template_id}`} (${probability})</div>`;
       }).join('');
 
       blendCard.innerHTML = `

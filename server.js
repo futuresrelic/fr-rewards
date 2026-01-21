@@ -1001,18 +1001,39 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
       });
     }
 
-    // Fetch user's assets from AtomicAssets API
-    console.log(`   Fetching assets for ${account}...`);
+    // Fetch ALL user's assets from AtomicAssets API (with pagination)
+    console.log(`   Fetching ALL assets for ${account}...`);
     const rpc = 'https://aa-wax-public1.neftyblocks.com';
-    const assetsUrl = `${rpc}/atomicassets/v1/assets?owner=${account}&collection_name=${collection}&page=1&limit=1000&order=desc&sort=asset_id`;
-    const assetsResponse = await fetch(assetsUrl);
-    const assetsData = await assetsResponse.json();
 
-    if (!assetsResponse.ok) {
-      throw new Error('Failed to fetch user assets');
+    let userAssets = [];
+    let page = 1;
+    const limit = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const assetsUrl = `${rpc}/atomicassets/v1/assets?owner=${account}&collection_name=${collection}&page=${page}&limit=${limit}&order=desc&sort=asset_id`;
+      const assetsResponse = await fetch(assetsUrl);
+
+      if (!assetsResponse.ok) {
+        throw new Error('Failed to fetch user assets');
+      }
+
+      const assetsData = await assetsResponse.json();
+      const pageAssets = assetsData.data || [];
+
+      userAssets = userAssets.concat(pageAssets);
+
+      console.log(`   📄 Fetched page ${page}: ${pageAssets.length} assets (total so far: ${userAssets.length})`);
+
+      // If we got fewer assets than the limit, we've reached the last page
+      if (pageAssets.length < limit) {
+        hasMore = false;
+      } else {
+        page++;
+      }
     }
 
-    const userAssets = assetsData.data || [];
+    console.log(`   ✅ Fetched all ${userAssets.length} assets from ${page} page(s)`);
 
     // Group user's assets by template ID
     const assetsByTemplate = {};
