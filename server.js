@@ -889,66 +889,83 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
         }
 
         // Parse ingredients (what you need to burn)
+        // Format: ["TEMPLATE_INGREDIENT", {"template_id": 202914, "amount": 1, ...}]
         const ingredients = [];
         let totalRequired = 0;
 
         if (blend.ingredients && Array.isArray(blend.ingredients)) {
-          for (const ing of blend.ingredients) {
-            const templateId = ing.template_id;
-            const amount = parseInt(ing.amount || 1);
+          for (const ingredient of blend.ingredients) {
+            // Ingredients are tuples: ["TEMPLATE_INGREDIENT", {...}]
+            if (Array.isArray(ingredient) && ingredient[0] === 'TEMPLATE_INGREDIENT' && ingredient[1]) {
+              const ing = ingredient[1];
+              const templateId = ing.template_id;
+              const amount = parseInt(ing.amount || 1);
 
-            if (templateId) {
-              // Fetch template data for display name
-              let templateName = `Template #${templateId}`;
-              try {
-                const templateRes = await fetch(`https://aa-wax-public1.neftyblocks.com/atomicassets/v1/templates/${collection}/${templateId}`);
-                if (templateRes.ok) {
-                  const templateData = await templateRes.json();
-                  templateName = templateData.data.immutable_data?.name || templateName;
+              if (templateId) {
+                // Fetch template data for display name and image
+                let templateName = `Template #${templateId}`;
+                let templateImg = null;
+                try {
+                  const templateRes = await fetch(`https://aa-wax-public1.neftyblocks.com/atomicassets/v1/templates/${collection}/${templateId}`);
+                  if (templateRes.ok) {
+                    const templateData = await templateRes.json();
+                    templateName = templateData.data.immutable_data?.name || templateName;
+                    templateImg = templateData.data.immutable_data?.img || null;
+                  }
+                } catch (err) {
+                  console.warn(`   Could not fetch template ${templateId} name:`, err.message);
                 }
-              } catch (err) {
-                console.warn(`   Could not fetch template ${templateId} name:`, err.message);
-              }
 
-              ingredients.push({
-                template_id: templateId,
-                name: templateName,
-                amount: amount,
-                owned: 0 // Will be populated below
-              });
-              totalRequired += amount;
+                ingredients.push({
+                  template_id: templateId,
+                  name: templateName,
+                  img: templateImg,
+                  amount: amount,
+                  owned: 0 // Will be populated below
+                });
+                totalRequired += amount;
+              }
             }
           }
         }
 
         // Parse results (what you get after blend)
+        // Format: rolls[{outcomes[{results[["ON_DEMAND_NFT_RESULT", {"template_id": 211094}]]}]}]
         const results = [];
         if (blend.rolls && Array.isArray(blend.rolls)) {
           for (const roll of blend.rolls) {
             if (roll.outcomes && Array.isArray(roll.outcomes)) {
               for (const outcome of roll.outcomes) {
-                const templateId = outcome.template_id;
-                if (templateId) {
-                  // Fetch template data
-                  let templateName = `Template #${templateId}`;
-                  let templateImg = null;
-                  try {
-                    const templateRes = await fetch(`https://aa-wax-public1.neftyblocks.com/atomicassets/v1/templates/${collection}/${templateId}`);
-                    if (templateRes.ok) {
-                      const templateData = await templateRes.json();
-                      templateName = templateData.data.immutable_data?.name || templateName;
-                      templateImg = templateData.data.immutable_data?.img || null;
-                    }
-                  } catch (err) {
-                    console.warn(`   Could not fetch template ${templateId}:`, err.message);
-                  }
+                if (outcome.results && Array.isArray(outcome.results)) {
+                  for (const result of outcome.results) {
+                    // Results are tuples: ["ON_DEMAND_NFT_RESULT", {"template_id": ...}]
+                    if (Array.isArray(result) && result[0] === 'ON_DEMAND_NFT_RESULT' && result[1]) {
+                      const templateId = result[1].template_id;
+                      if (templateId) {
+                        // Fetch template data
+                        let templateName = `Template #${templateId}`;
+                        let templateImg = null;
+                        try {
+                          const templateRes = await fetch(`https://aa-wax-public1.neftyblocks.com/atomicassets/v1/templates/${collection}/${templateId}`);
+                          if (templateRes.ok) {
+                            const templateData = await templateRes.json();
+                            templateName = templateData.data.immutable_data?.name || templateName;
+                            templateImg = templateData.data.immutable_data?.img || null;
+                          }
+                        } catch (err) {
+                          console.warn(`   Could not fetch result template ${templateId}:`, err.message);
+                        }
 
-                  results.push({
-                    template_id: templateId,
-                    name: templateName,
-                    img: templateImg,
-                    odds: outcome.odds
-                  });
+                        results.push({
+                          template_id: templateId,
+                          name: templateName,
+                          img: templateImg,
+                          odds: outcome.odds,
+                          total_odds: roll.total_odds
+                        });
+                      }
+                    }
+                  }
                 }
               }
             }
