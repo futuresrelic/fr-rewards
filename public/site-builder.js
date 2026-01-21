@@ -145,7 +145,7 @@ function renderModuleGallery() {
 }
 
 // Add module to canvas
-function addModule(moduleType) {
+async function addModule(moduleType) {
   const moduleInfo = AVAILABLE_MODULES.find(m => m.id === moduleType);
   if (!moduleInfo) return;
 
@@ -166,6 +166,11 @@ function addModule(moduleType) {
 
   renderCanvas();
   selectModule(pageModules.length - 1);
+
+  // Auto-save if editing a page
+  if (currentEditingFilepath) {
+    await autoSave();
+  }
 }
 
 // Render canvas
@@ -313,7 +318,7 @@ function renderConfigPanel() {
 }
 
 // Apply configuration changes
-function applyConfig() {
+async function applyConfig() {
   if (selectedModuleIndex === null) return;
 
   const module = pageModules[selectedModuleIndex];
@@ -335,6 +340,19 @@ function applyConfig() {
   const originalText = btn.textContent;
   btn.textContent = '✓ Applied!';
   btn.style.background = '#10b981';
+
+  // Auto-save if we're editing a page
+  if (currentEditingFilepath) {
+    try {
+      btn.textContent = '💾 Auto-saving...';
+      await saveToCurrentPage();
+      btn.textContent = '✓ Saved!';
+    } catch (error) {
+      btn.textContent = '❌ Save failed';
+      console.error('Auto-save error:', error);
+    }
+  }
+
   setTimeout(() => {
     btn.textContent = originalText;
     btn.style.background = '';
@@ -342,7 +360,7 @@ function applyConfig() {
 }
 
 // Remove module
-function removeModule(index) {
+async function removeModule(index) {
   if (confirm('Remove this module?')) {
     pageModules.splice(index, 1);
     if (selectedModuleIndex === index) {
@@ -352,11 +370,16 @@ function removeModule(index) {
     }
     renderCanvas();
     renderConfigPanel();
+
+    // Auto-save if editing a page
+    if (currentEditingFilepath) {
+      await autoSave();
+    }
   }
 }
 
 // Move module
-function moveModule(index, direction) {
+async function moveModule(index, direction) {
   const newIndex = index + direction;
   if (newIndex < 0 || newIndex >= pageModules.length) return;
 
@@ -371,6 +394,37 @@ function moveModule(index, direction) {
   }
 
   renderCanvas();
+
+  // Auto-save if editing a page
+  if (currentEditingFilepath) {
+    await autoSave();
+  }
+}
+
+// Auto-save helper
+async function autoSave() {
+  if (!currentEditingFilepath) return;
+
+  try {
+    const response = await fetch('/api/page/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filepath: currentEditingFilepath,
+        modules: pageModules
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      console.error('Auto-save failed:', data.error);
+    } else {
+      console.log('✓ Auto-saved to', currentEditingFilepath);
+    }
+  } catch (error) {
+    console.error('Auto-save error:', error);
+  }
 }
 
 // Clear all modules
@@ -380,6 +434,10 @@ function clearAll() {
   if (confirm('Clear all modules? This cannot be undone.')) {
     pageModules = [];
     selectedModuleIndex = null;
+    currentEditingFilepath = null;
+    saveBtn.textContent = '💾 Save Config';
+    saveBtn.classList.remove('btn-success');
+    saveBtn.classList.add('btn-secondary');
     renderCanvas();
     renderConfigPanel();
   }

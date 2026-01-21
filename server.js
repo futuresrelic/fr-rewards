@@ -3160,14 +3160,57 @@ app.post('/api/page/save', async (req, res) => {
     const { parse } = require('node-html-parser');
     const root = parse(htmlContent);
 
-    // Update each module's config
+    // Find all existing module elements
     const moduleElements = root.querySelectorAll('[data-module]');
-    moduleElements.forEach((element, index) => {
-      const moduleInUpdate = modules[index];
 
-      if (moduleInUpdate) {
-        // Update the data-config attribute
-        element.setAttribute('data-config', JSON.stringify(moduleInUpdate.config));
+    if (moduleElements.length === 0) {
+      return res.status(400).json({
+        error: 'No modules found in the page. Make sure the page has module divs with data-module attributes.',
+        success: false
+      });
+    }
+
+    // Find the parent container (assumes all modules are in the same container)
+    const container = moduleElements[0].parentNode;
+
+    // Remove all existing module elements
+    moduleElements.forEach(el => el.remove());
+
+    // Module type to name mapping for comments
+    const MODULE_NAMES = {
+      'claim-rewards': 'Claim Rewards',
+      'factory-craft': 'Factory Craft',
+      'transfer-mode': 'Transfer Mode',
+      'unpack': 'Unpack Module',
+      'blend-array': 'Blend Array',
+      'nefty-drop': 'NeftyBlocks Drop'
+    };
+
+    // Generate new module HTML elements
+    modules.forEach((module, index) => {
+      const moduleName = MODULE_NAMES[module.moduleType] || module.moduleType;
+
+      // Create comment node
+      const comment = parse(`<!-- ${moduleName} -->`);
+      container.appendChild(comment.firstChild);
+
+      // Create module div with proper formatting
+      const configJson = JSON.stringify(module.config);
+      const escapedConfig = configJson.replace(/"/g, '&quot;');
+
+      const moduleHtml = `
+      <div
+        id="module-${module.id}"
+        data-module="${module.moduleType}"
+        data-config="${escapedConfig}"
+      ></div>`;
+
+      const moduleNode = parse(moduleHtml);
+      container.appendChild(moduleNode.firstChild);
+
+      // Add newline if not last module
+      if (index < modules.length - 1) {
+        container.appendChild(parse('\n\n').firstChild);
       }
     });
 
