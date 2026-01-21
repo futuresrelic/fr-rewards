@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 6 - Future's Relic</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .story-container { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+    .story-header { text-align: center; margin-bottom: 3rem; }
+    .story-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; color: var(--primary); }
+    .story-header .subtitle { font-size: 1.2rem; color: var(--text-secondary); }
+    .narrative { background: var(--bg-secondary); border-left: 4px solid var(--primary); padding: 2rem; margin-bottom: 3rem; border-radius: 8px; line-height: 1.8; font-size: 1.05rem; }
+    .narrative h2 { margin-top: 0; color: var(--primary); }
+    .narrative ul { margin: 1rem 0 1rem 2rem; }
+    .narrative li { margin: 0.5rem 0; }
+    .action-module { margin-bottom: 3rem; }
+    .nav-buttons { display: flex; justify-content: space-between; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <div class="story-container">
+    <div class="story-header">
+      <h1>Phase 6</h1>
+      <p class="subtitle">Action: Blend Array</p>
+    </div>
+
+    <div class="narrative">
+      <h2>Continue Your Journey</h2>
+      <p>
+        Use the Blend Array below to continue crafting and managing your NFTs.
+      </p>
+    </div>
+
+    <div class="action-module">
+      <!-- Blend Array -->
+      <div
+        id="module-1"
+        data-module="blend-array"
+        data-config='{"collection":"futuresrelic","blend_ids":"15641,15942,15943,15944,15945,15946","auto_connect":true}'
+      ></div>
+    </div>
+
+    <div class="nav-buttons">
+      <a href="/story/phase5.html" class="btn btn-secondary">← Phase 5</a>
+      <a href="/story/index.html" class="btn btn-primary">Story Index</a>
+    </div>
+  </div>
+
+  <!-- Wallet Libraries -->
+  <script src="/waxjs.js"></script>
+  <script src="/anchor-simple.js"></script>
+
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>
