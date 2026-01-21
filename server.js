@@ -3284,7 +3284,8 @@ app.post('/api/page/save', async (req, res) => {
       ></div>`;
       }
 
-      const moduleNode = parse(moduleHtml);
+      // Trim moduleHtml to avoid firstChild being a text node with whitespace
+      const moduleNode = parse(moduleHtml.trim());
       if (moduleNode && moduleNode.firstChild) {
         container.appendChild(moduleNode.firstChild);
 
