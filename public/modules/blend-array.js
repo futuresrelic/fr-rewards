@@ -561,6 +561,36 @@ window.init_blend_array = function(containerId, config = {}) {
     }
   }
 
+  // Extract new asset ID from transaction result
+  function extractNewAssetId(result) {
+    try {
+      // Look through transaction traces for logmint or lognewasset action
+      const traces = result.processed?.action_traces || [];
+
+      for (const trace of traces) {
+        // Check inline traces as well
+        const allTraces = [trace, ...(trace.inline_traces || [])];
+
+        for (const t of allTraces) {
+          if (t.act?.account === 'atomicassets' &&
+              (t.act?.name === 'logmint' || t.act?.name === 'lognewasset')) {
+            // Extract asset_id from the action data
+            const assetId = t.act?.data?.asset_id;
+            if (assetId) {
+              return assetId;
+            }
+          }
+        }
+      }
+
+      console.warn('Could not find new asset ID in transaction result');
+      return null;
+    } catch (error) {
+      console.error('Error extracting asset ID:', error);
+      return null;
+    }
+  }
+
   // Execute blend
   async function executeBlend() {
     try {
@@ -648,12 +678,54 @@ window.init_blend_array = function(containerId, config = {}) {
       // Wait a moment for blockchain to process
       await new Promise(resolve => setTimeout(resolve, 3000));
 
+      // Try to fetch the newly minted NFT
+      let newAssetHtml = '';
+      try {
+        // Extract new asset ID from transaction result
+        const newAssetId = extractNewAssetId(result);
+
+        if (newAssetId) {
+          console.log('🎨 Fetching new asset:', newAssetId);
+
+          // Fetch the new asset data
+          const assetResponse = await fetch(`https://wax.api.atomicassets.io/atomicassets/v1/assets/${newAssetId}`);
+          const assetData = await assetResponse.json();
+
+          if (assetData.success && assetData.data) {
+            const asset = assetData.data;
+            const imgData = asset.data?.img || asset.data?.video;
+
+            if (imgData) {
+              const imgUrl = imgData.startsWith('Qm')
+                ? `https://ipfs.io/ipfs/${imgData}`
+                : imgData.replace('ipfs://', 'https://ipfs.io/ipfs/');
+
+              const assetName = asset.name || asset.data?.name || `Asset #${newAssetId}`;
+              const mintNumber = asset.template_mint || 'N/A';
+
+              newAssetHtml = `
+                <div style="text-align: center; margin: 20px 0;">
+                  <img src="${imgUrl}" alt="${assetName}"
+                       style="max-width: 200px; max-height: 200px; object-fit: contain; border-radius: 12px; border: 3px solid var(--success); box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);">
+                  <div style="margin-top: 12px; font-weight: 600; font-size: 1.1rem; color: var(--success);">${assetName}</div>
+                  <div style="font-size: 0.85rem; color: var(--text-secondary);">Mint #${mintNumber}</div>
+                  <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px;">Asset #${newAssetId}</div>
+                </div>
+              `;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch new asset image:', error);
+        // Continue without image - not critical
+      }
+
       showProcessingModal('✅ Blend Complete!', `
-        <p style="margin: 15px 0; color: #4ade80;">Successfully executed blend!</p>
-        <p style="font-size: 0.85rem;">
+        <p style="margin: 15px 0; color: #4ade80; font-weight: 600;">Successfully executed blend!</p>
+        ${newAssetHtml}
+        <p style="font-size: 0.85rem; margin-top: 15px;">
           TX: <a href="https://waxblock.io/transaction/${txId}" target="_blank" style="color: var(--primary);">${txId.substr(0, 16)}...</a>
         </p>
-        <p style="margin-top: 10px;">Check your wallet for the new NFT! 🎉</p>
         <button class="btn btn-primary blend-close-btn" style="margin-top: 15px;">Close & Refresh</button>
       `);
 
