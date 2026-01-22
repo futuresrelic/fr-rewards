@@ -20,6 +20,8 @@ window.init_paid_claim = function(containerId, config = {}) {
     template_image: config.template_image || null,
     max_supply: config.max_supply || null,
     per_wallet_limit: config.per_wallet_limit || null,
+    wallet_limit_cooldown: config.wallet_limit_cooldown || null,
+    supply_limit_cooldown: config.supply_limit_cooldown || null,
     auto_connect: config.auto_connect || false,
     show_purchase_history: config.show_purchase_history !== false
   };
@@ -311,15 +313,42 @@ window.init_paid_claim = function(containerId, config = {}) {
     if (moduleConfig.template_image) {
       const isVideo = moduleConfig.template_image.match(/\.(mp4|webm|mov)$/i);
       if (isVideo) {
-        mediaHtml = `<video src="${moduleConfig.template_image}" class="nft-image" autoplay loop muted playsinline style="max-width: 100%; border-radius: 8px;"></video>`;
+        mediaHtml = `<video src="${moduleConfig.template_image}" class="nft-image" autoplay loop muted playsinline preload="metadata" style="width: 100%; max-width: 100%; height: auto; border-radius: 8px; display: block;"></video>`;
       } else {
-        mediaHtml = `<img src="${moduleConfig.template_image}" alt="${moduleConfig.template_name}" class="nft-image" style="max-width: 100%; border-radius: 8px;">`;
+        mediaHtml = `<img src="${moduleConfig.template_image}" alt="${moduleConfig.template_name}" class="nft-image" style="width: 100%; max-width: 100%; height: auto; border-radius: 8px; display: block;">`;
       }
     }
 
     // Format WAX price for display
     const waxAmount = parseFloat(moduleConfig.price_wax).toFixed(8);
     const waxDisplay = parseFloat(waxAmount).toString(); // Remove trailing zeros for display
+
+    // Check cooldowns
+    const walletCooldown = moduleConfig.wallet_limit_cooldown ? checkCooldown('wallet', moduleConfig.wallet_limit_cooldown) : { active: false };
+    const supplyCooldown = moduleConfig.supply_limit_cooldown ? checkCooldown('supply', moduleConfig.supply_limit_cooldown) : { active: false };
+
+    // Check wallet purchase count
+    const purchaseCount = getWalletPurchaseCount();
+    const walletLimitReached = moduleConfig.per_wallet_limit && purchaseCount >= parseInt(moduleConfig.per_wallet_limit);
+
+    // Determine if purchase is disabled
+    const isPurchaseDisabled = walletCooldown.active || supplyCooldown.active || (walletLimitReached && !moduleConfig.wallet_limit_cooldown);
+
+    // Build cooldown/limit info
+    let limitInfoHtml = '';
+    if (moduleConfig.per_wallet_limit) {
+      if (walletCooldown.active) {
+        limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--warning); margin-bottom: 15px;">⏳ Cooldown: ${walletCooldown.remainingTime} remaining</div>`;
+      } else if (moduleConfig.wallet_limit_cooldown) {
+        limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Limit: ${moduleConfig.per_wallet_limit} per ${moduleConfig.wallet_limit_cooldown}h (${purchaseCount}/${moduleConfig.per_wallet_limit} used)</div>`;
+      } else {
+        limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Limit: ${moduleConfig.per_wallet_limit} per wallet (${purchaseCount}/${moduleConfig.per_wallet_limit} used)</div>`;
+      }
+    }
+
+    if (supplyCooldown.active) {
+      limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--warning); margin-bottom: 15px;">⏳ Supply cooldown: ${supplyCooldown.remainingTime} remaining</div>`;
+    }
 
     purchaseCard.innerHTML = `
       <div style="text-align: center;">
@@ -334,9 +363,9 @@ window.init_paid_claim = function(containerId, config = {}) {
           ${waxDisplay} WAX
         </div>
         ${moduleConfig.max_supply ? `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Max Supply: ${moduleConfig.max_supply}</div>` : ''}
-        ${moduleConfig.per_wallet_limit ? `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Limit: ${moduleConfig.per_wallet_limit} per wallet</div>` : ''}
-        <button class="btn btn-success purchase-btn" style="width: 100%; font-size: 1.1rem; padding: 15px;" data-template="${moduleConfig.template_id}">
-          💰 Purchase for ${waxDisplay} WAX
+        ${limitInfoHtml}
+        <button class="btn btn-success purchase-btn" style="width: 100%; font-size: 1.1rem; padding: 15px;" data-template="${moduleConfig.template_id}" ${isPurchaseDisabled ? 'disabled' : ''}>
+          ${isPurchaseDisabled ? '🔒 Purchase Unavailable' : `💰 Purchase for ${waxDisplay} WAX`}
         </button>
         <div class="purchase-status" style="margin-top: 15px; min-height: 20px;"></div>
       </div>
@@ -351,6 +380,11 @@ window.init_paid_claim = function(containerId, config = {}) {
     purchaseBtn.addEventListener('click', () => {
       processPurchase(purchaseBtn, statusEl);
     });
+
+    // Auto-refresh cooldown display if active
+    if (walletCooldown.active || supplyCooldown.active) {
+      setTimeout(() => displayPurchaseCard(), 1000); // Refresh every second
+    }
   }
 
   // Process the purchase
@@ -408,16 +442,32 @@ window.init_paid_claim = function(containerId, config = {}) {
 
       showMessage(`🎉 Purchase completed! NFT minted successfully.`, 'success');
 
+      // Update cooldown timestamps
+      if (moduleConfig.wallet_limit_cooldown) {
+        const walletCooldown = checkCooldown('wallet', moduleConfig.wallet_limit_cooldown);
+        if (!walletCooldown.active) {
+          // Reset count and start new cooldown period
+          resetWalletPurchaseCount();
+          setLastPurchaseTime('wallet');
+        }
+        incrementWalletPurchaseCount();
+      } else if (moduleConfig.per_wallet_limit) {
+        // No cooldown, just increment count
+        incrementWalletPurchaseCount();
+      }
+
+      if (moduleConfig.supply_limit_cooldown) {
+        setLastPurchaseTime('supply');
+      }
+
       // Reload purchase history
       if (moduleConfig.show_purchase_history) {
         setTimeout(() => loadPurchaseHistory(), 2000);
       }
 
-      // Re-enable button after delay
+      // Refresh display to show updated cooldown status
       setTimeout(() => {
-        button.disabled = false;
-        button.textContent = `💰 Purchase for ${parseFloat(moduleConfig.price_wax).toString()} WAX`;
-        statusEl.innerHTML = '';
+        displayPurchaseCard();
       }, 10000);
 
     } catch (error) {
@@ -478,14 +528,30 @@ window.init_paid_claim = function(containerId, config = {}) {
 
         showMessage(`🎉 Recovery completed! NFT minted successfully.`, 'success');
 
+        // Update cooldown timestamps
+        if (moduleConfig.wallet_limit_cooldown) {
+          const walletCooldown = checkCooldown('wallet', moduleConfig.wallet_limit_cooldown);
+          if (!walletCooldown.active) {
+            resetWalletPurchaseCount();
+            setLastPurchaseTime('wallet');
+          }
+          incrementWalletPurchaseCount();
+        } else if (moduleConfig.per_wallet_limit) {
+          incrementWalletPurchaseCount();
+        }
+
+        if (moduleConfig.supply_limit_cooldown) {
+          setLastPurchaseTime('supply');
+        }
+
         // Reload purchase history
         if (moduleConfig.show_purchase_history) {
           setTimeout(() => loadPurchaseHistory(), 2000);
         }
 
-        // Clear status after delay
+        // Refresh display to show updated cooldown status
         setTimeout(() => {
-          statusEl.innerHTML = '';
+          displayPurchaseCard();
         }, 10000);
 
       } catch (retryError) {
@@ -694,5 +760,80 @@ window.init_paid_claim = function(containerId, config = {}) {
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+
+  // Cooldown management functions
+  function getCooldownKey(type) {
+    return `paid_claim_cooldown_${type}_${currentAccount}_${moduleConfig.template_id}`;
+  }
+
+  function getLastPurchaseTime(type) {
+    const key = getCooldownKey(type);
+    const timestamp = localStorage.getItem(key);
+    return timestamp ? parseInt(timestamp) : null;
+  }
+
+  function setLastPurchaseTime(type) {
+    const key = getCooldownKey(type);
+    localStorage.setItem(key, Date.now().toString());
+  }
+
+  function checkCooldown(type, cooldownHours) {
+    if (!cooldownHours || !currentAccount) return { active: false };
+
+    const lastPurchase = getLastPurchaseTime(type);
+    if (!lastPurchase) return { active: false };
+
+    const cooldownMs = parseFloat(cooldownHours) * 60 * 60 * 1000; // Convert hours to milliseconds
+    const elapsedMs = Date.now() - lastPurchase;
+    const remainingMs = cooldownMs - elapsedMs;
+
+    if (remainingMs > 0) {
+      return {
+        active: true,
+        remainingMs: remainingMs,
+        remainingTime: formatCooldownTime(remainingMs)
+      };
+    }
+
+    return { active: false };
+  }
+
+  function formatCooldownTime(ms) {
+    const hours = Math.floor(ms / (60 * 60 * 1000));
+    const minutes = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((ms % (60 * 1000)) / 1000);
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    } else {
+      return `${seconds}s`;
+    }
+  }
+
+  function getWalletPurchaseCount() {
+    // Get count from purchase history
+    if (!currentAccount) return 0;
+
+    const key = `paid_claim_count_${currentAccount}_${moduleConfig.template_id}`;
+    const count = localStorage.getItem(key);
+    return count ? parseInt(count) : 0;
+  }
+
+  function incrementWalletPurchaseCount() {
+    if (!currentAccount) return;
+
+    const key = `paid_claim_count_${currentAccount}_${moduleConfig.template_id}`;
+    const count = getWalletPurchaseCount();
+    localStorage.setItem(key, (count + 1).toString());
+  }
+
+  function resetWalletPurchaseCount() {
+    if (!currentAccount) return;
+
+    const key = `paid_claim_count_${currentAccount}_${moduleConfig.template_id}`;
+    localStorage.removeItem(key);
   }
 };

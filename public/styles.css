@@ -814,3 +814,42 @@ footer a:hover {
   text-decoration: line-through;
   opacity: 0.7;
 }
+
+/* Paid Claim Grid Layout */
+.paid-claim-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
+  margin: 20px 0;
+  width: 100%;
+}
+
+/* Ensure paid claim modules fit in grid */
+.paid-claim-grid .module-container {
+  margin: 0;
+}
+
+.paid-claim-grid .nft-card {
+  max-width: 100%;
+  margin: 0;
+}
+
+/* Responsive adjustments for paid claims grid */
+@media (max-width: 768px) {
+  .paid-claim-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1200px) {
+  .paid-claim-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1201px) {
+  .paid-claim-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

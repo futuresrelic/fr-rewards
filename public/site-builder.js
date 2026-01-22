@@ -109,6 +109,8 @@ const AVAILABLE_MODULES = [
       collection_name: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
       max_supply: { type: 'text', label: 'Max Supply', default: '', help: 'Maximum supply available (optional)' },
       per_wallet_limit: { type: 'text', label: 'Per Wallet Limit', default: '', help: 'Max purchases per wallet (optional)' },
+      wallet_limit_cooldown: { type: 'text', label: 'Wallet Limit Cooldown (hours)', default: '', help: 'Hours before wallet limit resets (e.g., 24 for daily, 168 for weekly). Leave empty for no cooldown.' },
+      supply_limit_cooldown: { type: 'text', label: 'Supply Limit Cooldown (hours)', default: '', help: 'Hours before supply limit resets (optional). Leave empty for no cooldown.' },
       auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false, help: 'Automatically connect wallet on load' },
       show_purchase_history: { type: 'checkbox', label: 'Show Purchase History', default: true, help: 'Display user\'s purchase history' }
     }
