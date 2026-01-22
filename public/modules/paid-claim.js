@@ -103,6 +103,30 @@ window.init_paid_claim = function(containerId, config = {}) {
       currentAccount = savedAccount;
       currentWalletType = savedWallet;
 
+      // Try to restore WCW session
+      if (savedWallet === 'wcw') {
+        try {
+          const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
+          if (WaxJS) {
+            wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
+            const autoLoginAccount = await wax.login();
+            if (autoLoginAccount) {
+              currentAccount = autoLoginAccount;
+            } else {
+              // Auto-login failed, clear saved session
+              localStorage.removeItem('wax_account_paid');
+              localStorage.removeItem('wax_wallet_paid');
+              return;
+            }
+          }
+        } catch (error) {
+          console.warn('Could not restore WCW session:', error);
+          localStorage.removeItem('wax_account_paid');
+          localStorage.removeItem('wax_wallet_paid');
+          return;
+        }
+      }
+
       // Try to restore Anchor session
       if (savedWallet === 'anchor' && window.AnchorWallet) {
         try {

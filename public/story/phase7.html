@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase 7 - Get Hired and Clock-in Daily</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .story-container { max-width: 900px; margin: 0 auto; padding: 3rem 2rem; }
+    .story-header { text-align: center; margin-bottom: 3rem; }
+    .story-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; color: var(--primary); }
+    .story-header .subtitle { font-size: 1.2rem; color: var(--text-secondary); }
+    .narrative { background: var(--bg-secondary); border-left: 4px solid var(--primary); padding: 2rem; margin-bottom: 3rem; border-radius: 8px; line-height: 1.8; font-size: 1.05rem; }
+    .narrative h2 { margin-top: 0; color: var(--primary); }
+    .narrative p { margin: 1rem 0; }
+    .action-module { margin-bottom: 3rem; }
+    .nav-buttons { display: flex; justify-content: space-between; margin-top: 3rem; }
+  </style>
+</head>
+<body>
+  <div class="story-container">
+    <div class="story-header">
+      <h1>Phase 7</h1>
+      <p class="subtitle">Action: Get Hired and Clock-in Daily</p>
+    </div>
+
+    <div class="narrative">
+      <h2>Your Next Step</h2>
+      <p>
+        Purchase your Hired! (WAX BRIBE) NFT to unlock daily rewards and continue your journey in the Future's Relic universe.
+      </p>
+      <p>
+        This NFT grants you access to daily check-ins and special rewards. Connect your wallet below to get started.
+      </p>
+    </div>
+
+    <div class="action-module">
+      <!-- Paid Claim Module -->
+      <div
+        id="module-1"
+        data-module="paid-claim"
+        data-config='{"template_id":"551277","price_wax":"666.00000000","payment_wallet":"futuresrelic","collection_name":"futuresrelic","auto_connect":true,"show_purchase_history":true}'
+      ></div>
+    </div>
+
+    <div class="nav-buttons">
+      <a href="/story/phase6.html" class="btn btn-secondary">← Phase 6</a>
+      <a href="/story/index.html" class="btn btn-primary">Back to Story Index</a>
+    </div>
+  </div>
+
+  <!-- Wallet Libraries -->
+  <script src="/waxjs.js"></script>
+  <script src="/anchor-simple.js"></script>
+
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>
