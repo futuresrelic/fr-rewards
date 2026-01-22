@@ -785,7 +785,16 @@ app.post('/api/user/claim-all', strictLimiter, async (req, res) => {
  */
 app.post('/api/user/purchase', strictLimiter, async (req, res) => {
   try {
-    const { account, template_id, payment_transaction_id, price_wax, payment_wallet } = req.body;
+    const {
+      account,
+      template_id,
+      payment_transaction_id,
+      price_wax,
+      payment_wallet,
+      per_wallet_limit,
+      wallet_limit_cooldown,
+      supply_limit_cooldown
+    } = req.body;
 
     // Validate required fields
     if (!account || !template_id || !payment_transaction_id || !price_wax || !payment_wallet) {
@@ -821,6 +830,49 @@ app.post('/api/user/purchase', strictLimiter, async (req, res) => {
       } else if (existingPurchase.verification_status === 'verification_failed' || existingPurchase.status === 'failed') {
         // Allow retry for failed verifications
         console.log(`♻️ Retrying failed purchase: ${payment_transaction_id}`);
+      }
+    }
+
+    // SERVER-SIDE COOLDOWN ENFORCEMENT (prevents bypassing via localStorage manipulation)
+    // Check wallet-specific purchase limit and cooldown
+    if (per_wallet_limit && wallet_limit_cooldown) {
+      const walletCheck = db.purchases.checkWalletCooldown(
+        account,
+        validatedTemplateId,
+        per_wallet_limit,
+        wallet_limit_cooldown
+      );
+
+      if (!walletCheck.allowed) {
+        const remainingTime = walletCheck.cooldownEndsAt ? new Date(walletCheck.cooldownEndsAt).toISOString() : 'unknown';
+        console.log(`🚫 Wallet cooldown active for ${account} on template ${validatedTemplateId}`);
+        return res.status(429).json({
+          error: 'Wallet purchase limit reached',
+          details: `You have reached the purchase limit of ${walletCheck.limit} per ${wallet_limit_cooldown} hours. Cooldown ends at: ${remainingTime}`,
+          cooldown_active: true,
+          cooldown_ends_at: walletCheck.cooldownEndsAt,
+          purchases_in_window: walletCheck.count,
+          limit: walletCheck.limit
+        });
+      }
+    }
+
+    // Check global supply cooldown (rate limiting across all wallets)
+    if (supply_limit_cooldown) {
+      const supplyCheck = db.purchases.checkSupplyCooldown(
+        validatedTemplateId,
+        supply_limit_cooldown
+      );
+
+      if (!supplyCheck.allowed) {
+        const lastPurchaseTime = supplyCheck.lastPurchaseTime ? new Date(supplyCheck.lastPurchaseTime).toISOString() : 'unknown';
+        console.log(`🚫 Supply cooldown active for template ${validatedTemplateId}`);
+        return res.status(429).json({
+          error: 'Supply cooldown active',
+          details: `This template has a ${supply_limit_cooldown} hour cooldown between purchases. Last purchase: ${lastPurchaseTime}`,
+          cooldown_active: true,
+          last_purchase_time: supplyCheck.lastPurchaseTime
+        });
       }
     }
 

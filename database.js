@@ -1055,6 +1055,75 @@ const purchases = {
       FROM purchases
       WHERE template_id = ?
     `).get(template_id);
+  },
+
+  /**
+   * Check if wallet has reached purchase limit within cooldown period
+   * Returns { allowed: boolean, count: number, cooldownEndsAt: timestamp }
+   */
+  checkWalletCooldown: (wallet_account, template_id, limit, cooldown_hours) => {
+    // If no limit specified, allow unlimited purchases
+    if (!limit || limit <= 0) {
+      return { allowed: true, count: 0, cooldownEndsAt: null };
+    }
+
+    const cooldownMs = cooldown_hours * 60 * 60 * 1000;
+    const cooldownStartTime = Date.now() - cooldownMs;
+
+    // Count successful purchases within the cooldown window
+    const result = db.prepare(`
+      SELECT
+        COUNT(*) as count,
+        MAX(purchased_at) as last_purchase
+      FROM purchases
+      WHERE wallet_account = ?
+        AND template_id = ?
+        AND status = 'completed'
+        AND datetime(purchased_at) >= datetime(?, 'unixepoch', 'localtime')
+    `).get(wallet_account, template_id, Math.floor(cooldownStartTime / 1000));
+
+    const count = result.count || 0;
+    const allowed = count < limit;
+
+    // Calculate when cooldown ends (if limit reached)
+    let cooldownEndsAt = null;
+    if (!allowed && result.last_purchase) {
+      const lastPurchaseTime = new Date(result.last_purchase).getTime();
+      cooldownEndsAt = lastPurchaseTime + cooldownMs;
+    }
+
+    return { allowed, count, limit, cooldownEndsAt };
+  },
+
+  /**
+   * Check global supply cooldown (rate limiting across all wallets)
+   * Returns { allowed: boolean, lastPurchaseTime: timestamp }
+   */
+  checkSupplyCooldown: (template_id, cooldown_hours) => {
+    // If no cooldown specified, allow purchase
+    if (!cooldown_hours || cooldown_hours <= 0) {
+      return { allowed: true, lastPurchaseTime: null };
+    }
+
+    const cooldownMs = cooldown_hours * 60 * 60 * 1000;
+    const cooldownStartTime = Date.now() - cooldownMs;
+
+    // Get the most recent successful purchase for this template
+    const result = db.prepare(`
+      SELECT MAX(purchased_at) as last_purchase
+      FROM purchases
+      WHERE template_id = ?
+        AND status = 'completed'
+    `).get(template_id);
+
+    if (!result.last_purchase) {
+      return { allowed: true, lastPurchaseTime: null };
+    }
+
+    const lastPurchaseTime = new Date(result.last_purchase).getTime();
+    const allowed = lastPurchaseTime < cooldownStartTime;
+
+    return { allowed, lastPurchaseTime };
   }
 };
 

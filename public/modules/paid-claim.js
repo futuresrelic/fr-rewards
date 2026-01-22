@@ -416,7 +416,11 @@ window.init_paid_claim = function(containerId, config = {}) {
           template_id: cfg.template_id,
           payment_transaction_id: paymentResult.transaction_id,
           price_wax: cfg.price_wax,
-          payment_wallet: cfg.payment_wallet
+          payment_wallet: cfg.payment_wallet,
+          // Include cooldown parameters for server-side enforcement
+          per_wallet_limit: cfg.per_wallet_limit || null,
+          wallet_limit_cooldown: cfg.wallet_limit_cooldown || null,
+          supply_limit_cooldown: cfg.supply_limit_cooldown || null
         })
       });
 
@@ -425,6 +429,8 @@ window.init_paid_claim = function(containerId, config = {}) {
       if (!response.ok) {
         const error = new Error(data.error || 'Purchase failed');
         error.can_retry = data.can_retry;
+        error.cooldown_data = data.cooldown_active ? data : null;
+        error.status_code = response.status;
         throw error;
       }
 
@@ -472,6 +478,22 @@ window.init_paid_claim = function(containerId, config = {}) {
 
     } catch (error) {
       console.error('Purchase error:', error);
+
+      // Check if this is a cooldown error (429 status)
+      if (error.status_code === 429 && error.cooldown_data) {
+        let cooldownMessage = `<div style="color: var(--warning);">⏳ ${error.message}</div>`;
+
+        // Add detailed cooldown information
+        if (error.cooldown_data.details) {
+          cooldownMessage += `<div style="font-size: 0.9rem; margin-top: 8px; opacity: 0.9;">${error.cooldown_data.details}</div>`;
+        }
+
+        statusEl.innerHTML = cooldownMessage;
+        showMessage(error.message, 'warning');
+        button.disabled = false;
+        button.textContent = `💰 Purchase for ${parseFloat(cfg.price_wax).toString()} WAX`;
+        return;
+      }
 
       // Check if we can retry (verification failed or other recoverable error)
       const canRetry = error.can_retry || (error.message && error.message.includes('verification'));
