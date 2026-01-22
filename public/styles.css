@@ -819,11 +819,11 @@ footer a:hover {
 /* Paid Claim Grid Layout */
 .paid-claim-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 350px));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 30px;
   margin: 20px auto;
   width: 100%;
-  max-width: fit-content;
+  max-width: 1400px;
   justify-content: center;
 }
 
@@ -846,7 +846,7 @@ footer a:hover {
   padding: 30px;
   margin: 20px auto;
   width: 100%;
-  max-width: 100%;
+  max-width: 1400px;
   box-sizing: border-box;
 }
 
@@ -871,11 +871,11 @@ footer a:hover {
 /* Grid for multiple purchase cards within grouped module */
 .paid-claim-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 350px));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 20px;
   margin: 20px auto;
   width: 100%;
-  max-width: fit-content;
+  max-width: 1400px;
   justify-content: center;
 }
 
