@@ -405,15 +405,35 @@ function renderConfigPanel() {
         ${field.help ? `<div class="config-help">${field.help}</div>` : ''}
       `;
     } else {
-      section.innerHTML = `
-        <label class="config-label">${field.label}:</label>
-        <input type="${field.type}" class="config-input" data-key="${key}" value="${module.config[key] || ''}" placeholder="${field.default}">
-        ${field.help ? `<div class="config-help">${field.help}</div>` : ''}
-      `;
+      // Special handling for template_id in paid-claim module - add fetch button
+      if (module.moduleType === 'paid-claim' && key === 'template_id') {
+        section.innerHTML = `
+          <label class="config-label">${field.label}:</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="${field.type}" class="config-input" data-key="${key}" value="${module.config[key] || ''}" placeholder="${field.default}" style="flex: 1;">
+            <button type="button" class="btn btn-secondary" id="fetch-template-btn" style="padding: 8px 16px; white-space: nowrap;">📥 Fetch Data</button>
+          </div>
+          ${field.help ? `<div class="config-help">${field.help}</div>` : ''}
+        `;
+      } else {
+        section.innerHTML = `
+          <label class="config-label">${field.label}:</label>
+          <input type="${field.type}" class="config-input" data-key="${key}" value="${module.config[key] || ''}" placeholder="${field.default}">
+          ${field.help ? `<div class="config-help">${field.help}</div>` : ''}
+        `;
+      }
     }
 
     configForm.appendChild(section);
   });
+
+  // Add event listener for fetch template button (paid-claim module)
+  if (module.moduleType === 'paid-claim') {
+    const fetchBtn = configForm.querySelector('#fetch-template-btn');
+    if (fetchBtn) {
+      fetchBtn.addEventListener('click', () => fetchTemplateData(module));
+    }
+  }
 
   // Add apply button
   const applyBtn = document.createElement('button');
@@ -423,6 +443,102 @@ function renderConfigPanel() {
   applyBtn.textContent = '✓ Apply Changes';
   applyBtn.addEventListener('click', applyConfig);
   configForm.appendChild(applyBtn);
+}
+
+// Fetch template data from AtomicAssets API (for paid-claim module)
+async function fetchTemplateData(module) {
+  const templateIdInput = configForm.querySelector('[data-key="template_id"]');
+  const templateNameInput = configForm.querySelector('[data-key="template_name"]');
+  const templateImageInput = configForm.querySelector('[data-key="template_image"]');
+  const collectionNameInput = configForm.querySelector('[data-key="collection_name"]');
+  const fetchBtn = configForm.querySelector('#fetch-template-btn');
+
+  const templateId = templateIdInput.value.trim();
+  const collectionName = collectionNameInput ? collectionNameInput.value.trim() : 'futuresrelic';
+
+  if (!templateId) {
+    alert('Please enter a Template ID first');
+    return;
+  }
+
+  // Show loading state
+  const originalBtnText = fetchBtn.textContent;
+  fetchBtn.disabled = true;
+  fetchBtn.textContent = '⏳ Fetching...';
+
+  try {
+    // AtomicAssets API endpoints to try
+    const endpoints = [
+      'https://aa-wax-public1.neftyblocks.com',
+      'https://wax.api.atomicassets.io'
+    ];
+
+    let templateData = null;
+
+    for (const endpoint of endpoints) {
+      try {
+        const url = `${endpoint}/atomicassets/v1/templates/${collectionName}/${templateId}`;
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            templateData = data.data;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch from ${endpoint}:`, err);
+        continue;
+      }
+    }
+
+    if (!templateData) {
+      throw new Error('Could not fetch template data from AtomicAssets API');
+    }
+
+    // Extract template info
+    const name = templateData.immutable_data?.name || templateData.name || `Template ${templateId}`;
+    let imageUrl = '';
+
+    // Try to get image/video from immutable_data
+    if (templateData.immutable_data) {
+      const img = templateData.immutable_data.img || templateData.immutable_data.image || templateData.immutable_data.video;
+      if (img) {
+        // Convert IPFS hash to gateway URL
+        imageUrl = img.startsWith('Qm') ? `https://ipfs.io/ipfs/${img}` : img;
+      }
+    }
+
+    // Update fields with fetched data
+    if (templateNameInput && name) {
+      templateNameInput.value = name;
+    }
+
+    if (templateImageInput && imageUrl) {
+      templateImageInput.value = imageUrl;
+    }
+
+    // Show success feedback
+    fetchBtn.textContent = '✅ Fetched!';
+    fetchBtn.style.background = '#10b981';
+
+    // Reset button after delay
+    setTimeout(() => {
+      fetchBtn.textContent = originalBtnText;
+      fetchBtn.style.background = '';
+      fetchBtn.disabled = false;
+    }, 2000);
+
+  } catch (error) {
+    console.error('Error fetching template data:', error);
+    alert(`Failed to fetch template data: ${error.message}`);
+
+    fetchBtn.textContent = originalBtnText;
+    fetchBtn.disabled = false;
+  }
 }
 
 // Apply configuration changes

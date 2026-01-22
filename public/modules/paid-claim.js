@@ -198,6 +198,12 @@ window.init_paid_claim = function(containerId, config = {}) {
         throw new Error('No template_id configured for this module');
       }
 
+      // Fetch template data from AtomicAssets if name or image is missing
+      if (!moduleConfig.template_name || !moduleConfig.template_image ||
+          moduleConfig.template_name === 'NFT' || moduleConfig.template_image === '') {
+        await fetchTemplateMetadata();
+      }
+
       loadingSection.style.display = 'none';
       connectedSection.style.display = 'block';
 
@@ -214,6 +220,57 @@ window.init_paid_claim = function(containerId, config = {}) {
       showMessage('Error loading data: ' + error.message, 'error');
       console.error('Error:', error);
     }
+  }
+
+  // Fetch template metadata from AtomicAssets API (fallback)
+  async function fetchTemplateMetadata() {
+    const endpoints = [
+      'https://aa-wax-public1.neftyblocks.com',
+      'https://wax.api.atomicassets.io'
+    ];
+
+    for (const endpoint of endpoints) {
+      try {
+        const url = `${endpoint}/atomicassets/v1/templates/${moduleConfig.collection_name}/${moduleConfig.template_id}`;
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            const templateData = data.data;
+
+            // Use fetched name as fallback if not set or is default
+            if (!moduleConfig.template_name || moduleConfig.template_name === 'NFT') {
+              const name = templateData.immutable_data?.name || templateData.name;
+              if (name) {
+                moduleConfig.template_name = name;
+              }
+            }
+
+            // Use fetched image/video as fallback if not set
+            if (!moduleConfig.template_image || moduleConfig.template_image === '') {
+              const img = templateData.immutable_data?.img ||
+                         templateData.immutable_data?.image ||
+                         templateData.immutable_data?.video;
+              if (img) {
+                // Convert IPFS hash to gateway URL
+                moduleConfig.template_image = img.startsWith('Qm') ? `https://ipfs.io/ipfs/${img}` : img;
+              }
+            }
+
+            console.log('✅ Fetched template metadata from AtomicAssets API');
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch template from ${endpoint}:`, err);
+        continue;
+      }
+    }
+
+    console.warn('⚠️ Could not fetch template metadata, using configured values');
   }
 
   // Display the purchase card
