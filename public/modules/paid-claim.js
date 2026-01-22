@@ -480,13 +480,24 @@ window.init_paid_claim = function(containerId, config = {}) {
 
       if (canRetry && paymentResult && paymentResult.transaction_id) {
         errorHtml += `
-          <button class="btn btn-sm btn-warning" onclick="window.retryFailedPurchase_${containerId}('${paymentResult.transaction_id}', '${cfg.template_id}')" style="margin-top: 10px; font-size: 0.9rem;">
+          <button class="btn btn-sm btn-warning retry-verification-btn" data-tx-id="${paymentResult.transaction_id}" data-template-id="${cfg.template_id}" style="margin-top: 10px; font-size: 0.9rem;">
             ♻️ Retry Verification
           </button>
         `;
       }
 
       statusEl.innerHTML = errorHtml;
+
+      // Add event listener to retry button if it exists
+      const retryBtn = statusEl.querySelector('.retry-verification-btn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', () => {
+          const txId = retryBtn.getAttribute('data-tx-id');
+          const templateId = retryBtn.getAttribute('data-template-id');
+          window[`retryFailedPurchase_${containerId}`](txId, templateId);
+        });
+      }
+
       showMessage('Purchase failed: ' + error.message, 'error');
       button.disabled = false;
       button.textContent = `💰 Purchase for ${parseFloat(cfg.price_wax).toString()} WAX`;
@@ -561,10 +572,20 @@ window.init_paid_claim = function(containerId, config = {}) {
         console.error('Retry error:', retryError);
         statusEl.innerHTML = `
           <div style="color: var(--error);">❌ Retry failed: ${retryError.message}</div>
-          <button class="btn btn-sm btn-warning" onclick="window.retryFailedPurchase_${containerId}('${txId}', '${templateId}')" style="margin-top: 10px; font-size: 0.9rem;">
+          <button class="btn btn-sm btn-warning retry-again-btn" data-tx-id="${txId}" data-template-id="${templateId}" style="margin-top: 10px; font-size: 0.9rem;">
             ♻️ Try Again
           </button>
         `;
+
+        // Add event listener to retry button
+        const retryAgainBtn = statusEl.querySelector('.retry-again-btn');
+        if (retryAgainBtn) {
+          retryAgainBtn.addEventListener('click', () => {
+            const txId = retryAgainBtn.getAttribute('data-tx-id');
+            const templateId = retryAgainBtn.getAttribute('data-template-id');
+            window[`retryFailedPurchase_${containerId}`](txId, templateId);
+          });
+        }
       }
     };
   }
