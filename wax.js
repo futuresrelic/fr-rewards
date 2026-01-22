@@ -563,11 +563,15 @@ async function verifyTokenPayment(transactionId, expectedAmount, expectedRecipie
         };
       }
 
-      // Verify amount
-      if (transferData.quantity !== expectedAmount) {
+      // Verify amount - ensure both formats match (add " WAX" suffix if not present)
+      const normalizedExpectedAmount = expectedAmount.includes(' WAX')
+        ? expectedAmount
+        : `${expectedAmount} WAX`;
+
+      if (transferData.quantity !== normalizedExpectedAmount) {
         return {
           verified: false,
-          error: `Incorrect payment amount. Expected: ${expectedAmount}, Got: ${transferData.quantity}`
+          error: `Incorrect payment amount. Expected: ${normalizedExpectedAmount}, Got: ${transferData.quantity}`
         };
       }
 
