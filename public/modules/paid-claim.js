@@ -360,7 +360,7 @@ window.init_paid_claim = function(containerId, config = {}) {
       data: {
         from: currentAccount,
         to: moduleConfig.payment_wallet,
-        quantity: moduleConfig.price_wax,
+        quantity: `${moduleConfig.price_wax} WAX`,
         memo: `NFT Purchase - Template ${moduleConfig.template_id}`
       },
     }];
