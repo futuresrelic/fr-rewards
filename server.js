@@ -831,6 +831,10 @@ app.post('/api/user/purchase', strictLimiter, async (req, res) => {
       db.purchases.add(account, validatedTemplateId, price_wax, payment_transaction_id);
     }
 
+    // Wait 3 seconds for transaction to propagate across blockchain network
+    console.log(`⏳ Waiting 3 seconds for transaction propagation...`);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
     // Verify the token payment on-chain
     let paymentVerification;
     try {
@@ -979,6 +983,24 @@ app.post('/api/user/purchase/recover', strictLimiter, async (req, res) => {
 
         console.log(`✅ Payment re-verified successfully`);
         db.purchases.markVerified(payment_transaction_id);
+
+        // After successful verification, immediately proceed to minting
+        console.log(`🎨 Minting NFT after successful re-verification...`);
+        const config = db.config.get();
+        const mintResult = await wax.mintNFT(purchase.wallet_account, config.collection_name, purchase.template_id);
+
+        console.log(`✅ NFT minted successfully: ${mintResult.transaction_id}`);
+        db.purchases.markCompleted(payment_transaction_id, mintResult.transaction_id);
+
+        return res.json({
+          success: true,
+          message: 'Recovery successful! NFT minted.',
+          payment_transaction_id: payment_transaction_id,
+          mint_transaction_id: mintResult.transaction_id,
+          template_id: purchase.template_id,
+          price_paid: purchase.price_wax
+        });
+
       } catch (verifyError) {
         console.error(`❌ Payment re-verification error:`, verifyError);
         db.purchases.markVerificationFailed(payment_transaction_id, verifyError.message);
@@ -990,9 +1012,9 @@ app.post('/api/user/purchase/recover', strictLimiter, async (req, res) => {
       }
     }
 
-    // If verification succeeded but mint failed, retry minting
+    // If verification succeeded earlier but mint failed, retry minting
     if (purchase.verification_status === 'verified' && (purchase.status === 'failed' || purchase.status === 'pending')) {
-      console.log(`🎨 Re-attempting NFT mint...`);
+      console.log(`🎨 Re-attempting NFT mint (verification was already successful)...`);
 
       const config = db.config.get();
       const mintResult = await wax.mintNFT(purchase.wallet_account, config.collection_name, purchase.template_id);
