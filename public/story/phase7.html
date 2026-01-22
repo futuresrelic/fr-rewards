@@ -37,21 +37,33 @@
     <div class="action-module">
       <!-- Paid Claim Grid - Multiple NFTs side by side -->
       <div class="paid-claim-grid">
-        <!-- Paid Claim Module 1 -->
+        <!-- Paid Claim Module 1: Hired! -->
         <div
           id="module-1"
           data-module="paid-claim"
           data-config='{"template_id":"551277","price_wax":"666.00000000","payment_wallet":"futuresrelic","collection_name":"futuresrelic","auto_connect":true,"show_purchase_history":true}'
         ></div>
 
-        <!-- Add more paid claim modules here as needed -->
-        <!-- Example:
+        <!-- Paid Claim Module 2: Schedule Pack -->
         <div
           id="module-2"
           data-module="paid-claim"
-          data-config='{"template_id":"582322","price_wax":"2.00000000","payment_wallet":"futuresrelic","collection_name":"futuresrelic","auto_connect":true,"show_purchase_history":false}'
+          data-config='{"template_id":"582322","price_wax":"2.00000000","payment_wallet":"futuresrelic","collection_name":"futuresrelic","auto_connect":true,"show_purchase_history":false,"per_wallet_limit":"1","wallet_limit_cooldown":"168"}'
         ></div>
-        -->
+
+        <!-- Paid Claim Module 3: Day -->
+        <div
+          id="module-3"
+          data-module="paid-claim"
+          data-config='{"template_id":"557194","price_wax":"1.00000000","payment_wallet":"futuresrelic","collection_name":"futuresrelic","auto_connect":true,"show_purchase_history":false}'
+        ></div>
+
+        <!-- Paid Claim Module 4: Pencil -->
+        <div
+          id="module-4"
+          data-module="paid-claim"
+          data-config='{"template_id":"217746","price_wax":"1.00000000","payment_wallet":"futuresrelic","collection_name":"futuresrelic","auto_connect":true,"show_purchase_history":false}'
+        ></div>
       </div>
     </div>
 
@@ -64,6 +76,9 @@
   <!-- Wallet Libraries -->
   <script src="/waxjs.js"></script>
   <script src="/anchor-simple.js"></script>
+
+  <!-- Global Wallet Manager (must load before modules) -->
+  <script src="/modules/wallet-manager.js"></script>
 
   <script src="/modules/module-loader.js"></script>
 </body>
