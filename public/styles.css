@@ -819,20 +819,22 @@ footer a:hover {
 /* Paid Claim Grid Layout */
 .paid-claim-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 350px));
   gap: 30px;
-  margin: 20px 0;
+  margin: 20px auto;
   width: 100%;
-  justify-items: center;
+  max-width: fit-content;
+  justify-content: center;
 }
 
 /* Ensure paid claim modules fit in grid */
 .paid-claim-grid .module-container {
   margin: 0;
+  width: 100%;
 }
 
 .paid-claim-grid .nft-card {
-  max-width: 100%;
+  width: 100%;
   margin: 0;
 }
 
@@ -869,11 +871,12 @@ footer a:hover {
 /* Grid for multiple purchase cards within grouped module */
 .paid-claim-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 350px));
   gap: 20px;
   margin: 20px auto;
   width: 100%;
-  justify-items: center;
+  max-width: fit-content;
+  justify-content: center;
 }
 
 .paid-claim-cards-grid .nft-card {
@@ -882,7 +885,7 @@ footer a:hover {
   border-radius: 8px;
   padding: 20px;
   transition: transform 0.2s, box-shadow 0.2s;
-  min-width: 0; /* Prevent grid blowout */
+  width: 100%;
 }
 
 .paid-claim-cards-grid .nft-card:hover {
@@ -893,7 +896,7 @@ footer a:hover {
 /* Responsive adjustments for paid claims grid */
 @media (max-width: 768px) {
   .paid-claim-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(300px, 400px);
     gap: 20px;
   }
 
@@ -902,37 +905,7 @@ footer a:hover {
   }
 
   .paid-claim-cards-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(280px, 400px);
     gap: 15px;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1024px) {
-  .paid-claim-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .paid-claim-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1025px) and (max-width: 1400px) {
-  .paid-claim-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .paid-claim-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1401px) {
-  .paid-claim-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .paid-claim-cards-grid {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
