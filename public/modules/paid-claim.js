@@ -274,12 +274,6 @@ window.init_paid_claim = function(containerId, config = {}) {
       // Create a grid container for multiple cards
       const gridContainer = document.createElement('div');
       gridContainer.className = 'paid-claim-cards-grid';
-      gridContainer.style.cssText = `
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 20px;
-        margin: 20px 0;
-      `;
 
       // Render each template as a card
       let hasActiveCooldown = false;
