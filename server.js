@@ -777,6 +777,143 @@ app.post('/api/user/claim-all', strictLimiter, async (req, res) => {
   }
 });
 
+// ==================== PURCHASE ENDPOINTS ====================
+
+/**
+ * POST /api/user/purchase
+ * Process NFT purchase with WAX token payment
+ */
+app.post('/api/user/purchase', strictLimiter, async (req, res) => {
+  try {
+    const { account, template_id, payment_transaction_id, price_wax, payment_wallet } = req.body;
+
+    // Validate required fields
+    if (!account || !template_id || !payment_transaction_id || !price_wax || !payment_wallet) {
+      return res.status(400).json({
+        error: 'Missing required fields: account, template_id, payment_transaction_id, price_wax, payment_wallet'
+      });
+    }
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    // Validate template_id
+    const validatedTemplateId = validators.validateTemplateId(template_id);
+    if (validatedTemplateId === null) {
+      return res.status(400).json({ error: 'Invalid template_id - must be a positive integer' });
+    }
+
+    // Check if this payment has already been processed (prevent double-minting)
+    if (db.purchases.exists(payment_transaction_id)) {
+      const existingPurchase = db.purchases.getByPaymentTx(payment_transaction_id);
+
+      if (existingPurchase.status === 'completed') {
+        return res.status(409).json({
+          error: 'This payment has already been processed',
+          purchase: existingPurchase
+        });
+      } else if (existingPurchase.status === 'pending') {
+        return res.status(409).json({
+          error: 'This payment is currently being processed'
+        });
+      }
+    }
+
+    console.log(`🔍 Verifying payment: ${payment_transaction_id}`);
+
+    // Verify the token payment on-chain
+    const paymentVerification = await wax.verifyTokenPayment(
+      payment_transaction_id,
+      price_wax,
+      payment_wallet,
+      account
+    );
+
+    if (!paymentVerification.verified) {
+      console.error(`❌ Payment verification failed:`, paymentVerification.error);
+      return res.status(400).json({
+        error: 'Payment verification failed',
+        details: paymentVerification.error
+      });
+    }
+
+    console.log(`✅ Payment verified: ${price_wax} from ${account} to ${payment_wallet}`);
+
+    // Record purchase as pending
+    db.purchases.add(account, validatedTemplateId, price_wax, payment_transaction_id);
+
+    // Get collection from config
+    const config = db.config.get();
+
+    // Mint the NFT to the user
+    console.log(`🎨 Minting NFT template ${validatedTemplateId} to ${account}...`);
+    const mintResult = await wax.mintNFT(account, config.collection_name, validatedTemplateId);
+
+    console.log(`✅ NFT minted successfully: ${mintResult.transaction_id}`);
+
+    // Update purchase record to completed
+    db.purchases.markCompleted(payment_transaction_id, mintResult.transaction_id);
+
+    res.json({
+      success: true,
+      message: 'Purchase completed successfully!',
+      payment_transaction_id: payment_transaction_id,
+      mint_transaction_id: mintResult.transaction_id,
+      template_id: validatedTemplateId,
+      price_paid: price_wax
+    });
+
+  } catch (error) {
+    console.error('Error processing purchase:', error);
+
+    // Try to mark purchase as failed if it exists
+    if (req.body.payment_transaction_id && db.purchases.exists(req.body.payment_transaction_id)) {
+      db.purchases.markFailed(req.body.payment_transaction_id, error.message);
+    }
+
+    // Handle CPU exhaustion errors
+    if (error.message && error.message.toLowerCase().includes('cpu')) {
+      return res.status(503).json({
+        error: 'Server temporarily unavailable - insufficient CPU resources. Your payment was verified but minting failed. Please contact admin with transaction ID: ' + req.body.payment_transaction_id
+      });
+    }
+
+    res.status(500).json({
+      error: error.message,
+      payment_transaction_id: req.body.payment_transaction_id
+    });
+  }
+});
+
+/**
+ * GET /api/user/purchases/:account
+ * Get purchase history for an account
+ */
+app.get('/api/user/purchases/:account', async (req, res) => {
+  try {
+    const { account } = req.params;
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    const purchases = db.purchases.getByAccount(account);
+
+    res.json({
+      success: true,
+      account: account,
+      purchases: purchases
+    });
+
+  } catch (error) {
+    console.error('Error fetching purchases:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== BLEND ENDPOINTS ====================
 
 /**

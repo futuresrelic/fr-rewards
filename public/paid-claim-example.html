@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paid Claim Example - NFT Purchase</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .example-container {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+
+    .example-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .example-header h1 {
+      margin-bottom: 10px;
+    }
+
+    .example-header p {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+    }
+
+    .module-demo {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 40px;
+    }
+
+    .code-example {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin-top: 20px;
+    }
+
+    .code-example pre {
+      margin: 0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .code-example code {
+      color: #ce9178;
+    }
+
+    .info-box {
+      background: rgba(59, 130, 246, 0.1);
+      border-left: 4px solid var(--primary);
+      padding: 15px 20px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+
+    .info-box h4 {
+      margin: 0 0 10px 0;
+      color: var(--primary);
+    }
+
+    .info-box ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+
+    .info-box li {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="example-container">
+    <div class="example-header">
+      <h1>💰 Paid Claim Module</h1>
+      <p>Purchase NFTs with WAX tokens - No NeftyBlocks required!</p>
+    </div>
+
+    <!-- Live Demo -->
+    <div class="module-demo">
+      <h2 style="margin-bottom: 20px; text-align: center;">Live Demo</h2>
+
+      <!-- The Paid Claim Module -->
+      <div id="demo-paid-claim" data-module="paid-claim" data-config='{
+        "template_id": 251276,
+        "price_wax": "10.00000000",
+        "payment_wallet": "futuresrelic",
+        "collection_name": "futuresrelic",
+        "template_name": "Premium NFT",
+        "template_image": null,
+        "max_supply": 100,
+        "per_wallet_limit": 5,
+        "auto_connect": false,
+        "show_purchase_history": true
+      }'></div>
+    </div>
+
+    <!-- Usage Instructions -->
+    <div class="info-box">
+      <h4>📖 How to Use</h4>
+      <p>Add this module to any page by including the HTML element with configuration:</p>
+
+      <div class="code-example">
+        <pre><code>&lt;!-- Load Module System --&gt;
+&lt;script src="/modules/module-loader.js"&gt;&lt;/script&gt;
+
+&lt;!-- Add Module to Page --&gt;
+&lt;div id="my-paid-claim" data-module="paid-claim" data-config='{
+  "template_id": 251276,
+  "price_wax": "10.00000000",
+  "payment_wallet": "your.wallet",
+  "collection_name": "yourcollection",
+  "template_name": "Cool NFT",
+  "template_image": "https://example.com/image.png",
+  "max_supply": 100,
+  "per_wallet_limit": 3,
+  "auto_connect": false,
+  "show_purchase_history": true
+}'&gt;&lt;/div&gt;</code></pre>
+      </div>
+    </div>
+
+    <!-- Configuration Options -->
+    <div class="info-box">
+      <h4>⚙️ Configuration Options</h4>
+      <ul>
+        <li><strong>template_id</strong> (required): NFT template ID to mint</li>
+        <li><strong>price_wax</strong> (required): Price in WAX with 8 decimals (e.g., "10.00000000")</li>
+        <li><strong>payment_wallet</strong> (required): Wallet that receives payments</li>
+        <li><strong>collection_name</strong>: Collection name (default: "futuresrelic")</li>
+        <li><strong>template_name</strong>: Display name for the NFT</li>
+        <li><strong>template_image</strong>: URL to NFT image/video</li>
+        <li><strong>max_supply</strong>: Maximum number available (optional, for display)</li>
+        <li><strong>per_wallet_limit</strong>: Max purchases per wallet (optional, for display)</li>
+        <li><strong>auto_connect</strong>: Auto-connect wallet on load (default: false)</li>
+        <li><strong>show_purchase_history</strong>: Show purchase history (default: true)</li>
+      </ul>
+    </div>
+
+    <!-- Features -->
+    <div class="info-box">
+      <h4>✨ Features</h4>
+      <ul>
+        <li>✅ <strong>Direct Payment Processing</strong> - Users pay WAX tokens directly</li>
+        <li>✅ <strong>Automatic NFT Minting</strong> - NFT minted immediately after payment verification</li>
+        <li>✅ <strong>Dual Wallet Support</strong> - Works with both WAX Cloud Wallet and Anchor</li>
+        <li>✅ <strong>Transaction Verification</strong> - On-chain payment verification prevents fraud</li>
+        <li>✅ <strong>Purchase History</strong> - Track all purchases per wallet</li>
+        <li>✅ <strong>No External Dependencies</strong> - Bypass NeftyBlocks embeds entirely</li>
+        <li>✅ <strong>Duplicate Prevention</strong> - Same payment can't be processed twice</li>
+        <li>✅ <strong>Full Customization</strong> - Complete control over styling and UX</li>
+      </ul>
+    </div>
+
+    <!-- Technical Flow -->
+    <div class="info-box">
+      <h4>🔄 How It Works</h4>
+      <ol style="padding-left: 20px;">
+        <li>User connects their WAX wallet (WCW or Anchor)</li>
+        <li>Module displays purchasable NFT with price</li>
+        <li>User clicks "Purchase" button</li>
+        <li>Wallet prompts user to sign WAX token transfer</li>
+        <li>Payment transaction sent to blockchain</li>
+        <li>Frontend sends payment TX ID to backend</li>
+        <li>Backend verifies payment on-chain (amount, recipient, sender)</li>
+        <li>Backend mints NFT to user's wallet</li>
+        <li>Purchase recorded in database</li>
+        <li>User receives success confirmation with transaction links</li>
+      </ol>
+    </div>
+
+    <!-- Backend Setup -->
+    <div class="info-box">
+      <h4>🛠️ Backend Setup</h4>
+      <p>The backend automatically handles:</p>
+      <ul>
+        <li><strong>Payment Verification</strong> - POST /api/user/purchase</li>
+        <li><strong>Purchase History</strong> - GET /api/user/purchases/:account</li>
+        <li><strong>Database Tracking</strong> - All purchases logged in SQLite</li>
+        <li><strong>Idempotency</strong> - Prevents duplicate minting from same payment</li>
+        <li><strong>Error Handling</strong> - CPU exhaustion, verification failures, etc.</li>
+      </ul>
+    </div>
+
+    <!-- Example Use Cases -->
+    <div class="info-box">
+      <h4>💡 Use Cases</h4>
+      <ul>
+        <li><strong>Fixed-Price NFT Sales</strong> - Sell specific templates at set prices</li>
+        <li><strong>Limited Edition Drops</strong> - Track supply and enforce limits</li>
+        <li><strong>Membership Passes</strong> - Sell access NFTs for communities</li>
+        <li><strong>Event Tickets</strong> - NFT-based ticketing with payment</li>
+        <li><strong>Digital Collectibles</strong> - Direct-to-consumer NFT sales</li>
+        <li><strong>Premium Content Access</strong> - Gated content via NFT purchase</li>
+      </ul>
+    </div>
+
+    <!-- Advantages Over NeftyBlocks -->
+    <div class="info-box" style="border-color: var(--success); background: rgba(16, 185, 129, 0.1);">
+      <h4 style="color: var(--success);">🚀 Why Use This Instead of NeftyBlocks?</h4>
+      <ul>
+        <li>✅ <strong>Full Control</strong> - Your platform, your branding, your rules</li>
+        <li>✅ <strong>No Embeds</strong> - Faster loading, cleaner UI, no iframes</li>
+        <li>✅ <strong>Integrated Experience</strong> - Seamless with your existing modules</li>
+        <li>✅ <strong>Complete Data</strong> - All purchase records in your database</li>
+        <li>✅ <strong>Custom Features</strong> - Add discounts, bundles, time limits, etc.</li>
+        <li>✅ <strong>No External Dependency</strong> - Never worry about NeftyBlocks downtime</li>
+        <li>✅ <strong>Better UX</strong> - Streamlined flow without external redirects</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Load Module System -->
+  <script src="/modules/module-loader.js"></script>
+</body>
+</html>

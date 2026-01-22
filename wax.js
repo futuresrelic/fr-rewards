@@ -500,6 +500,102 @@ async function verifyTransaction(transactionId) {
 }
 
 /**
+ * Verify a WAX token payment transaction
+ * @param {string} transactionId - Transaction ID to verify
+ * @param {string} expectedAmount - Expected amount in WAX (e.g., "10.00000000 WAX")
+ * @param {string} expectedRecipient - Expected recipient wallet
+ * @param {string} fromAccount - Expected sender wallet
+ * @returns {Promise<Object>} Verification result with status and details
+ */
+async function verifyTokenPayment(transactionId, expectedAmount, expectedRecipient, fromAccount) {
+  // RPC endpoints for transaction verification
+  const rpcEndpoints = [
+    'https://api.wax.alohaeos.com',
+    'https://wax.greymass.com',
+    'https://api.waxsweden.org',
+    'https://wax.eosphere.io'
+  ];
+
+  let lastError = null;
+
+  for (const endpoint of rpcEndpoints) {
+    try {
+      console.log(`🔍 Verifying payment transaction ${transactionId} via ${endpoint}...`);
+      const rpc = new JsonRpc(endpoint, { fetch });
+
+      // Get transaction details
+      const txData = await rpc.history_get_transaction(transactionId);
+
+      if (!txData || !txData.trx || !txData.trx.trx) {
+        throw new Error('Transaction not found or invalid format');
+      }
+
+      const actions = txData.trx.trx.actions || [];
+
+      // Find eosio.token transfer action
+      const transferAction = actions.find(action =>
+        action.account === 'eosio.token' &&
+        action.name === 'transfer'
+      );
+
+      if (!transferAction) {
+        return {
+          verified: false,
+          error: 'No token transfer action found in transaction'
+        };
+      }
+
+      const transferData = transferAction.data;
+
+      // Verify sender
+      if (transferData.from !== fromAccount) {
+        return {
+          verified: false,
+          error: `Payment sent from wrong account. Expected: ${fromAccount}, Got: ${transferData.from}`
+        };
+      }
+
+      // Verify recipient
+      if (transferData.to !== expectedRecipient) {
+        return {
+          verified: false,
+          error: `Payment sent to wrong recipient. Expected: ${expectedRecipient}, Got: ${transferData.to}`
+        };
+      }
+
+      // Verify amount
+      if (transferData.quantity !== expectedAmount) {
+        return {
+          verified: false,
+          error: `Incorrect payment amount. Expected: ${expectedAmount}, Got: ${transferData.quantity}`
+        };
+      }
+
+      // All checks passed
+      console.log(`✅ Payment verified: ${transferData.quantity} from ${transferData.from} to ${transferData.to}`);
+
+      return {
+        verified: true,
+        transaction_id: transactionId,
+        from: transferData.from,
+        to: transferData.to,
+        amount: transferData.quantity,
+        memo: transferData.memo || '',
+        block_time: txData.block_time
+      };
+
+    } catch (error) {
+      console.warn(`⚠️ RPC endpoint ${endpoint} failed:`, error.message);
+      lastError = error;
+      continue;
+    }
+  }
+
+  // All endpoints failed
+  throw new Error(`Failed to verify transaction: ${lastError?.message || 'All RPC endpoints failed'}`);
+}
+
+/**
  * Get user assets LIVE from blockchain RPC (not cached)
  * Queries atomicassets contract directly for real-time data
  * @param {string} account - WAX account name
@@ -741,6 +837,7 @@ module.exports = {
   transferNFTs,
   getCollection,
   verifyTransaction,
+  verifyTokenPayment,
   getAccountResources,
   getIpfsUrl,
   getAtomicAPIs,

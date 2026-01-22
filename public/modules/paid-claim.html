@@ -1,0 +1,45 @@
+<div class="module-container paid-claim-module">
+  <!-- Not Connected State -->
+  <div class="paid-claim-not-connected" style="display: block;">
+    <h3>Connect Your Wallet</h3>
+    <p style="margin-bottom: 20px;">Connect your WAX wallet to purchase NFTs.</p>
+
+    <div class="wallet-buttons" style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;">
+      <button class="paid-claim-connect-wcw btn btn-primary">
+        <span class="btn-icon">☁️</span>
+        Wax Cloud Wallet
+      </button>
+      <button class="paid-claim-connect-anchor btn btn-primary">
+        <span class="btn-icon">⚓</span>
+        Anchor Wallet
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div class="paid-claim-loading" style="display: none; text-align: center; padding: 40px;">
+    <div class="loader" style="margin: 0 auto 15px;"></div>
+    <p>Loading available NFTs...</p>
+  </div>
+
+  <!-- Connected State -->
+  <div class="paid-claim-connected" style="display: none;">
+    <div class="paid-claim-wallet-info" style="margin-bottom: 20px; text-align: center;">
+      <span style="color: var(--text-secondary);">Connected: </span>
+      <span class="paid-claim-connected-account" style="font-weight: 600; color: var(--primary);"></span>
+      <button class="paid-claim-disconnect-btn btn btn-secondary btn-sm" style="margin-left: 15px;">Disconnect</button>
+    </div>
+
+    <!-- Available NFTs for Purchase -->
+    <div class="paid-claim-nft-list" style="margin-top: 20px;"></div>
+
+    <!-- Purchase History -->
+    <div class="paid-claim-history" style="display: none; margin-top: 30px;">
+      <h4>Recent Purchases</h4>
+      <div class="paid-claim-history-list"></div>
+    </div>
+  </div>
+
+  <!-- Error/Status Messages -->
+  <div class="paid-claim-message" style="display: none; padding: 20px; border-radius: 8px; margin: 20px 0;"></div>
+</div>

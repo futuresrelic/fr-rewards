@@ -642,6 +642,41 @@ function initializeTables() {
     console.warn('⚠️ Migration warning:', error.message);
   }
 
+  // Migration: Create purchases table if it doesn't exist
+  try {
+    const purchasesExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='purchases'
+    `).get();
+
+    if (!purchasesExists) {
+      console.log('🔄 Creating purchases table...');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS purchases (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          wallet_account TEXT NOT NULL,
+          template_id INTEGER NOT NULL,
+          price_wax TEXT NOT NULL,
+          payment_transaction_id TEXT NOT NULL UNIQUE,
+          mint_transaction_id TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          error_message TEXT,
+          purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          minted_at TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_purchases_wallet ON purchases(wallet_account);
+        CREATE INDEX IF NOT EXISTS idx_purchases_template ON purchases(template_id);
+        CREATE INDEX IF NOT EXISTS idx_purchases_payment_tx ON purchases(payment_transaction_id);
+        CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status);
+      `);
+
+      console.log('✅ purchases table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
   // Seed default templates if they don't exist (runs every time)
   console.log('🌱 Checking default templates...');
 
@@ -850,6 +885,104 @@ const admin = {
 
   getAll: () => {
     return db.prepare('SELECT * FROM admin_accounts ORDER BY created_at DESC').all();
+  }
+};
+
+// Purchases methods
+const purchases = {
+  /**
+   * Add a new purchase record
+   */
+  add: (wallet_account, template_id, price_wax, payment_transaction_id) => {
+    const stmt = db.prepare(`
+      INSERT INTO purchases (wallet_account, template_id, price_wax, payment_transaction_id, status)
+      VALUES (?, ?, ?, ?, 'pending')
+    `);
+    return stmt.run(wallet_account, template_id, price_wax, payment_transaction_id);
+  },
+
+  /**
+   * Update purchase status to completed
+   */
+  markCompleted: (payment_transaction_id, mint_transaction_id) => {
+    const stmt = db.prepare(`
+      UPDATE purchases
+      SET status = 'completed',
+          mint_transaction_id = ?,
+          minted_at = CURRENT_TIMESTAMP
+      WHERE payment_transaction_id = ?
+    `);
+    return stmt.run(mint_transaction_id, payment_transaction_id);
+  },
+
+  /**
+   * Update purchase status to failed
+   */
+  markFailed: (payment_transaction_id, error_message) => {
+    const stmt = db.prepare(`
+      UPDATE purchases
+      SET status = 'failed',
+          error_message = ?
+      WHERE payment_transaction_id = ?
+    `);
+    return stmt.run(error_message, payment_transaction_id);
+  },
+
+  /**
+   * Check if payment transaction has already been processed
+   */
+  exists: (payment_transaction_id) => {
+    const result = db.prepare(`
+      SELECT id FROM purchases WHERE payment_transaction_id = ?
+    `).get(payment_transaction_id);
+    return !!result;
+  },
+
+  /**
+   * Get purchases by wallet account
+   */
+  getByAccount: (wallet_account, limit = 50) => {
+    return db.prepare(`
+      SELECT * FROM purchases
+      WHERE wallet_account = ?
+      ORDER BY purchased_at DESC
+      LIMIT ?
+    `).all(wallet_account, limit);
+  },
+
+  /**
+   * Get all purchases
+   */
+  getAll: (limit = 100) => {
+    return db.prepare(`
+      SELECT * FROM purchases
+      ORDER BY purchased_at DESC
+      LIMIT ?
+    `).all(limit);
+  },
+
+  /**
+   * Get purchase by payment transaction ID
+   */
+  getByPaymentTx: (payment_transaction_id) => {
+    return db.prepare(`
+      SELECT * FROM purchases WHERE payment_transaction_id = ?
+    `).get(payment_transaction_id);
+  },
+
+  /**
+   * Get purchase statistics for a template
+   */
+  getTemplateStats: (template_id) => {
+    return db.prepare(`
+      SELECT
+        COUNT(*) as total_purchases,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed,
+        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed,
+        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending
+      FROM purchases
+      WHERE template_id = ?
+    `).get(template_id);
   }
 };
 
@@ -1833,6 +1966,7 @@ module.exports = {
   db,
   config,
   claims,
+  purchases,
   admin,
   templates,
   templateRewards,
