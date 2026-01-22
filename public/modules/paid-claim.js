@@ -10,21 +10,53 @@ window.init_paid_claim = function(containerId, config = {}) {
   const container = document.getElementById(containerId);
   const API_URL = window.location.origin;
 
+  // Check if this is a grouped configuration
+  const isGrouped = config.grouped === true && Array.isArray(config.templates);
+
   // Module configuration with defaults
-  const moduleConfig = {
-    template_id: config.template_id || null,
-    price_wax: config.price_wax || "10.00000000",
-    payment_wallet: config.payment_wallet || 'futuresrelic',
-    collection_name: config.collection_name || 'futuresrelic',
-    template_name: config.template_name || 'NFT',
-    template_image: config.template_image || null,
-    max_supply: config.max_supply || null,
-    per_wallet_limit: config.per_wallet_limit || null,
-    wallet_limit_cooldown: config.wallet_limit_cooldown || null,
-    supply_limit_cooldown: config.supply_limit_cooldown || null,
-    auto_connect: config.auto_connect || false,
-    show_purchase_history: config.show_purchase_history !== false
-  };
+  let moduleConfigs = [];
+
+  if (isGrouped) {
+    // Grouped mode: multiple templates
+    moduleConfigs = config.templates.map(cfg => ({
+      template_id: cfg.template_id || null,
+      price_wax: cfg.price_wax || "10.00000000",
+      payment_wallet: cfg.payment_wallet || 'futuresrelic',
+      collection_name: cfg.collection_name || 'futuresrelic',
+      template_name: cfg.template_name || 'NFT',
+      template_image: cfg.template_image || null,
+      max_supply: cfg.max_supply || null,
+      per_wallet_limit: cfg.per_wallet_limit || null,
+      wallet_limit_cooldown: cfg.wallet_limit_cooldown || null,
+      supply_limit_cooldown: cfg.supply_limit_cooldown || null,
+      auto_connect: cfg.auto_connect || false,
+      show_purchase_history: cfg.show_purchase_history !== false
+    }));
+  } else {
+    // Single mode: one template
+    moduleConfigs = [{
+      template_id: config.template_id || null,
+      price_wax: config.price_wax || "10.00000000",
+      payment_wallet: config.payment_wallet || 'futuresrelic',
+      collection_name: config.collection_name || 'futuresrelic',
+      template_name: config.template_name || 'NFT',
+      template_image: config.template_image || null,
+      max_supply: config.max_supply || null,
+      per_wallet_limit: config.per_wallet_limit || null,
+      wallet_limit_cooldown: config.wallet_limit_cooldown || null,
+      supply_limit_cooldown: config.supply_limit_cooldown || null,
+      auto_connect: config.auto_connect || false,
+      show_purchase_history: config.show_purchase_history !== false
+    }];
+  }
+
+  // For backward compatibility, keep moduleConfig pointing to the first one
+  const moduleConfig = moduleConfigs[0];
+
+  // Determine if we should show purchase history (only if at least one config enables it)
+  const shouldShowPurchaseHistory = isGrouped
+    ? moduleConfigs.some(cfg => cfg.show_purchase_history)
+    : moduleConfig.show_purchase_history;
 
   // Module state
   let currentAccount = null;
@@ -152,25 +184,27 @@ window.init_paid_claim = function(containerId, config = {}) {
       loadingSection.style.display = 'block';
       connectedSection.style.display = 'none';
 
-      // Validate configuration
-      if (!moduleConfig.template_id) {
-        throw new Error('No template_id configured for this module');
-      }
+      // Validate configuration and fetch template metadata for all configs
+      for (let cfg of moduleConfigs) {
+        if (!cfg.template_id) {
+          throw new Error('No template_id configured for this module');
+        }
 
-      // Fetch template data from AtomicAssets if name or image is missing
-      if (!moduleConfig.template_name || !moduleConfig.template_image ||
-          moduleConfig.template_name === 'NFT' || moduleConfig.template_image === '') {
-        await fetchTemplateMetadata();
+        // Fetch template data from AtomicAssets if name or image is missing
+        if (!cfg.template_name || !cfg.template_image ||
+            cfg.template_name === 'NFT' || cfg.template_image === '') {
+          await fetchTemplateMetadata(cfg);
+        }
       }
 
       loadingSection.style.display = 'none';
       connectedSection.style.display = 'block';
 
-      // Display purchase card
+      // Display purchase card(s)
       displayPurchaseCard();
 
-      // Load purchase history if enabled
-      if (moduleConfig.show_purchase_history) {
+      // Load purchase history if enabled (only once for grouped mode)
+      if (shouldShowPurchaseHistory) {
         await loadPurchaseHistory();
       }
 
@@ -182,7 +216,7 @@ window.init_paid_claim = function(containerId, config = {}) {
   }
 
   // Fetch template metadata from AtomicAssets API (fallback)
-  async function fetchTemplateMetadata() {
+  async function fetchTemplateMetadata(cfg) {
     const endpoints = [
       'https://aa-wax-public1.neftyblocks.com',
       'https://wax.api.atomicassets.io'
@@ -190,7 +224,7 @@ window.init_paid_claim = function(containerId, config = {}) {
 
     for (const endpoint of endpoints) {
       try {
-        const url = `${endpoint}/atomicassets/v1/templates/${moduleConfig.collection_name}/${moduleConfig.template_id}`;
+        const url = `${endpoint}/atomicassets/v1/templates/${cfg.collection_name}/${cfg.template_id}`;
         const response = await fetch(url, {
           signal: AbortSignal.timeout(5000)
         });
@@ -201,81 +235,122 @@ window.init_paid_claim = function(containerId, config = {}) {
             const templateData = data.data;
 
             // Use fetched name as fallback if not set or is default
-            if (!moduleConfig.template_name || moduleConfig.template_name === 'NFT') {
+            if (!cfg.template_name || cfg.template_name === 'NFT') {
               const name = templateData.immutable_data?.name || templateData.name;
               if (name) {
-                moduleConfig.template_name = name;
+                cfg.template_name = name;
               }
             }
 
             // Use fetched image/video as fallback if not set
-            if (!moduleConfig.template_image || moduleConfig.template_image === '') {
+            if (!cfg.template_image || cfg.template_image === '') {
               const img = templateData.immutable_data?.img ||
                          templateData.immutable_data?.image ||
                          templateData.immutable_data?.video;
               if (img) {
                 // Convert IPFS hash to gateway URL
-                moduleConfig.template_image = img.startsWith('Qm') ? `https://ipfs.io/ipfs/${img}` : img;
+                cfg.template_image = img.startsWith('Qm') ? `https://ipfs.io/ipfs/${img}` : img;
               }
             }
 
-            console.log('✅ Fetched template metadata from AtomicAssets API');
+            console.log(`✅ Fetched template metadata for ${cfg.template_id} from AtomicAssets API`);
             return;
           }
         }
       } catch (err) {
-        console.warn(`Failed to fetch template from ${endpoint}:`, err);
+        console.warn(`Failed to fetch template ${cfg.template_id} from ${endpoint}:`, err);
         continue;
       }
     }
 
-    console.warn('⚠️ Could not fetch template metadata, using configured values');
+    console.warn(`⚠️ Could not fetch template metadata for ${cfg.template_id}, using configured values`);
   }
 
-  // Display the purchase card
+  // Display the purchase card(s)
   function displayPurchaseCard() {
     nftListEl.innerHTML = '';
 
+    if (isGrouped) {
+      // Create a grid container for multiple cards
+      const gridContainer = document.createElement('div');
+      gridContainer.className = 'paid-claim-cards-grid';
+      gridContainer.style.cssText = `
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
+      `;
+
+      // Render each template as a card
+      let hasActiveCooldown = false;
+      moduleConfigs.forEach(cfg => {
+        const cardResult = createPurchaseCard(cfg);
+        gridContainer.appendChild(cardResult.card);
+        if (cardResult.hasActiveCooldown) {
+          hasActiveCooldown = true;
+        }
+      });
+
+      nftListEl.appendChild(gridContainer);
+
+      // Auto-refresh if any card has active cooldown
+      if (hasActiveCooldown) {
+        setTimeout(() => displayPurchaseCard(), 1000);
+      }
+    } else {
+      // Single card mode (backward compatible)
+      const cardResult = createPurchaseCard(moduleConfig);
+      cardResult.card.style.maxWidth = '500px';
+      cardResult.card.style.margin = '0 auto';
+      nftListEl.appendChild(cardResult.card);
+
+      // Auto-refresh if cooldown is active
+      if (cardResult.hasActiveCooldown) {
+        setTimeout(() => displayPurchaseCard(), 1000);
+      }
+    }
+  }
+
+  // Create a single purchase card
+  function createPurchaseCard(cfg) {
     const purchaseCard = document.createElement('div');
     purchaseCard.className = 'nft-card';
-    purchaseCard.style.maxWidth = '500px';
-    purchaseCard.style.margin = '0 auto';
 
     // Build media element
     let mediaHtml = '🎨';
-    if (moduleConfig.template_image) {
-      const isVideo = moduleConfig.template_image.match(/\.(mp4|webm|mov)$/i);
+    if (cfg.template_image) {
+      const isVideo = cfg.template_image.match(/\.(mp4|webm|mov)$/i);
       if (isVideo) {
-        mediaHtml = `<video src="${moduleConfig.template_image}" class="nft-image" autoplay loop muted playsinline preload="metadata" style="width: 100%; max-width: 100%; height: auto; border-radius: 8px; display: block;"></video>`;
+        mediaHtml = `<video src="${cfg.template_image}" class="nft-image" autoplay loop muted playsinline preload="metadata" style="width: 100%; max-width: 100%; height: auto; border-radius: 8px; display: block;"></video>`;
       } else {
-        mediaHtml = `<img src="${moduleConfig.template_image}" alt="${moduleConfig.template_name}" class="nft-image" style="width: 100%; max-width: 100%; height: auto; border-radius: 8px; display: block;">`;
+        mediaHtml = `<img src="${cfg.template_image}" alt="${cfg.template_name}" class="nft-image" style="width: 100%; max-width: 100%; height: auto; border-radius: 8px; display: block;">`;
       }
     }
 
     // Format WAX price for display
-    const waxAmount = parseFloat(moduleConfig.price_wax).toFixed(8);
+    const waxAmount = parseFloat(cfg.price_wax).toFixed(8);
     const waxDisplay = parseFloat(waxAmount).toString(); // Remove trailing zeros for display
 
-    // Check cooldowns
-    const walletCooldown = moduleConfig.wallet_limit_cooldown ? checkCooldown('wallet', moduleConfig.wallet_limit_cooldown) : { active: false };
-    const supplyCooldown = moduleConfig.supply_limit_cooldown ? checkCooldown('supply', moduleConfig.supply_limit_cooldown) : { active: false };
+    // Check cooldowns (use cfg for this specific template)
+    const walletCooldown = cfg.wallet_limit_cooldown ? checkCooldown('wallet', cfg.wallet_limit_cooldown, cfg) : { active: false };
+    const supplyCooldown = cfg.supply_limit_cooldown ? checkCooldown('supply', cfg.supply_limit_cooldown, cfg) : { active: false };
 
     // Check wallet purchase count
-    const purchaseCount = getWalletPurchaseCount();
-    const walletLimitReached = moduleConfig.per_wallet_limit && purchaseCount >= parseInt(moduleConfig.per_wallet_limit);
+    const purchaseCount = getWalletPurchaseCount(cfg);
+    const walletLimitReached = cfg.per_wallet_limit && purchaseCount >= parseInt(cfg.per_wallet_limit);
 
     // Determine if purchase is disabled
-    const isPurchaseDisabled = walletCooldown.active || supplyCooldown.active || (walletLimitReached && !moduleConfig.wallet_limit_cooldown);
+    const isPurchaseDisabled = walletCooldown.active || supplyCooldown.active || (walletLimitReached && !cfg.wallet_limit_cooldown);
 
     // Build cooldown/limit info
     let limitInfoHtml = '';
-    if (moduleConfig.per_wallet_limit) {
+    if (cfg.per_wallet_limit) {
       if (walletCooldown.active) {
         limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--warning); margin-bottom: 15px;">⏳ Cooldown: ${walletCooldown.remainingTime} remaining</div>`;
-      } else if (moduleConfig.wallet_limit_cooldown) {
-        limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Limit: ${moduleConfig.per_wallet_limit} per ${moduleConfig.wallet_limit_cooldown}h (${purchaseCount}/${moduleConfig.per_wallet_limit} used)</div>`;
+      } else if (cfg.wallet_limit_cooldown) {
+        limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Limit: ${cfg.per_wallet_limit} per ${cfg.wallet_limit_cooldown}h (${purchaseCount}/${cfg.per_wallet_limit} used)</div>`;
       } else {
-        limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Limit: ${moduleConfig.per_wallet_limit} per wallet (${purchaseCount}/${moduleConfig.per_wallet_limit} used)</div>`;
+        limitInfoHtml += `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Limit: ${cfg.per_wallet_limit} per wallet (${purchaseCount}/${cfg.per_wallet_limit} used)</div>`;
       }
     }
 
@@ -288,40 +363,38 @@ window.init_paid_claim = function(containerId, config = {}) {
         <div class="nft-icon" style="margin-bottom: 15px;">
           ${mediaHtml}
         </div>
-        <h3 style="margin: 15px 0 10px;">${moduleConfig.template_name}</h3>
+        <h3 style="margin: 15px 0 10px;">${cfg.template_name}</h3>
         <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 5px;">
-          Template ID: ${moduleConfig.template_id}
+          Template ID: ${cfg.template_id}
         </div>
         <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary); margin: 20px 0;">
           ${waxDisplay} WAX
         </div>
-        ${moduleConfig.max_supply ? `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Max Supply: ${moduleConfig.max_supply}</div>` : ''}
+        ${cfg.max_supply ? `<div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px;">Max Supply: ${cfg.max_supply}</div>` : ''}
         ${limitInfoHtml}
-        <button class="btn btn-success purchase-btn" style="width: 100%; font-size: 1.1rem; padding: 15px;" data-template="${moduleConfig.template_id}" ${isPurchaseDisabled ? 'disabled' : ''}>
+        <button class="btn btn-success purchase-btn" style="width: 100%; font-size: 1.1rem; padding: 15px;" data-template="${cfg.template_id}" ${isPurchaseDisabled ? 'disabled' : ''}>
           ${isPurchaseDisabled ? '🔒 Purchase Unavailable' : `💰 Purchase for ${waxDisplay} WAX`}
         </button>
         <div class="purchase-status" style="margin-top: 15px; min-height: 20px;"></div>
       </div>
     `;
 
-    nftListEl.appendChild(purchaseCard);
-
     // Add purchase button listener
     const purchaseBtn = purchaseCard.querySelector('.purchase-btn');
     const statusEl = purchaseCard.querySelector('.purchase-status');
 
     purchaseBtn.addEventListener('click', () => {
-      processPurchase(purchaseBtn, statusEl);
+      processPurchase(purchaseBtn, statusEl, cfg);
     });
 
-    // Auto-refresh cooldown display if active
-    if (walletCooldown.active || supplyCooldown.active) {
-      setTimeout(() => displayPurchaseCard(), 1000); // Refresh every second
-    }
+    return {
+      card: purchaseCard,
+      hasActiveCooldown: walletCooldown.active || supplyCooldown.active
+    };
   }
 
   // Process the purchase
-  async function processPurchase(button, statusEl) {
+  async function processPurchase(button, statusEl, cfg) {
     let paymentResult = null;
 
     try {
@@ -332,7 +405,7 @@ window.init_paid_claim = function(containerId, config = {}) {
       // Step 1: User signs token transfer transaction
       statusEl.innerHTML = '<div style="color: var(--primary);">💳 Please sign the payment transaction in your wallet...</div>';
 
-      paymentResult = await executeTokenTransfer();
+      paymentResult = await executeTokenTransfer(cfg);
 
       statusEl.innerHTML = '<div style="color: var(--primary);">✅ Payment sent! Verifying transaction...</div>';
 
@@ -346,10 +419,10 @@ window.init_paid_claim = function(containerId, config = {}) {
         },
         body: JSON.stringify({
           account: currentAccount,
-          template_id: moduleConfig.template_id,
+          template_id: cfg.template_id,
           payment_transaction_id: paymentResult.transaction_id,
-          price_wax: moduleConfig.price_wax,
-          payment_wallet: moduleConfig.payment_wallet
+          price_wax: cfg.price_wax,
+          payment_wallet: cfg.payment_wallet
         })
       });
 
@@ -376,25 +449,25 @@ window.init_paid_claim = function(containerId, config = {}) {
       showMessage(`🎉 Purchase completed! NFT minted successfully.`, 'success');
 
       // Update cooldown timestamps
-      if (moduleConfig.wallet_limit_cooldown) {
-        const walletCooldown = checkCooldown('wallet', moduleConfig.wallet_limit_cooldown);
+      if (cfg.wallet_limit_cooldown) {
+        const walletCooldown = checkCooldown('wallet', cfg.wallet_limit_cooldown, cfg);
         if (!walletCooldown.active) {
           // Reset count and start new cooldown period
-          resetWalletPurchaseCount();
-          setLastPurchaseTime('wallet');
+          resetWalletPurchaseCount(cfg);
+          setLastPurchaseTime('wallet', cfg);
         }
-        incrementWalletPurchaseCount();
-      } else if (moduleConfig.per_wallet_limit) {
+        incrementWalletPurchaseCount(cfg);
+      } else if (cfg.per_wallet_limit) {
         // No cooldown, just increment count
-        incrementWalletPurchaseCount();
+        incrementWalletPurchaseCount(cfg);
       }
 
-      if (moduleConfig.supply_limit_cooldown) {
-        setLastPurchaseTime('supply');
+      if (cfg.supply_limit_cooldown) {
+        setLastPurchaseTime('supply', cfg);
       }
 
       // Reload purchase history
-      if (moduleConfig.show_purchase_history) {
+      if (shouldShowPurchaseHistory) {
         setTimeout(() => loadPurchaseHistory(), 2000);
       }
 
@@ -413,7 +486,7 @@ window.init_paid_claim = function(containerId, config = {}) {
 
       if (canRetry && paymentResult && paymentResult.transaction_id) {
         errorHtml += `
-          <button class="btn btn-sm btn-warning" onclick="window.retryFailedPurchase('${paymentResult.transaction_id}')" style="margin-top: 10px; font-size: 0.9rem;">
+          <button class="btn btn-sm btn-warning" onclick="window.retryFailedPurchase_${containerId}('${paymentResult.transaction_id}', '${cfg.template_id}')" style="margin-top: 10px; font-size: 0.9rem;">
             ♻️ Retry Verification
           </button>
         `;
@@ -422,12 +495,15 @@ window.init_paid_claim = function(containerId, config = {}) {
       statusEl.innerHTML = errorHtml;
       showMessage('Purchase failed: ' + error.message, 'error');
       button.disabled = false;
-      button.textContent = `💰 Purchase for ${parseFloat(moduleConfig.price_wax).toString()} WAX`;
+      button.textContent = `💰 Purchase for ${parseFloat(cfg.price_wax).toString()} WAX`;
     }
 
     // Global retry function (for inline retry button)
-    window.retryFailedPurchase = async (txId) => {
+    window[`retryFailedPurchase_${containerId}`] = async (txId, templateId) => {
       try {
+        // Find the config for this template
+        const cfg = moduleConfigs.find(c => c.template_id === templateId) || moduleConfig;
+
         statusEl.innerHTML = '<div style="color: var(--primary);">♻️ Retrying verification...</div>';
 
         const response = await fetch(`${API_URL}/api/user/purchase/recover`, {
@@ -437,7 +513,7 @@ window.init_paid_claim = function(containerId, config = {}) {
           },
           body: JSON.stringify({
             payment_transaction_id: txId,
-            payment_wallet: moduleConfig.payment_wallet
+            payment_wallet: cfg.payment_wallet
           })
         });
 
@@ -462,23 +538,23 @@ window.init_paid_claim = function(containerId, config = {}) {
         showMessage(`🎉 Recovery completed! NFT minted successfully.`, 'success');
 
         // Update cooldown timestamps
-        if (moduleConfig.wallet_limit_cooldown) {
-          const walletCooldown = checkCooldown('wallet', moduleConfig.wallet_limit_cooldown);
+        if (cfg.wallet_limit_cooldown) {
+          const walletCooldown = checkCooldown('wallet', cfg.wallet_limit_cooldown, cfg);
           if (!walletCooldown.active) {
-            resetWalletPurchaseCount();
-            setLastPurchaseTime('wallet');
+            resetWalletPurchaseCount(cfg);
+            setLastPurchaseTime('wallet', cfg);
           }
-          incrementWalletPurchaseCount();
-        } else if (moduleConfig.per_wallet_limit) {
-          incrementWalletPurchaseCount();
+          incrementWalletPurchaseCount(cfg);
+        } else if (cfg.per_wallet_limit) {
+          incrementWalletPurchaseCount(cfg);
         }
 
-        if (moduleConfig.supply_limit_cooldown) {
-          setLastPurchaseTime('supply');
+        if (cfg.supply_limit_cooldown) {
+          setLastPurchaseTime('supply', cfg);
         }
 
         // Reload purchase history
-        if (moduleConfig.show_purchase_history) {
+        if (shouldShowPurchaseHistory) {
           setTimeout(() => loadPurchaseHistory(), 2000);
         }
 
@@ -491,7 +567,7 @@ window.init_paid_claim = function(containerId, config = {}) {
         console.error('Retry error:', retryError);
         statusEl.innerHTML = `
           <div style="color: var(--error);">❌ Retry failed: ${retryError.message}</div>
-          <button class="btn btn-sm btn-warning" onclick="window.retryFailedPurchase('${txId}')" style="margin-top: 10px; font-size: 0.9rem;">
+          <button class="btn btn-sm btn-warning" onclick="window.retryFailedPurchase_${containerId}('${txId}', '${templateId}')" style="margin-top: 10px; font-size: 0.9rem;">
             ♻️ Try Again
           </button>
         `;
@@ -500,7 +576,7 @@ window.init_paid_claim = function(containerId, config = {}) {
   }
 
   // Execute token transfer transaction
-  async function executeTokenTransfer() {
+  async function executeTokenTransfer(cfg) {
     const actions = [{
       account: 'eosio.token',
       name: 'transfer',
@@ -510,9 +586,9 @@ window.init_paid_claim = function(containerId, config = {}) {
       }],
       data: {
         from: currentAccount,
-        to: moduleConfig.payment_wallet,
-        quantity: `${moduleConfig.price_wax} WAX`,
-        memo: `NFT Purchase - Template ${moduleConfig.template_id}`
+        to: cfg.payment_wallet,
+        quantity: `${cfg.price_wax} WAX`,
+        memo: `NFT Purchase - Template ${cfg.template_id}`
       },
     }];
 
@@ -683,25 +759,25 @@ window.init_paid_claim = function(containerId, config = {}) {
   }
 
   // Cooldown management functions
-  function getCooldownKey(type) {
-    return `paid_claim_cooldown_${type}_${currentAccount}_${moduleConfig.template_id}`;
+  function getCooldownKey(type, cfg) {
+    return `paid_claim_cooldown_${type}_${currentAccount}_${cfg.template_id}`;
   }
 
-  function getLastPurchaseTime(type) {
-    const key = getCooldownKey(type);
+  function getLastPurchaseTime(type, cfg) {
+    const key = getCooldownKey(type, cfg);
     const timestamp = localStorage.getItem(key);
     return timestamp ? parseInt(timestamp) : null;
   }
 
-  function setLastPurchaseTime(type) {
-    const key = getCooldownKey(type);
+  function setLastPurchaseTime(type, cfg) {
+    const key = getCooldownKey(type, cfg);
     localStorage.setItem(key, Date.now().toString());
   }
 
-  function checkCooldown(type, cooldownHours) {
+  function checkCooldown(type, cooldownHours, cfg) {
     if (!cooldownHours || !currentAccount) return { active: false };
 
-    const lastPurchase = getLastPurchaseTime(type);
+    const lastPurchase = getLastPurchaseTime(type, cfg);
     if (!lastPurchase) return { active: false };
 
     const cooldownMs = parseFloat(cooldownHours) * 60 * 60 * 1000; // Convert hours to milliseconds
@@ -733,27 +809,27 @@ window.init_paid_claim = function(containerId, config = {}) {
     }
   }
 
-  function getWalletPurchaseCount() {
+  function getWalletPurchaseCount(cfg) {
     // Get count from purchase history
     if (!currentAccount) return 0;
 
-    const key = `paid_claim_count_${currentAccount}_${moduleConfig.template_id}`;
+    const key = `paid_claim_count_${currentAccount}_${cfg.template_id}`;
     const count = localStorage.getItem(key);
     return count ? parseInt(count) : 0;
   }
 
-  function incrementWalletPurchaseCount() {
+  function incrementWalletPurchaseCount(cfg) {
     if (!currentAccount) return;
 
-    const key = `paid_claim_count_${currentAccount}_${moduleConfig.template_id}`;
-    const count = getWalletPurchaseCount();
+    const key = `paid_claim_count_${currentAccount}_${cfg.template_id}`;
+    const count = getWalletPurchaseCount(cfg);
     localStorage.setItem(key, (count + 1).toString());
   }
 
-  function resetWalletPurchaseCount() {
+  function resetWalletPurchaseCount(cfg) {
     if (!currentAccount) return;
 
-    const key = `paid_claim_count_${currentAccount}_${moduleConfig.template_id}`;
+    const key = `paid_claim_count_${currentAccount}_${cfg.template_id}`;
     localStorage.removeItem(key);
   }
 };

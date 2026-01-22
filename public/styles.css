@@ -834,11 +834,57 @@ footer a:hover {
   margin: 0;
 }
 
+/* Paid Claim Group Wrapper - contains grouped paid claims */
+.paid-claim-group-wrapper {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 30px;
+  margin: 20px 0;
+}
+
+.paid-claim-group-wrapper .paid-claim-module {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Grid for multiple purchase cards within grouped module */
+.paid-claim-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.paid-claim-cards-grid .nft-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.paid-claim-cards-grid .nft-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
 /* Responsive adjustments for paid claims grid */
 @media (max-width: 768px) {
   .paid-claim-grid {
     grid-template-columns: 1fr;
     gap: 20px;
+  }
+
+  .paid-claim-group-wrapper {
+    padding: 20px;
+  }
+
+  .paid-claim-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
   }
 }
 
@@ -846,10 +892,18 @@ footer a:hover {
   .paid-claim-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .paid-claim-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (min-width: 1201px) {
   .paid-claim-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .paid-claim-cards-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   }
 }

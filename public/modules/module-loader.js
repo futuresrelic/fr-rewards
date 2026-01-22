@@ -121,28 +121,151 @@ class ModuleLoader {
 
     console.log(`📦 Found ${moduleElements.length} module(s) to load`);
 
-    moduleElements.forEach(el => {
-      const moduleName = el.getAttribute('data-module');
-      const configStr = el.getAttribute('data-config') || '{}';
+    // Group consecutive paid-claim modules
+    const grouped = this.groupConsecutivePaidClaims(Array.from(moduleElements));
 
-      // Parse config
-      let config = {};
-      try {
-        config = JSON.parse(configStr);
-      } catch (e) {
-        console.error(`Invalid config JSON for module ${moduleName}:`, e);
+    grouped.forEach(item => {
+      if (item.isGroup) {
+        // This is a group of paid-claim modules
+        this.loadGroupedPaidClaims(item.elements);
+      } else {
+        // Single module, load normally
+        const el = item.element;
+        const moduleName = el.getAttribute('data-module');
+        const configStr = el.getAttribute('data-config') || '{}';
+
+        // Parse config
+        let config = {};
+        try {
+          config = JSON.parse(configStr);
+        } catch (e) {
+          console.error(`Invalid config JSON for module ${moduleName}:`, e);
+        }
+
+        // Ensure element has an ID
+        let containerId = el.id;
+        if (!containerId) {
+          containerId = `module-${moduleName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          el.id = containerId;
+        }
+
+        // Load the module
+        this.loadModule(moduleName, containerId, config);
       }
-
-      // Ensure element has an ID
-      let containerId = el.id;
-      if (!containerId) {
-        containerId = `module-${moduleName}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        el.id = containerId;
-      }
-
-      // Load the module
-      this.loadModule(moduleName, containerId, config);
     });
+  }
+
+  /**
+   * Group consecutive paid-claim modules together
+   */
+  static groupConsecutivePaidClaims(elements) {
+    const result = [];
+    let currentGroup = [];
+
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
+      const moduleName = el.getAttribute('data-module');
+
+      if (moduleName === 'paid-claim') {
+        currentGroup.push(el);
+      } else {
+        // Not a paid-claim, flush current group if any
+        if (currentGroup.length > 1) {
+          result.push({ isGroup: true, elements: currentGroup });
+          currentGroup = [];
+        } else if (currentGroup.length === 1) {
+          result.push({ isGroup: false, element: currentGroup[0] });
+          currentGroup = [];
+        }
+        // Add the non-paid-claim element
+        result.push({ isGroup: false, element: el });
+      }
+    }
+
+    // Flush remaining group
+    if (currentGroup.length > 1) {
+      result.push({ isGroup: true, elements: currentGroup });
+    } else if (currentGroup.length === 1) {
+      result.push({ isGroup: false, element: currentGroup[0] });
+    }
+
+    return result;
+  }
+
+  /**
+   * Load grouped paid-claim modules
+   */
+  static async loadGroupedPaidClaims(elements) {
+    console.log(`📦 Grouping ${elements.length} consecutive paid-claim modules`);
+
+    // Parse all configs
+    const configs = elements.map(el => {
+      const configStr = el.getAttribute('data-config') || '{}';
+      try {
+        return JSON.parse(configStr);
+      } catch (e) {
+        console.error('Invalid config JSON for paid-claim:', e);
+        return {};
+      }
+    });
+
+    // Create a wrapper container
+    const wrapperContainer = document.createElement('div');
+    wrapperContainer.className = 'paid-claim-group-wrapper';
+    wrapperContainer.id = `paid-claim-group-${Date.now()}`;
+
+    // Replace the first element with the wrapper and remove the rest
+    const firstElement = elements[0];
+    firstElement.parentNode.insertBefore(wrapperContainer, firstElement);
+    elements.forEach(el => el.remove());
+
+    // Load the grouped module
+    await this.loadGroupedPaidClaimModule(wrapperContainer.id, configs);
+  }
+
+  /**
+   * Load grouped paid-claim module
+   */
+  static async loadGroupedPaidClaimModule(containerId, configs) {
+    const container = document.getElementById(containerId);
+
+    if (!container) {
+      console.error(`Container #${containerId} not found`);
+      return;
+    }
+
+    // Show loading state
+    container.innerHTML = `
+      <div class="module-loading" style="text-align: center; padding: 40px; color: var(--text-secondary);">
+        <div class="spinner" style="margin: 0 auto 15px;"></div>
+        <p>Loading paid claims...</p>
+      </div>
+    `;
+
+    try {
+      // Load HTML template
+      const htmlResponse = await fetch('/modules/paid-claim.html');
+      if (!htmlResponse.ok) {
+        throw new Error('Failed to load paid-claim.html');
+      }
+      const html = await htmlResponse.text();
+      container.innerHTML = html;
+
+      // Load and initialize JS with grouped config
+      await this.loadModuleScript('paid-claim', containerId, {
+        grouped: true,
+        templates: configs
+      });
+
+    } catch (error) {
+      console.error('Error loading grouped paid-claim module:', error);
+      container.innerHTML = `
+        <div class="module-error" style="text-align: center; padding: 40px; color: var(--error);">
+          <p>❌ Failed to load paid claims</p>
+          <p style="font-size: 0.9rem; color: var(--text-secondary);">${error.message}</p>
+        </div>
+      `;
+    }
   }
 
   /**
