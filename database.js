@@ -660,8 +660,10 @@ function initializeTables() {
           payment_transaction_id TEXT NOT NULL UNIQUE,
           mint_transaction_id TEXT,
           status TEXT NOT NULL DEFAULT 'pending',
+          verification_status TEXT NOT NULL DEFAULT 'pending_verification',
           error_message TEXT,
           purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          verified_at TIMESTAMP,
           minted_at TIMESTAMP
         );
 
@@ -669,9 +671,41 @@ function initializeTables() {
         CREATE INDEX IF NOT EXISTS idx_purchases_template ON purchases(template_id);
         CREATE INDEX IF NOT EXISTS idx_purchases_payment_tx ON purchases(payment_transaction_id);
         CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status);
+        CREATE INDEX IF NOT EXISTS idx_purchases_verification_status ON purchases(verification_status);
       `);
 
       console.log('✅ purchases table created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Add verification_status to existing purchases table
+  try {
+    const hasVerificationStatus = db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('purchases') WHERE name='verification_status'
+    `).get();
+
+    if (hasVerificationStatus.count === 0) {
+      console.log('🔄 Adding verification_status column to purchases...');
+      db.exec(`ALTER TABLE purchases ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'pending_verification'`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_purchases_verification_status ON purchases(verification_status)`);
+      console.log('✅ verification_status column added');
+    }
+  } catch (error) {
+    console.warn('⚠️ Migration warning:', error.message);
+  }
+
+  // Migration: Add verified_at to existing purchases table
+  try {
+    const hasVerifiedAt = db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('purchases') WHERE name='verified_at'
+    `).get();
+
+    if (hasVerifiedAt.count === 0) {
+      console.log('🔄 Adding verified_at column to purchases...');
+      db.exec(`ALTER TABLE purchases ADD COLUMN verified_at TIMESTAMP`);
+      console.log('✅ verified_at column added');
     }
   } catch (error) {
     console.warn('⚠️ Migration warning:', error.message);
@@ -902,6 +936,32 @@ const purchases = {
   },
 
   /**
+   * Mark payment as verified
+   */
+  markVerified: (payment_transaction_id) => {
+    const stmt = db.prepare(`
+      UPDATE purchases
+      SET verification_status = 'verified',
+          verified_at = CURRENT_TIMESTAMP
+      WHERE payment_transaction_id = ?
+    `);
+    return stmt.run(payment_transaction_id);
+  },
+
+  /**
+   * Mark payment verification as failed
+   */
+  markVerificationFailed: (payment_transaction_id, error_message) => {
+    const stmt = db.prepare(`
+      UPDATE purchases
+      SET verification_status = 'verification_failed',
+          error_message = ?
+      WHERE payment_transaction_id = ?
+    `);
+    return stmt.run(error_message, payment_transaction_id);
+  },
+
+  /**
    * Update purchase status to completed
    */
   markCompleted: (payment_transaction_id, mint_transaction_id) => {
@@ -926,6 +986,18 @@ const purchases = {
       WHERE payment_transaction_id = ?
     `);
     return stmt.run(error_message, payment_transaction_id);
+  },
+
+  /**
+   * Get purchases that need recovery (verification failed but payment valid)
+   */
+  getNeedingRecovery: (limit = 50) => {
+    return db.prepare(`
+      SELECT * FROM purchases
+      WHERE verification_status = 'verification_failed' OR (status = 'failed' AND verification_status = 'verified')
+      ORDER BY purchased_at DESC
+      LIMIT ?
+    `).all(limit);
   },
 
   /**

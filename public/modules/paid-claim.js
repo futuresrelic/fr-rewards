@@ -274,6 +274,8 @@ window.init_paid_claim = function(containerId, config = {}) {
 
   // Process the purchase
   async function processPurchase(button, statusEl) {
+    let paymentResult = null;
+
     try {
       button.disabled = true;
       button.textContent = 'Processing...';
@@ -282,7 +284,7 @@ window.init_paid_claim = function(containerId, config = {}) {
       // Step 1: User signs token transfer transaction
       statusEl.innerHTML = '<div style="color: var(--primary);">💳 Please sign the payment transaction in your wallet...</div>';
 
-      const paymentResult = await executeTokenTransfer();
+      paymentResult = await executeTokenTransfer();
 
       statusEl.innerHTML = '<div style="color: var(--primary);">✅ Payment sent! Verifying transaction...</div>';
 
@@ -306,7 +308,9 @@ window.init_paid_claim = function(containerId, config = {}) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Purchase failed');
+        const error = new Error(data.error || 'Purchase failed');
+        error.can_retry = data.can_retry;
+        throw error;
       }
 
       // Success!
@@ -337,15 +341,82 @@ window.init_paid_claim = function(containerId, config = {}) {
 
     } catch (error) {
       console.error('Purchase error:', error);
-      statusEl.innerHTML = `<div style="color: var(--error);">❌ ${error.message}</div>`;
+
+      // Check if we can retry (verification failed or other recoverable error)
+      const canRetry = error.can_retry || (error.message && error.message.includes('verification'));
+
+      let errorHtml = `<div style="color: var(--error);">❌ ${error.message}</div>`;
+
+      if (canRetry && paymentResult && paymentResult.transaction_id) {
+        errorHtml += `
+          <button class="btn btn-sm btn-warning" onclick="window.retryFailedPurchase('${paymentResult.transaction_id}')" style="margin-top: 10px; font-size: 0.9rem;">
+            ♻️ Retry Verification
+          </button>
+        `;
+      }
+
+      statusEl.innerHTML = errorHtml;
       showMessage('Purchase failed: ' + error.message, 'error');
       button.disabled = false;
       button.textContent = `💰 Purchase for ${parseFloat(moduleConfig.price_wax).toString()} WAX`;
-
-      setTimeout(() => {
-        statusEl.innerHTML = '';
-      }, 10000);
     }
+
+    // Global retry function (for inline retry button)
+    window.retryFailedPurchase = async (txId) => {
+      try {
+        statusEl.innerHTML = '<div style="color: var(--primary);">♻️ Retrying verification...</div>';
+
+        const response = await fetch(`${API_URL}/api/user/purchase/recover`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            payment_transaction_id: txId,
+            payment_wallet: moduleConfig.payment_wallet
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Recovery failed');
+        }
+
+        // Success!
+        statusEl.innerHTML = `
+          <div style="color: var(--success); font-weight: 600;">
+            ✅ Recovery successful!
+          </div>
+          <div style="font-size: 0.85rem; margin-top: 8px;">
+            <a href="https://waxblock.io/transaction/${data.mint_transaction_id}" target="_blank" style="color: var(--primary);">
+              View NFT Mint Transaction →
+            </a>
+          </div>
+        `;
+
+        showMessage(`🎉 Recovery completed! NFT minted successfully.`, 'success');
+
+        // Reload purchase history
+        if (moduleConfig.show_purchase_history) {
+          setTimeout(() => loadPurchaseHistory(), 2000);
+        }
+
+        // Clear status after delay
+        setTimeout(() => {
+          statusEl.innerHTML = '';
+        }, 10000);
+
+      } catch (retryError) {
+        console.error('Retry error:', retryError);
+        statusEl.innerHTML = `
+          <div style="color: var(--error);">❌ Retry failed: ${retryError.message}</div>
+          <button class="btn btn-sm btn-warning" onclick="window.retryFailedPurchase('${txId}')" style="margin-top: 10px; font-size: 0.9rem;">
+            ♻️ Try Again
+          </button>
+        `;
+      }
+    };
   }
 
   // Execute token transfer transaction
@@ -411,24 +482,87 @@ window.init_paid_claim = function(containerId, config = {}) {
             ? `<a href="https://waxblock.io/transaction/${purchase.mint_transaction_id}" target="_blank" style="color: var(--primary); font-size: 0.85rem;">View TX</a>`
             : '';
 
+          // Show retry button for failed purchases
+          const canRetry = (purchase.status === 'failed' || purchase.verification_status === 'verification_failed') &&
+                          purchase.status !== 'completed';
+
+          const retryButton = canRetry
+            ? `<button class="btn btn-sm btn-warning retry-purchase-btn" data-tx-id="${purchase.payment_transaction_id}" style="margin-left: 10px; font-size: 0.75rem; padding: 4px 8px;">♻️ Retry</button>`
+            : '';
+
+          const errorMsg = purchase.error_message && canRetry
+            ? `<div style="font-size: 0.75rem; color: var(--error); margin-top: 4px;">${purchase.error_message}</div>`
+            : '';
+
           historyItem.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);">
-              <div>
+              <div style="flex: 1;">
                 <div style="font-weight: 600;">${status} Template ${purchase.template_id}</div>
                 <div style="font-size: 0.85rem; color: var(--text-secondary);">
                   ${purchase.price_wax} • ${formatDate(purchase.purchased_at)}
                 </div>
+                ${errorMsg}
               </div>
-              <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
                 ${mintLink}
+                ${retryButton}
               </div>
             </div>
           `;
           historyListEl.appendChild(historyItem);
+
+          // Add retry button listener
+          if (canRetry) {
+            const retryBtn = historyItem.querySelector('.retry-purchase-btn');
+            if (retryBtn) {
+              retryBtn.addEventListener('click', async () => {
+                await retryPurchase(purchase.payment_transaction_id, retryBtn);
+              });
+            }
+          }
         });
       }
     } catch (error) {
       console.error('Error loading purchase history:', error);
+    }
+  }
+
+  // Retry failed purchase
+  async function retryPurchase(payment_transaction_id, button) {
+    try {
+      button.disabled = true;
+      button.textContent = 'Retrying...';
+
+      const response = await fetch(`${API_URL}/api/user/purchase/recover`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          payment_transaction_id: payment_transaction_id,
+          payment_wallet: moduleConfig.payment_wallet
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Recovery failed');
+      }
+
+      // Success!
+      showMessage(`🎉 Recovery successful! NFT minted.`, 'success');
+
+      // Reload purchase history
+      setTimeout(() => {
+        loadPurchaseHistory();
+      }, 1000);
+
+    } catch (error) {
+      console.error('Recovery error:', error);
+      showMessage('Recovery failed: ' + error.message, 'error');
+      button.disabled = false;
+      button.textContent = '♻️ Retry';
     }
   }
 

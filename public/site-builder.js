@@ -94,6 +94,24 @@ const AVAILABLE_MODULES = [
       drop_id: { type: 'text', label: 'Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
       limit: { type: 'text', label: 'Limit', default: '1', help: 'Number of drops to show' }
     }
+  },
+  {
+    id: 'paid-claim',
+    name: 'Paid Claim (NFT Sales)',
+    icon: '💰',
+    description: 'Sell NFTs directly with WAX token payments',
+    config: {
+      template_id: { type: 'text', label: 'Template ID', default: '', help: 'NFT template ID to sell (required)' },
+      template_name: { type: 'text', label: 'Template Name', default: 'NFT', help: 'Display name for the NFT' },
+      template_image: { type: 'text', label: 'Template Image URL', default: '', help: 'Image/video URL for the NFT (optional)' },
+      price_wax: { type: 'text', label: 'Price (WAX)', default: '10.00000000', help: 'Price in WAX tokens (8 decimals)' },
+      payment_wallet: { type: 'text', label: 'Payment Wallet', default: 'futuresrelic', help: 'Wallet to receive payments' },
+      collection_name: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      max_supply: { type: 'text', label: 'Max Supply', default: '', help: 'Maximum supply available (optional)' },
+      per_wallet_limit: { type: 'text', label: 'Per Wallet Limit', default: '', help: 'Max purchases per wallet (optional)' },
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false, help: 'Automatically connect wallet on load' },
+      show_purchase_history: { type: 'checkbox', label: 'Show Purchase History', default: true, help: 'Display user\'s purchase history' }
+    }
   }
 ];
 

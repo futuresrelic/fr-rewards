@@ -814,35 +814,56 @@ app.post('/api/user/purchase', strictLimiter, async (req, res) => {
           error: 'This payment has already been processed',
           purchase: existingPurchase
         });
-      } else if (existingPurchase.status === 'pending') {
+      } else if (existingPurchase.status === 'pending' && existingPurchase.verification_status === 'verified') {
         return res.status(409).json({
           error: 'This payment is currently being processed'
         });
+      } else if (existingPurchase.verification_status === 'verification_failed' || existingPurchase.status === 'failed') {
+        // Allow retry for failed verifications
+        console.log(`♻️ Retrying failed purchase: ${payment_transaction_id}`);
       }
     }
 
     console.log(`🔍 Verifying payment: ${payment_transaction_id}`);
 
-    // Verify the token payment on-chain
-    const paymentVerification = await wax.verifyTokenPayment(
-      payment_transaction_id,
-      price_wax,
-      payment_wallet,
-      account
-    );
+    // Record purchase as pending verification if not exists
+    if (!db.purchases.exists(payment_transaction_id)) {
+      db.purchases.add(account, validatedTemplateId, price_wax, payment_transaction_id);
+    }
 
-    if (!paymentVerification.verified) {
-      console.error(`❌ Payment verification failed:`, paymentVerification.error);
+    // Verify the token payment on-chain
+    let paymentVerification;
+    try {
+      paymentVerification = await wax.verifyTokenPayment(
+        payment_transaction_id,
+        price_wax,
+        payment_wallet,
+        account
+      );
+
+      if (!paymentVerification.verified) {
+        console.error(`❌ Payment verification failed:`, paymentVerification.error);
+        db.purchases.markVerificationFailed(payment_transaction_id, paymentVerification.error);
+        return res.status(400).json({
+          error: 'Payment verification failed',
+          details: paymentVerification.error,
+          can_retry: true
+        });
+      }
+    } catch (verifyError) {
+      console.error(`❌ Payment verification error:`, verifyError);
+      db.purchases.markVerificationFailed(payment_transaction_id, verifyError.message);
       return res.status(400).json({
         error: 'Payment verification failed',
-        details: paymentVerification.error
+        details: verifyError.message,
+        can_retry: true
       });
     }
 
     console.log(`✅ Payment verified: ${price_wax} from ${account} to ${payment_wallet}`);
 
-    // Record purchase as pending
-    db.purchases.add(account, validatedTemplateId, price_wax, payment_transaction_id);
+    // Mark payment as verified
+    db.purchases.markVerified(payment_transaction_id);
 
     // Get collection from config
     const config = db.config.get();
@@ -870,7 +891,12 @@ app.post('/api/user/purchase', strictLimiter, async (req, res) => {
 
     // Try to mark purchase as failed if it exists
     if (req.body.payment_transaction_id && db.purchases.exists(req.body.payment_transaction_id)) {
-      db.purchases.markFailed(req.body.payment_transaction_id, error.message);
+      const purchase = db.purchases.getByPaymentTx(req.body.payment_transaction_id);
+
+      // If verification succeeded but minting failed, keep verification status
+      if (purchase && purchase.verification_status === 'verified') {
+        db.purchases.markFailed(req.body.payment_transaction_id, error.message);
+      }
     }
 
     // Handle CPU exhaustion errors
@@ -883,6 +909,130 @@ app.post('/api/user/purchase', strictLimiter, async (req, res) => {
     res.status(500).json({
       error: error.message,
       payment_transaction_id: req.body.payment_transaction_id
+    });
+  }
+});
+
+/**
+ * POST /api/user/purchase/recover
+ * Recovery endpoint to retry failed purchase verification or minting
+ */
+app.post('/api/user/purchase/recover', strictLimiter, async (req, res) => {
+  try {
+    const { payment_transaction_id } = req.body;
+
+    if (!payment_transaction_id) {
+      return res.status(400).json({
+        error: 'Missing required field: payment_transaction_id'
+      });
+    }
+
+    // Check if purchase exists
+    if (!db.purchases.exists(payment_transaction_id)) {
+      return res.status(404).json({
+        error: 'Purchase not found'
+      });
+    }
+
+    const purchase = db.purchases.getByPaymentTx(payment_transaction_id);
+
+    // Cannot recover completed purchases
+    if (purchase.status === 'completed') {
+      return res.status(409).json({
+        error: 'This purchase is already completed',
+        purchase: purchase
+      });
+    }
+
+    // Cannot recover pending purchases (already being processed)
+    if (purchase.status === 'pending' && purchase.verification_status === 'verified') {
+      return res.status(409).json({
+        error: 'This purchase is currently being processed'
+      });
+    }
+
+    console.log(`♻️ Recovery attempt for purchase: ${payment_transaction_id}`);
+    console.log(`   Current status: ${purchase.status}`);
+    console.log(`   Verification status: ${purchase.verification_status}`);
+
+    // If verification failed, retry verification
+    if (purchase.verification_status === 'verification_failed' || purchase.verification_status === 'pending_verification') {
+      console.log(`🔍 Re-verifying payment...`);
+
+      try {
+        const paymentVerification = await wax.verifyTokenPayment(
+          payment_transaction_id,
+          purchase.price_wax,
+          req.body.payment_wallet || process.env.WAX_ACCOUNT, // Use provided or default wallet
+          purchase.wallet_account
+        );
+
+        if (!paymentVerification.verified) {
+          console.error(`❌ Payment re-verification failed:`, paymentVerification.error);
+          db.purchases.markVerificationFailed(payment_transaction_id, paymentVerification.error);
+          return res.status(400).json({
+            error: 'Payment verification failed',
+            details: paymentVerification.error,
+            can_retry: true
+          });
+        }
+
+        console.log(`✅ Payment re-verified successfully`);
+        db.purchases.markVerified(payment_transaction_id);
+      } catch (verifyError) {
+        console.error(`❌ Payment re-verification error:`, verifyError);
+        db.purchases.markVerificationFailed(payment_transaction_id, verifyError.message);
+        return res.status(400).json({
+          error: 'Payment verification failed',
+          details: verifyError.message,
+          can_retry: true
+        });
+      }
+    }
+
+    // If verification succeeded but mint failed, retry minting
+    if (purchase.verification_status === 'verified' && (purchase.status === 'failed' || purchase.status === 'pending')) {
+      console.log(`🎨 Re-attempting NFT mint...`);
+
+      const config = db.config.get();
+      const mintResult = await wax.mintNFT(purchase.wallet_account, config.collection_name, purchase.template_id);
+
+      console.log(`✅ NFT minted successfully: ${mintResult.transaction_id}`);
+
+      // Update purchase record to completed
+      db.purchases.markCompleted(payment_transaction_id, mintResult.transaction_id);
+
+      return res.json({
+        success: true,
+        message: 'Recovery successful! NFT minted.',
+        payment_transaction_id: payment_transaction_id,
+        mint_transaction_id: mintResult.transaction_id,
+        template_id: purchase.template_id,
+        price_paid: purchase.price_wax
+      });
+    }
+
+    // Should not reach here, but return success for verified purchases
+    res.json({
+      success: true,
+      message: 'Purchase verified, waiting for mint',
+      purchase: purchase
+    });
+
+  } catch (error) {
+    console.error('Error in purchase recovery:', error);
+
+    // Handle CPU exhaustion errors
+    if (error.message && error.message.toLowerCase().includes('cpu')) {
+      return res.status(503).json({
+        error: 'Server temporarily unavailable - insufficient CPU resources. Please try again later.',
+        can_retry: true
+      });
+    }
+
+    res.status(500).json({
+      error: error.message,
+      can_retry: true
     });
   }
 });
@@ -1549,6 +1699,165 @@ app.get('/api/admin/claims/full', authenticateAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching full claim history:', error);
     res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+// ==================== PURCHASE ADMIN ENDPOINTS ====================
+
+/**
+ * GET /api/admin/purchases
+ * Get all purchases with optional filtering
+ */
+app.get('/api/admin/purchases', authenticateAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const purchases = db.purchases.getAll(limit);
+
+    res.json({
+      success: true,
+      total: purchases.length,
+      purchases
+    });
+  } catch (error) {
+    console.error('Error fetching purchases:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/purchases/recovery
+ * Get purchases that need recovery (verification or minting failed)
+ */
+app.get('/api/admin/purchases/recovery', authenticateAdmin, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const purchases = db.purchases.getNeedingRecovery(limit);
+
+    res.json({
+      success: true,
+      total: purchases.length,
+      purchases
+    });
+  } catch (error) {
+    console.error('Error fetching purchases needing recovery:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/purchases/recover
+ * Admin endpoint to manually recover a failed purchase
+ */
+app.post('/api/admin/purchases/recover', authenticateAdmin, strictLimiter, async (req, res) => {
+  try {
+    const { payment_transaction_id, skip_verification } = req.body;
+
+    if (!payment_transaction_id) {
+      return res.status(400).json({
+        error: 'Missing required field: payment_transaction_id'
+      });
+    }
+
+    // Check if purchase exists
+    if (!db.purchases.exists(payment_transaction_id)) {
+      return res.status(404).json({
+        error: 'Purchase not found'
+      });
+    }
+
+    const purchase = db.purchases.getByPaymentTx(payment_transaction_id);
+
+    // Cannot recover completed purchases
+    if (purchase.status === 'completed') {
+      return res.status(409).json({
+        error: 'This purchase is already completed',
+        purchase: purchase
+      });
+    }
+
+    console.log(`👨‍💼 Admin recovery for purchase: ${payment_transaction_id}`);
+    console.log(`   Admin: ${req.session.wallet}`);
+    console.log(`   Current status: ${purchase.status}`);
+    console.log(`   Verification status: ${purchase.verification_status}`);
+
+    // If skip_verification flag is set, admin can force mint without re-verification
+    if (!skip_verification) {
+      // Re-verify payment unless admin explicitly skips
+      if (purchase.verification_status !== 'verified') {
+        console.log(`🔍 Admin re-verifying payment...`);
+
+        try {
+          const paymentVerification = await wax.verifyTokenPayment(
+            payment_transaction_id,
+            purchase.price_wax,
+            req.body.payment_wallet || process.env.WAX_ACCOUNT,
+            purchase.wallet_account
+          );
+
+          if (!paymentVerification.verified) {
+            console.error(`❌ Payment re-verification failed:`, paymentVerification.error);
+            db.purchases.markVerificationFailed(payment_transaction_id, paymentVerification.error);
+            return res.status(400).json({
+              error: 'Payment verification failed',
+              details: paymentVerification.error,
+              can_force: true,
+              hint: 'Use skip_verification: true to force mint'
+            });
+          }
+
+          console.log(`✅ Payment re-verified successfully by admin`);
+          db.purchases.markVerified(payment_transaction_id);
+        } catch (verifyError) {
+          console.error(`❌ Payment re-verification error:`, verifyError);
+          return res.status(400).json({
+            error: 'Payment verification failed',
+            details: verifyError.message,
+            can_force: true,
+            hint: 'Use skip_verification: true to force mint'
+          });
+        }
+      }
+    } else {
+      console.log(`⚠️ Admin force-minting without verification`);
+      if (purchase.verification_status !== 'verified') {
+        db.purchases.markVerified(payment_transaction_id);
+      }
+    }
+
+    // Mint the NFT
+    console.log(`🎨 Admin minting NFT...`);
+
+    const config = db.config.get();
+    const mintResult = await wax.mintNFT(purchase.wallet_account, config.collection_name, purchase.template_id);
+
+    console.log(`✅ NFT minted successfully by admin: ${mintResult.transaction_id}`);
+
+    // Update purchase record to completed
+    db.purchases.markCompleted(payment_transaction_id, mintResult.transaction_id);
+
+    res.json({
+      success: true,
+      message: 'Admin recovery successful! NFT minted.',
+      payment_transaction_id: payment_transaction_id,
+      mint_transaction_id: mintResult.transaction_id,
+      template_id: purchase.template_id,
+      price_paid: purchase.price_wax,
+      recovered_by: req.session.wallet
+    });
+
+  } catch (error) {
+    console.error('Error in admin purchase recovery:', error);
+
+    // Handle CPU exhaustion errors
+    if (error.message && error.message.toLowerCase().includes('cpu')) {
+      return res.status(503).json({
+        error: 'Server temporarily unavailable - insufficient CPU resources. Please try again later.'
+      });
+    }
+
+    res.status(500).json({
+      error: error.message
+    });
   }
 });
 
