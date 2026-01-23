@@ -2171,6 +2171,143 @@ app.delete('/api/admin/template-rewards/:id', authenticateAdmin, async (req, res
 });
 
 /**
+ * MODULE INSTANCES API
+ * Database-backed module configuration system
+ */
+
+/**
+ * POST /api/modules/create
+ * Create a new module instance
+ */
+app.post('/api/modules/create', authenticateAdmin, async (req, res) => {
+  try {
+    const { module_type, name, description, config } = req.body;
+
+    if (!module_type || !config) {
+      return res.status(400).json({ error: 'module_type and config are required' });
+    }
+
+    // Generate unique ID
+    const id = `mod_${module_type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const moduleData = {
+      id,
+      module_type,
+      name: name || `${module_type} Instance`,
+      description: description || null,
+      config,
+      created_by: req.admin?.wallet_account || 'system'
+    };
+
+    db.moduleInstances.create(moduleData);
+
+    const created = db.moduleInstances.get(id);
+    res.json({
+      success: true,
+      message: 'Module instance created successfully',
+      module: created
+    });
+  } catch (error) {
+    console.error('Error creating module instance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/modules/:id
+ * Get a specific module instance by ID
+ */
+app.get('/api/modules/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const module = db.moduleInstances.get(id);
+    if (!module) {
+      return res.status(404).json({ error: 'Module instance not found' });
+    }
+
+    res.json(module);
+  } catch (error) {
+    console.error('Error getting module instance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/modules
+ * Get all module instances, optionally filtered by type
+ */
+app.get('/api/modules', authenticateAdmin, async (req, res) => {
+  try {
+    const { module_type } = req.query;
+
+    const modules = db.moduleInstances.getAll(module_type || null);
+    res.json(modules);
+  } catch (error) {
+    console.error('Error getting module instances:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/modules/:id
+ * Update a module instance
+ */
+app.put('/api/modules/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, config } = req.body;
+
+    const existing = db.moduleInstances.get(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Module instance not found' });
+    }
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (config !== undefined) updateData.config = config;
+
+    db.moduleInstances.update(id, updateData);
+
+    const updated = db.moduleInstances.get(id);
+    res.json({
+      success: true,
+      message: 'Module instance updated successfully',
+      module: updated
+    });
+  } catch (error) {
+    console.error('Error updating module instance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/modules/:id
+ * Delete a module instance
+ */
+app.delete('/api/modules/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const existing = db.moduleInstances.get(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Module instance not found' });
+    }
+
+    db.moduleInstances.delete(id);
+
+    res.json({
+      success: true,
+      message: 'Module instance deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting module instance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/admin/export
  * Export all templates and configuration as JSON backup
  */
@@ -3619,21 +3756,42 @@ app.get('/api/page/load/:filepath(*)', async (req, res) => {
     const modules = [];
 
     const moduleElements = root.querySelectorAll('[data-module]');
-    moduleElements.forEach((element, index) => {
+    for (let index = 0; index < moduleElements.length; index++) {
+      const element = moduleElements[index];
       const moduleType = element.getAttribute('data-module');
-      const configStr = element.getAttribute('data-config') || '{}';
+      const moduleInstanceId = element.getAttribute('data-module-id');
 
-      try {
-        const config = JSON.parse(configStr);
-        modules.push({
-          id: index + 1,
-          moduleType: moduleType,
-          config: config
-        });
-      } catch (err) {
-        console.warn(`Could not parse config for module ${moduleType}:`, err);
+      let config = {};
+
+      if (moduleInstanceId) {
+        // Database-backed module - fetch config from database
+        try {
+          const moduleInstance = db.moduleInstances.get(moduleInstanceId);
+          if (moduleInstance) {
+            config = moduleInstance.config;
+          } else {
+            console.warn(`Module instance ${moduleInstanceId} not found in database`);
+          }
+        } catch (err) {
+          console.warn(`Error loading module instance ${moduleInstanceId}:`, err);
+        }
+      } else {
+        // Inline config (backward compatibility)
+        const configStr = element.getAttribute('data-config') || '{}';
+        try {
+          config = JSON.parse(configStr);
+        } catch (err) {
+          console.warn(`Could not parse config for module ${moduleType}:`, err);
+        }
       }
-    });
+
+      modules.push({
+        id: index + 1,
+        moduleType: moduleType,
+        config: config,
+        moduleInstanceId: moduleInstanceId || null
+      });
+    }
 
     // Extract custom CSS if present
     let customCSS = '';
@@ -3793,15 +3951,27 @@ app.post('/api/page/save', async (req, res) => {
       }
       // Handle regular modules
       else {
-        const configJson = JSON.stringify(module.config);
-        const escapedConfig = configJson.replace(/"/g, '&quot;');
+        // Check if module has a database instance ID
+        if (module.moduleInstanceId) {
+          // Database-backed module - use data-module-id
+          moduleHtml = `
+      <div
+        id="module-${module.id}"
+        data-module="${module.moduleType}"
+        data-module-id="${module.moduleInstanceId}"
+      ></div>`;
+        } else {
+          // Inline config (backward compatibility)
+          const configJson = JSON.stringify(module.config);
+          const escapedConfig = configJson.replace(/"/g, '&quot;');
 
-        moduleHtml = `
+          moduleHtml = `
       <div
         id="module-${module.id}"
         data-module="${module.moduleType}"
         data-config="${escapedConfig}"
       ></div>`;
+        }
       }
 
       // Trim moduleHtml to avoid firstChild being a text node with whitespace

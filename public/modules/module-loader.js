@@ -169,7 +169,7 @@ class ModuleLoader {
   /**
    * Initialize all modules on the page
    */
-  static initAllModules() {
+  static async initAllModules() {
     const moduleElements = document.querySelectorAll('[data-module]');
 
     console.log(`📦 Found ${moduleElements.length} module(s) to load`);
@@ -177,23 +177,15 @@ class ModuleLoader {
     // Group consecutive paid-claim modules
     const grouped = this.groupConsecutivePaidClaims(Array.from(moduleElements));
 
-    grouped.forEach(item => {
+    for (const item of grouped) {
       if (item.isGroup) {
         // This is a group of paid-claim modules
-        this.loadGroupedPaidClaims(item.elements);
+        await this.loadGroupedPaidClaims(item.elements);
       } else {
         // Single module, load normally
         const el = item.element;
         const moduleName = el.getAttribute('data-module');
-        const configStr = el.getAttribute('data-config') || '{}';
-
-        // Parse config
-        let config = {};
-        try {
-          config = JSON.parse(configStr);
-        } catch (e) {
-          console.error(`Invalid config JSON for module ${moduleName}:`, e);
-        }
+        const moduleId = el.getAttribute('data-module-id');
 
         // Ensure element has an ID
         let containerId = el.id;
@@ -202,10 +194,52 @@ class ModuleLoader {
           el.id = containerId;
         }
 
+        // Load config from database or inline
+        let config = {};
+
+        if (moduleId) {
+          // Database-backed config
+          console.log(`📡 Loading config from database for module ${moduleId}`);
+          try {
+            const response = await fetch(`/api/modules/${moduleId}`);
+            if (response.ok) {
+              const moduleData = await response.json();
+              config = moduleData.config;
+              console.log(`✅ Loaded config for ${moduleName} from database`);
+            } else {
+              console.error(`Failed to load module config for ${moduleId}:`, response.statusText);
+              // Fall back to inline config if database fetch fails
+              const configStr = el.getAttribute('data-config') || '{}';
+              try {
+                config = JSON.parse(configStr);
+              } catch (e) {
+                console.error(`Invalid fallback config JSON for module ${moduleName}:`, e);
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching module config for ${moduleId}:`, error);
+            // Fall back to inline config
+            const configStr = el.getAttribute('data-config') || '{}';
+            try {
+              config = JSON.parse(configStr);
+            } catch (e) {
+              console.error(`Invalid fallback config JSON for module ${moduleName}:`, e);
+            }
+          }
+        } else {
+          // Inline config (backward compatibility)
+          const configStr = el.getAttribute('data-config') || '{}';
+          try {
+            config = JSON.parse(configStr);
+          } catch (e) {
+            console.error(`Invalid config JSON for module ${moduleName}:`, e);
+          }
+        }
+
         // Load the module
-        this.loadModule(moduleName, containerId, config);
+        await this.loadModule(moduleName, containerId, config);
       }
-    });
+    }
   }
 
   /**
@@ -251,8 +285,26 @@ class ModuleLoader {
   static async loadGroupedPaidClaims(elements) {
     console.log(`📦 Grouping ${elements.length} consecutive paid-claim modules`);
 
-    // Parse all configs
-    const configs = elements.map(el => {
+    // Parse all configs (support both database-backed and inline)
+    const configs = await Promise.all(elements.map(async el => {
+      const moduleId = el.getAttribute('data-module-id');
+
+      if (moduleId) {
+        // Database-backed config
+        try {
+          const response = await fetch(`/api/modules/${moduleId}`);
+          if (response.ok) {
+            const moduleData = await response.json();
+            return moduleData.config;
+          } else {
+            console.error(`Failed to load module config for ${moduleId}`);
+          }
+        } catch (error) {
+          console.error(`Error fetching module config for ${moduleId}:`, error);
+        }
+      }
+
+      // Fall back to inline config
       const configStr = el.getAttribute('data-config') || '{}';
       try {
         return JSON.parse(configStr);
@@ -260,7 +312,7 @@ class ModuleLoader {
         console.error('Invalid config JSON for paid-claim:', e);
         return {};
       }
-    });
+    }));
 
     // Create a wrapper container
     const wrapperContainer = document.createElement('div');
@@ -332,7 +384,7 @@ class ModuleLoader {
     }
 
     const moduleName = container.getAttribute('data-module');
-    const configStr = container.getAttribute('data-config') || '{}';
+    const moduleId = container.getAttribute('data-module-id');
 
     if (!moduleName) {
       console.error(`No data-module attribute found on #${containerId}`);
@@ -340,10 +392,42 @@ class ModuleLoader {
     }
 
     let config = {};
-    try {
-      config = JSON.parse(configStr);
-    } catch (e) {
-      console.error(`Invalid config JSON:`, e);
+
+    if (moduleId) {
+      // Database-backed config
+      try {
+        const response = await fetch(`/api/modules/${moduleId}`);
+        if (response.ok) {
+          const moduleData = await response.json();
+          config = moduleData.config;
+        } else {
+          console.error(`Failed to load module config for ${moduleId}`);
+          // Fall back to inline config
+          const configStr = container.getAttribute('data-config') || '{}';
+          try {
+            config = JSON.parse(configStr);
+          } catch (e) {
+            console.error(`Invalid fallback config JSON:`, e);
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching module config:`, error);
+        // Fall back to inline config
+        const configStr = container.getAttribute('data-config') || '{}';
+        try {
+          config = JSON.parse(configStr);
+        } catch (e) {
+          console.error(`Invalid fallback config JSON:`, e);
+        }
+      }
+    } else {
+      // Inline config (backward compatibility)
+      const configStr = container.getAttribute('data-config') || '{}';
+      try {
+        config = JSON.parse(configStr);
+      } catch (e) {
+        console.error(`Invalid config JSON:`, e);
+      }
     }
 
     await this.loadModule(moduleName, containerId, config);

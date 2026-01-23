@@ -223,12 +223,46 @@ async function addModule(moduleType) {
     config[key] = field.default;
   });
 
-  // Add to page modules
+  // Determine if this module type should use database-backed config
+  const useDatabase = !['text-block', 'image-block'].includes(moduleType);
+
   const moduleId = nextModuleId++;
+  let moduleInstanceId = null;
+
+  // Create database instance for eligible modules
+  if (useDatabase) {
+    try {
+      const response = await fetch('/api/modules/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          module_type: moduleType,
+          name: `${moduleInfo.name} - ${new Date().toLocaleString()}`,
+          description: `Created via Site Builder`,
+          config: config
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        moduleInstanceId = data.module.id;
+        console.log(`✅ Created database-backed module instance: ${moduleInstanceId}`);
+      } else {
+        console.warn(`⚠️ Failed to create database module instance, falling back to inline config`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Error creating database module instance:`, error);
+    }
+  }
+
+  // Add to page modules
   pageModules.push({
     id: moduleId,
     moduleType: moduleType,
-    config: config
+    config: config,
+    moduleInstanceId: moduleInstanceId
   });
 
   renderCanvas();
@@ -559,6 +593,29 @@ async function applyConfig() {
     }
   });
 
+  // Update database instance if this module has one
+  if (module.moduleInstanceId) {
+    try {
+      const response = await fetch(`/api/modules/${module.moduleInstanceId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          config: module.config
+        })
+      });
+
+      if (response.ok) {
+        console.log(`✅ Updated database module instance: ${module.moduleInstanceId}`);
+      } else {
+        console.warn(`⚠️ Failed to update database module instance`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ Error updating database module instance:`, error);
+    }
+  }
+
   renderCanvas();
 
   // Show feedback
@@ -588,6 +645,25 @@ async function applyConfig() {
 // Remove module
 async function removeModule(index) {
   if (confirm('Remove this module?')) {
+    const module = pageModules[index];
+
+    // Delete database instance if this module has one
+    if (module.moduleInstanceId) {
+      try {
+        const response = await fetch(`/api/modules/${module.moduleInstanceId}`, {
+          method: 'DELETE'
+        });
+
+        if (response.ok) {
+          console.log(`✅ Deleted database module instance: ${module.moduleInstanceId}`);
+        } else {
+          console.warn(`⚠️ Failed to delete database module instance`);
+        }
+      } catch (error) {
+        console.warn(`⚠️ Error deleting database module instance:`, error);
+      }
+    }
+
     pageModules.splice(index, 1);
     if (selectedModuleIndex === index) {
       selectedModuleIndex = null;
