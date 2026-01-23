@@ -8,6 +8,40 @@
 class ModuleLoader {
   static loadedModules = new Set();
   static loadingModules = new Map();
+  static unifiedSystemLoaded = false;
+
+  /**
+   * Load unified module system (CSS and JS)
+   */
+  static async loadUnifiedSystem() {
+    if (this.unifiedSystemLoaded) {
+      return;
+    }
+
+    console.log('📦 Loading unified module system...');
+
+    // Load unified CSS
+    const cssLink = document.createElement('link');
+    cssLink.rel = 'stylesheet';
+    cssLink.href = '/modules/unified-module.css';
+    document.head.appendChild(cssLink);
+
+    // Load unified base JS
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = '/modules/unified-module-base.js';
+      script.onload = () => {
+        this.unifiedSystemLoaded = true;
+        console.log('✅ Unified module system loaded');
+        resolve();
+      };
+      script.onerror = () => {
+        console.error('❌ Failed to load unified module system');
+        reject(new Error('Failed to load unified-module-base.js'));
+      };
+      document.head.appendChild(script);
+    });
+  }
 
   /**
    * Load a specific module into a container
@@ -16,6 +50,8 @@ class ModuleLoader {
    * @param {object} config - Configuration object for the module
    */
   static async loadModule(moduleName, containerId, config = {}) {
+    // Ensure unified system is loaded first
+    await this.loadUnifiedSystem();
     const container = document.getElementById(containerId);
 
     if (!container) {

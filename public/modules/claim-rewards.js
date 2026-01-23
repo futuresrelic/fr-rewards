@@ -1,600 +1,463 @@
 /**
- * Claim Rewards Module
- * Self-contained module for NFT reward claiming
+ * Claim Rewards Module - UNIFIED VERSION
+ *
+ * Extends UnifiedModuleBase for consistent look, feel, and authentication.
+ * This demonstrates the new unified module pattern.
  */
 
-window.init_claim_rewards = function(containerId, config = {}) {
-  console.log(`✅ Claim Rewards module initialized in #${containerId}`);
-  console.log('Config:', config);
+class ClaimRewardsModule extends UnifiedModuleBase {
+  constructor(containerId, config) {
+    super(containerId, config);
 
-  const container = document.getElementById(containerId);
-  const API_URL = window.location.origin;
-
-  // Module state (scoped to this instance)
-  let currentAccount = null;
-  let wax = null;
-  let anchor = null;
-  let currentWalletType = null;
-  let publicConfig = null;
-  let countdownIntervals = [];
-
-  // Get module elements using container scope
-  const notConnectedSection = container.querySelector('.claim-not-connected');
-  const loadingSection = container.querySelector('.claim-loading');
-  const eligibleSection = container.querySelector('.claim-eligible');
-  const notEligibleSection = container.querySelector('.claim-not-eligible');
-  const errorSection = container.querySelector('.claim-error');
-  const connectedAccountEl = container.querySelector('.claim-connected-account');
-  const nftListEl = container.querySelector('.claim-nft-list');
-  const historyListEl = container.querySelector('.claim-history-list');
-  const whitelistInfoEl = container.querySelector('.claim-whitelist-info');
-  const claimHistorySection = container.querySelector('.claim-history');
-  const claimAllContainer = container.querySelector('.claim-all-container');
-  const walletInfoDiv = container.querySelector('.claim-wallet-info');
-
-  // Initialize
-  (async function init() {
-    await loadPublicConfig();
-    await waitForLibraries();
-    setupEventListeners();
-
-    // Auto-connect if configured
-    if (config.auto_connect) {
-      checkExistingSession();
-    }
-  })();
-
-  // Wait for wallet libraries to load
-  async function waitForLibraries() {
-    // Check WaxJS
-    if (window.WaxJS || window.waxjs?.WaxJS) {
-      console.log('✅ WaxJS loaded');
-    } else {
-      console.error('❌ WaxJS not loaded');
-    }
-
-    // Wait for Anchor to load
-    let attempts = 0;
-    while (!window.AnchorWallet && attempts < 50) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      attempts++;
-    }
-
-    if (window.AnchorWallet) {
-      console.log('✅ Anchor wallet loaded');
-    } else {
-      console.warn('⚠️ Anchor wallet not loaded (will be disabled)');
-    }
-
-    return true;
+    // Module-specific state
+    this.publicConfig = null;
+    this.eligibilityData = null;
+    this.cooldownData = null;
+    this.claimsData = null;
+    this.countdownIntervals = [];
+    this.API_URL = window.location.origin;
   }
 
-  // Load public configuration
-  async function loadPublicConfig() {
+  /**
+   * Load module-specific data
+   * Called by base class when wallet connects
+   */
+  async loadModuleData() {
     try {
-      const response = await fetch(`${API_URL}/api/config/public`);
+      // Load public config if not loaded
+      if (!this.publicConfig) {
+        await this.loadPublicConfig();
+      }
+
+      // Clear any existing countdowns
+      this.clearCountdowns();
+
+      // Load all data in parallel
+      const [eligibilityData, cooldownData, claimsData] = await Promise.all([
+        fetch(`${this.API_URL}/api/user/eligibility/${this.currentAccount}`).then(r => r.json()),
+        fetch(`${this.API_URL}/api/user/cooldowns/${this.currentAccount}`).then(r => r.json()),
+        fetch(`${this.API_URL}/api/user/claims/${this.currentAccount}`).then(r => r.json())
+      ]);
+
+      this.eligibilityData = eligibilityData;
+      this.cooldownData = cooldownData;
+      this.claimsData = claimsData;
+
+    } catch (error) {
+      console.error('Error loading claim rewards data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Render module content
+   * Called by base class after data is loaded
+   */
+  renderContent() {
+    this.elements.content.innerHTML = '';
+
+    if (!this.eligibilityData.eligible) {
+      this.renderNotEligible();
+      return;
+    }
+
+    // Build cooldown map
+    const cooldownMap = {};
+    this.cooldownData.cooldowns.forEach(cd => {
+      const key = `${cd.template_id}-${cd.reward_id}`;
+      cooldownMap[key] = cd;
+    });
+
+    // Filter assets if configured
+    let assetsToShow = this.eligibilityData.eligibleAssets;
+    if (this.config.show_only_reward_id) {
+      assetsToShow = assetsToShow.filter(asset => {
+        return asset.rewards && asset.rewards.some(r =>
+          r.reward_id === parseInt(this.config.show_only_reward_id)
+        );
+      });
+    }
+
+    // Check if we have claimable rewards
+    const hasClaimableRewards = this.cooldownData.cooldowns.some(cd => cd.can_claim);
+
+    // Add claim-all button if applicable
+    if (hasClaimableRewards) {
+      const claimAllBtn = document.createElement('button');
+      claimAllBtn.className = 'module-item-action-btn success';
+      claimAllBtn.style.marginBottom = '20px';
+      claimAllBtn.style.width = '100%';
+      claimAllBtn.style.fontSize = '1.1rem';
+      claimAllBtn.innerHTML = '🎁 Claim All Available Rewards';
+      claimAllBtn.addEventListener('click', () => this.claimAll());
+      this.elements.content.appendChild(claimAllBtn);
+    }
+
+    // Create items grid
+    const itemsGrid = document.createElement('div');
+    itemsGrid.className = 'module-items-grid';
+
+    // Render each asset
+    assetsToShow.forEach(asset => {
+      const card = this.createAssetCard(asset, cooldownMap);
+      itemsGrid.appendChild(card);
+    });
+
+    this.elements.content.appendChild(itemsGrid);
+
+    // Show claim history if available
+    if (this.claimsData.claims.length > 0) {
+      this.renderClaimHistory();
+    }
+  }
+
+  /**
+   * Create asset card with rewards
+   */
+  createAssetCard(asset, cooldownMap) {
+    const templateId = parseInt(asset.template_id);
+    const quantity = asset.quantity_owned;
+
+    // Filter rewards if configured
+    let rewardsToShow = asset.rewards || [];
+    if (this.config.show_only_reward_id) {
+      rewardsToShow = rewardsToShow.filter(r =>
+        r.reward_id === parseInt(this.config.show_only_reward_id)
+      );
+    }
+
+    // Determine badge
+    let badge = null;
+    let badgeType = 'info';
+    if (quantity > 1) {
+      badge = `Owned: ${quantity}`;
+      badgeType = 'success';
+    }
+
+    // Create base card
+    const card = this.createItemCard({
+      title: asset.name || `Template #${templateId}`,
+      image: asset.image_url,
+      badge: badge,
+      badgeType: badgeType,
+      description: `Template ID: ${templateId}`,
+      info: []
+    });
+
+    // Highlight if configured
+    if (this.config.highlight_reward_id) {
+      const hasHighlightedReward = rewardsToShow.some(r =>
+        r.reward_id === parseInt(this.config.highlight_reward_id)
+      );
+      if (hasHighlightedReward) {
+        card.style.border = '2px solid var(--success)';
+        card.style.background = 'rgba(16, 185, 129, 0.05)';
+      }
+    }
+
+    // Add rewards section
+    const actionsContainer = card.querySelector('[data-actions-container]');
+    if (actionsContainer) {
+      actionsContainer.style.flexDirection = 'column';
+      actionsContainer.style.gap = '15px';
+
+      if (rewardsToShow.length > 0) {
+        const rewardsTitle = document.createElement('h4');
+        rewardsTitle.style.margin = '10px 0 5px 0';
+        rewardsTitle.style.color = 'var(--text-secondary)';
+        rewardsTitle.style.fontSize = '0.95rem';
+        rewardsTitle.textContent = 'Available Rewards:';
+        actionsContainer.appendChild(rewardsTitle);
+
+        rewardsToShow.forEach(reward => {
+          const rewardElement = this.createRewardElement(templateId, reward, cooldownMap);
+          actionsContainer.appendChild(rewardElement);
+        });
+      } else {
+        const noRewards = document.createElement('p');
+        noRewards.style.color = 'var(--text-secondary)';
+        noRewards.style.fontSize = '0.9rem';
+        noRewards.textContent = 'No rewards configured for this template.';
+        actionsContainer.appendChild(noRewards);
+      }
+    }
+
+    return card;
+  }
+
+  /**
+   * Create reward element with claim button
+   */
+  createRewardElement(templateId, reward, cooldownMap) {
+    const cooldownKey = `${templateId}-${reward.reward_id}`;
+    const cooldown = cooldownMap[cooldownKey];
+    const canClaim = cooldown ? cooldown.can_claim : true;
+    const remainingSeconds = cooldown ? cooldown.remaining_seconds : 0;
+
+    const rewardName = reward.reward_name || `Template #${reward.reward_template_id}`;
+    const quantityInfo = reward.match_quantity
+      ? `×${reward.available_quantity}`
+      : `(max ${reward.max_claims || 1})`;
+
+    const rewardDiv = document.createElement('div');
+    rewardDiv.style.padding = '15px';
+    rewardDiv.style.background = 'var(--bg-card)';
+    rewardDiv.style.borderRadius = '8px';
+    rewardDiv.style.border = '1px solid var(--border)';
+
+    // Reward header with image
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.alignItems = 'center';
+    header.style.gap = '10px';
+    header.style.marginBottom = '10px';
+
+    if (reward.reward_image_url) {
+      const img = document.createElement('img');
+      img.src = reward.reward_image_url;
+      img.alt = rewardName;
+      img.style.width = '40px';
+      img.style.height = '40px';
+      img.style.objectFit = 'contain';
+      img.style.borderRadius = '4px';
+      img.style.background = 'rgba(139, 92, 246, 0.1)';
+      img.style.padding = '4px';
+      header.appendChild(img);
+    }
+
+    const infoDiv = document.createElement('div');
+    infoDiv.innerHTML = `
+      <div style="font-weight: 600; color: var(--text-primary);">${rewardName}</div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary);">
+        ${quantityInfo} • ${reward.cooldown_hours}h cooldown
+      </div>
+    `;
+    header.appendChild(infoDiv);
+    rewardDiv.appendChild(header);
+
+    // Status or countdown
+    if (!canClaim && remainingSeconds > 0) {
+      const countdown = this.createCountdown(Date.now() + (remainingSeconds * 1000));
+      countdown.style.marginBottom = '10px';
+      countdown.style.width = '100%';
+      countdown.style.justifyContent = 'center';
+
+      // Store countdown info for reload
+      countdown.dataset.templateId = templateId;
+      countdown.dataset.rewardId = reward.reward_id;
+
+      // When countdown ends, reload data
+      setTimeout(() => {
+        this.handleWalletConnected();
+      }, remainingSeconds * 1000);
+
+      rewardDiv.appendChild(countdown);
+    } else if (canClaim) {
+      const readyBadge = document.createElement('div');
+      readyBadge.className = 'module-status-message success';
+      readyBadge.style.marginBottom = '10px';
+      readyBadge.style.fontSize = '0.85rem';
+      readyBadge.style.padding = '8px 12px';
+      readyBadge.innerHTML = '<span class="module-status-icon">✅</span><span>Ready to claim!</span>';
+      rewardDiv.appendChild(readyBadge);
+    }
+
+    // Claim button
+    const claimBtn = this.createActionButton(
+      `🎁 Claim ${rewardName}`,
+      () => this.claimReward(templateId, reward.reward_id),
+      canClaim ? 'success' : 'secondary',
+      !canClaim
+    );
+    claimBtn.style.width = '100%';
+    rewardDiv.appendChild(claimBtn);
+
+    return rewardDiv;
+  }
+
+  /**
+   * Render not eligible state
+   */
+  renderNotEligible() {
+    const emptyState = document.createElement('div');
+    emptyState.className = 'module-empty-state';
+    emptyState.innerHTML = `
+      <div class="module-empty-icon">❌</div>
+      <div class="module-empty-title">No Eligible NFTs Found</div>
+      <div class="module-empty-description">
+        You need to hold one of the whitelisted NFT templates to claim rewards.
+      </div>
+    `;
+
+    // Show whitelisted templates if available
+    if (this.eligibilityData.whitelistTemplates && this.eligibilityData.whitelistTemplates.length > 0) {
+      const whitelistDiv = document.createElement('div');
+      whitelistDiv.style.marginTop = '20px';
+      whitelistDiv.style.textAlign = 'left';
+      whitelistDiv.innerHTML = '<h4 style="margin-bottom: 10px;">Required Templates:</h4>';
+
+      const list = document.createElement('ul');
+      list.style.listStyle = 'none';
+      list.style.padding = '0';
+      list.style.display = 'grid';
+      list.style.gap = '10px';
+
+      this.eligibilityData.whitelistTemplates.forEach(templateId => {
+        const li = document.createElement('li');
+        li.style.padding = '10px';
+        li.style.background = 'var(--bg-card)';
+        li.style.borderRadius = '8px';
+        li.style.border = '1px solid var(--border)';
+        li.textContent = `Template ID: ${templateId}`;
+        list.appendChild(li);
+      });
+
+      whitelistDiv.appendChild(list);
+      emptyState.appendChild(whitelistDiv);
+    }
+
+    this.elements.content.appendChild(emptyState);
+  }
+
+  /**
+   * Render claim history
+   */
+  renderClaimHistory() {
+    const historySection = document.createElement('div');
+    historySection.style.marginTop = '30px';
+    historySection.style.paddingTop = '30px';
+    historySection.style.borderTop = '2px solid var(--border)';
+
+    const title = document.createElement('h3');
+    title.textContent = 'Recent Claims';
+    title.style.marginBottom = '15px';
+    title.style.color = 'var(--text-secondary)';
+    historySection.appendChild(title);
+
+    const historyList = document.createElement('div');
+    historyList.style.display = 'grid';
+    historyList.style.gap = '10px';
+
+    this.claimsData.claims.slice(0, 5).forEach(claim => {
+      const item = document.createElement('div');
+      item.style.display = 'flex';
+      item.style.justifyContent = 'space-between';
+      item.style.padding = '12px 15px';
+      item.style.background = 'var(--bg-dark)';
+      item.style.borderRadius = '8px';
+      item.style.border = '1px solid var(--border)';
+
+      item.innerHTML = `
+        <span style="color: var(--text-primary);">
+          ${claim.reward_name || `Template ${claim.reward_template}`}
+        </span>
+        <span style="color: var(--text-secondary); font-size: 0.9rem;">
+          ${this.formatDate(claim.claimed_at)}
+        </span>
+      `;
+
+      historyList.appendChild(item);
+    });
+
+    historySection.appendChild(historyList);
+    this.elements.content.appendChild(historySection);
+  }
+
+  /**
+   * Claim a single reward
+   */
+  async claimReward(templateId, rewardId) {
+    this.showLoading('Claiming reward...');
+
+    try {
+      const response = await fetch(`${this.API_URL}/api/user/claim`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: this.currentAccount,
+          template_id: templateId,
+          reward_id: rewardId
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await this.handleWalletConnected(); // Reload data
+        this.showStatusMessage(`Successfully claimed ${result.reward_name || 'reward'}!`, 'success');
+      } else {
+        throw new Error(result.error || 'Failed to claim reward');
+      }
+    } catch (error) {
+      console.error('Claim error:', error);
+      this.showError(error.message || 'Failed to claim reward');
+    }
+  }
+
+  /**
+   * Claim all available rewards
+   */
+  async claimAll() {
+    this.showLoading('Claiming all rewards...');
+
+    try {
+      const response = await fetch(`${this.API_URL}/api/user/claim-all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: this.currentAccount
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        await this.handleWalletConnected(); // Reload data
+        this.showStatusMessage(
+          `Successfully claimed ${result.claimed_count} reward${result.claimed_count !== 1 ? 's' : ''}!`,
+          'success'
+        );
+      } else {
+        throw new Error(result.error || 'Failed to claim rewards');
+      }
+    } catch (error) {
+      console.error('Claim all error:', error);
+      this.showError(error.message || 'Failed to claim rewards');
+    }
+  }
+
+  /**
+   * Load public configuration
+   */
+  async loadPublicConfig() {
+    try {
+      const response = await fetch(`${this.API_URL}/api/config/public`);
       const data = await response.json();
       if (data.success) {
-        publicConfig = data.config;
+        this.publicConfig = data.config;
       }
     } catch (error) {
       console.error('Error loading config:', error);
     }
   }
 
-  // Setup event listeners
-  function setupEventListeners() {
-    const connectWcwBtn = container.querySelector('.claim-connect-wcw');
-    const connectAnchorBtn = container.querySelector('.claim-connect-anchor');
-    const disconnectBtn = container.querySelector('.claim-disconnect-btn');
-    const claimAllBtn = container.querySelector('.claim-all-btn');
-
-    if (connectWcwBtn) {
-      connectWcwBtn.addEventListener('click', () => connectWallet('wcw'));
-    }
-    if (connectAnchorBtn) {
-      connectAnchorBtn.addEventListener('click', () => connectWallet('anchor'));
-    }
-    if (disconnectBtn) {
-      disconnectBtn.addEventListener('click', disconnect);
-    }
-    if (claimAllBtn) {
-      claimAllBtn.addEventListener('click', claimAll);
-    }
+  /**
+   * Clear all countdown intervals
+   */
+  clearCountdowns() {
+    this.countdownIntervals.forEach(interval => clearInterval(interval));
+    this.countdownIntervals = [];
   }
 
-  // Check for existing session
-  async function checkExistingSession() {
-    const savedAccount = localStorage.getItem('wax_account');
-    const savedWallet = localStorage.getItem('wax_wallet');
-
-    if (savedAccount && savedWallet) {
-      currentAccount = savedAccount;
-      currentWalletType = savedWallet;
-
-      // Try to restore Anchor session
-      if (savedWallet === 'anchor' && window.AnchorWallet) {
-        try {
-          const restored = await window.AnchorWallet.restoreSession();
-          if (restored) {
-            anchor = window.AnchorWallet;
-            currentAccount = restored;
-          }
-        } catch (error) {
-          console.warn('Could not restore Anchor session:', error);
-          localStorage.removeItem('wax_account');
-          localStorage.removeItem('wax_wallet');
-          return;
-        }
-      }
-
-      showConnectedState();
-      loadUserData();
-    }
+  /**
+   * Cleanup on module unload
+   */
+  destroy() {
+    this.clearCountdowns();
   }
-
-  // Connect wallet
-  async function connectWallet(walletType) {
-    try {
-      hideError();
-
-      if (walletType === 'wcw') {
-        await connectWCW();
-      } else if (walletType === 'anchor') {
-        await connectAnchor();
-      }
-
-      if (currentAccount) {
-        currentWalletType = walletType;
-        localStorage.setItem('wax_account', currentAccount);
-        localStorage.setItem('wax_wallet', walletType);
-        showConnectedState();
-        await loadUserData();
-      }
-    } catch (error) {
-      showError('Failed to connect wallet: ' + error.message);
-      console.error('Wallet connection error:', error);
-    }
-  }
-
-  // Connect Wax Cloud Wallet
-  async function connectWCW() {
-    const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
-    if (!WaxJS) throw new Error('WaxJS not loaded');
-
-    wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: false });
-    currentAccount = await wax.login();
-  }
-
-  // Connect Anchor
-  async function connectAnchor() {
-    if (!window.AnchorWallet) {
-      throw new Error('Anchor wallet not loaded. Please refresh the page or use WAX Cloud Wallet.');
-    }
-
-    anchor = window.AnchorWallet;
-    currentAccount = await anchor.login();
-  }
-
-  // Disconnect wallet
-  async function disconnect() {
-    // Logout from Anchor if connected
-    if (currentWalletType === 'anchor' && anchor) {
-      try {
-        await anchor.logout();
-      } catch (error) {
-        console.error('Error logging out of Anchor:', error);
-      }
-    }
-
-    currentAccount = null;
-    wax = null;
-    anchor = null;
-    currentWalletType = null;
-    localStorage.removeItem('wax_account');
-    localStorage.removeItem('wax_wallet');
-    clearCountdowns();
-    showNotConnectedState();
-  }
-
-  // Load user data
-  async function loadUserData() {
-    try {
-      clearCountdowns();
-
-      loadingSection.style.display = 'block';
-      eligibleSection.style.display = 'none';
-      notEligibleSection.style.display = 'none';
-
-      const [eligibilityData, cooldownData, claimsData] = await Promise.all([
-        fetch(`${API_URL}/api/user/eligibility/${currentAccount}`).then(r => r.json()),
-        fetch(`${API_URL}/api/user/cooldowns/${currentAccount}`).then(r => r.json()),
-        fetch(`${API_URL}/api/user/claims/${currentAccount}`).then(r => r.json())
-      ]);
-
-      loadingSection.style.display = 'none';
-
-      if (eligibilityData.eligible) {
-        showEligibleState(eligibilityData, cooldownData, claimsData);
-      } else {
-        showNotEligibleState(eligibilityData);
-      }
-    } catch (error) {
-      loadingSection.style.display = 'none';
-      showError('Error loading user data: ' + error.message);
-      console.error('Error:', error);
-    }
-  }
-
-  // Show eligible state
-  function showEligibleState(eligibilityData, cooldownData, claimsData) {
-    eligibleSection.style.display = 'block';
-    nftListEl.innerHTML = '';
-
-    // Build cooldown map by template_id + reward_id
-    const cooldownMap = {};
-    cooldownData.cooldowns.forEach(cd => {
-      const key = `${cd.template_id}-${cd.reward_id}`;
-      cooldownMap[key] = cd;
-    });
-
-    // Filter assets if show_only_reward_id is configured
-    let assetsToShow = eligibilityData.eligibleAssets;
-    if (config.show_only_reward_id) {
-      assetsToShow = assetsToShow.filter(asset => {
-        return asset.rewards && asset.rewards.some(r => r.reward_id === parseInt(config.show_only_reward_id));
-      });
-    }
-
-    // Display each eligible template with its rewards
-    assetsToShow.forEach(asset => {
-      const templateId = parseInt(asset.template_id);
-      const quantity = asset.quantity_owned;
-
-      const nftCard = document.createElement('div');
-      nftCard.className = 'nft-card';
-
-      // Highlight if configured
-      if (config.highlight_reward_id) {
-        const hasHighlightedReward = asset.rewards && asset.rewards.some(r => r.reward_id === parseInt(config.highlight_reward_id));
-        if (hasHighlightedReward) {
-          nftCard.style.border = '2px solid var(--success)';
-          nftCard.style.background = 'rgba(16, 185, 129, 0.05)';
-        }
-      }
-
-      // Get image/video URLs
-      const nftMediaUrl = asset.image_url;
-      const isVideo = asset.is_video;
-
-      // Build media element (video or image)
-      let nftMediaHtml = '📦';
-      if (nftMediaUrl) {
-        if (isVideo) {
-          nftMediaHtml = `<video src="${nftMediaUrl}" class="nft-image" autoplay loop muted playsinline onerror="this.style.display='none'; this.parentElement.innerHTML='📦';"></video>`;
-        } else {
-          nftMediaHtml = `<img src="${nftMediaUrl}" alt="NFT" class="nft-image" onerror="this.style.display='none'; this.parentElement.innerHTML='📦';">`;
-        }
-      }
-
-      // Build rewards buttons
-      let rewardsHtml = '';
-      if (asset.rewards && asset.rewards.length > 0) {
-        // Filter rewards if show_only_reward_id is configured
-        let rewardsToShow = asset.rewards;
-        if (config.show_only_reward_id) {
-          rewardsToShow = rewardsToShow.filter(r => r.reward_id === parseInt(config.show_only_reward_id));
-        }
-
-        rewardsToShow.forEach((reward, index) => {
-          const cooldownKey = `${templateId}-${reward.reward_id}`;
-          const cooldown = cooldownMap[cooldownKey];
-          const canClaim = cooldown ? cooldown.can_claim : true;
-          const remainingSeconds = cooldown ? cooldown.remaining_seconds : 0;
-
-          const rewardName = reward.reward_name || `Template #${reward.reward_template_id}`;
-          const quantityInfo = reward.match_quantity ? `×${reward.available_quantity}` : `(max ${reward.max_claims || 1})`;
-
-          rewardsHtml += `
-            <div style="margin-bottom: 10px;">
-              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
-                ${reward.reward_image_url
-                  ? `<img src="${reward.reward_image_url}" alt="${rewardName}" style="width: 40px; height: 40px; object-fit: contain; border-radius: 4px; background: rgba(16, 185, 129, 0.1); padding: 2px;">`
-                  : ''}
-                <div>
-                  <div style="font-weight: 600;">${rewardName}</div>
-                  <div style="font-size: 0.85rem; color: var(--text-secondary);">
-                    ${quantityInfo} • ${reward.cooldown_hours}h cooldown
-                  </div>
-                </div>
-              </div>
-              <div class="nft-status ${canClaim ? 'ready' : 'cooldown'}" style="margin-bottom: 8px;">
-                ${canClaim ? '✅ Ready to claim!' : `⏰ Next claim in: <span class="countdown reward-countdown-${templateId}-${reward.reward_id}" data-seconds="${remainingSeconds}"></span>`}
-              </div>
-              <button class="btn btn-sm ${canClaim ? 'btn-success' : 'btn-primary'} reward-claim-btn"
-                      data-template="${templateId}"
-                      data-reward="${reward.reward_id}"
-                      ${canClaim ? '' : 'disabled'}>
-                ${canClaim ? `🎁 Claim ${rewardName}` : 'Cooldown Active'}
-              </button>
-            </div>
-          `;
-        });
-      } else {
-        rewardsHtml = '<p style="color: var(--text-secondary); font-size: 0.9rem;">No rewards configured for this template.</p>';
-      }
-
-      nftCard.innerHTML = `
-        <div class="nft-icon">
-          ${nftMediaHtml}
-        </div>
-        <div class="nft-header">
-          <div class="nft-info">
-            <div class="nft-name">
-              ${asset.name || 'Template #' + templateId}
-              ${quantity > 1 ? `<span class="quantity-badge">×${quantity}</span>` : ''}
-            </div>
-            <div class="nft-template">Template ID: ${templateId}</div>
-          </div>
-          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border);">
-            <h4 style="margin: 0 0 15px 0; color: var(--text-secondary); font-size: 0.95rem;">Available Rewards:</h4>
-            ${rewardsHtml}
-          </div>
-        </div>
-      `;
-
-      nftListEl.appendChild(nftCard);
-
-      // Add claim button listeners for each reward
-      nftCard.querySelectorAll('.reward-claim-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const templateId = btn.dataset.template;
-          const rewardId = btn.dataset.reward;
-          claimReward(templateId, rewardId, btn);
-        });
-      });
-
-      // Start countdowns for each reward
-      nftCard.querySelectorAll('[class*="reward-countdown-"]').forEach(countdownEl => {
-        const seconds = parseInt(countdownEl.dataset.seconds);
-        if (seconds > 0) {
-          startCountdown(countdownEl, seconds, () => {
-            loadUserData();
-          });
-        }
-      });
-    });
-
-    // Check if any rewards are claimable and show/hide claim-all button
-    const hasClaimableRewards = cooldownData.cooldowns.some(cd => cd.can_claim);
-    if (hasClaimableRewards && claimAllContainer) {
-      claimAllContainer.style.display = 'block';
-    } else if (claimAllContainer) {
-      claimAllContainer.style.display = 'none';
-    }
-
-    // Show claim history
-    if (claimsData.claims.length > 0 && claimHistorySection && historyListEl) {
-      claimHistorySection.style.display = 'block';
-      historyListEl.innerHTML = '';
-
-      claimsData.claims.slice(0, 5).forEach(claim => {
-        const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        historyItem.innerHTML = `
-          <span>${claim.reward_name || `Template ${claim.reward_template}`}</span>
-          <span class="history-date">${formatDate(claim.claimed_at)}</span>
-        `;
-        historyListEl.appendChild(historyItem);
-      });
-    }
-  }
-
-  // Show not eligible state
-  function showNotEligibleState(eligibilityData) {
-    notEligibleSection.style.display = 'block';
-    whitelistInfoEl.innerHTML = '';
-
-    if (eligibilityData && eligibilityData.whitelistTemplates && eligibilityData.whitelistTemplates.length > 0) {
-      eligibilityData.whitelistTemplates.forEach(templateId => {
-        const item = document.createElement('div');
-        item.className = 'whitelist-item';
-        item.textContent = `Template ID: ${templateId}`;
-        whitelistInfoEl.appendChild(item);
-      });
-    } else {
-      whitelistInfoEl.innerHTML = '<p>No templates configured. Please contact admin.</p>';
-    }
-  }
-
-  // Claim reward
-  async function claimReward(templateId, rewardId, button) {
-    try {
-      button.disabled = true;
-      button.textContent = 'Claiming...';
-
-      const response = await fetch(`${API_URL}/api/user/claim`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          account: currentAccount,
-          template_id: templateId,
-          reward_id: rewardId
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Claim failed');
-      }
-
-      // Show success
-      const txIds = data.transaction_ids || [data.transaction_id];
-      const quantityMsg = data.quantity_minted > 1 ? ` (${data.quantity_minted}x NFTs)` : '';
-      showError(`Success! Reward claimed${quantityMsg}. TX: ${txIds[0]}`, 'success');
-
-      // Reload user data
-      setTimeout(() => loadUserData(), 2000);
-
-    } catch (error) {
-      showError('Claim failed: ' + error.message);
-      button.disabled = false;
-      button.textContent = '🎁 Claim Reward';
-    }
-  }
-
-  // Claim all available rewards
-  async function claimAll() {
-    const button = container.querySelector('.claim-all-btn');
-    const statusEl = container.querySelector('.claim-all-status');
-
-    try {
-      button.disabled = true;
-      button.textContent = '⏳ Claiming all rewards...';
-      statusEl.innerHTML = '<div style="color: var(--primary);">Processing...</div>';
-
-      const response = await fetch(`${API_URL}/api/user/claim-all`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          account: currentAccount
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Claim all failed');
-      }
-
-      // Show detailed results
-      let statusHtml = `<div style="color: var(--success); font-weight: 600; margin-bottom: 10px;">✅ ${data.message}</div>`;
-
-      if (data.results && data.results.length > 0) {
-        statusHtml += '<div style="text-align: left; max-width: 600px; margin: 0 auto;">';
-        data.results.forEach(result => {
-          const txLink = result.transaction_ids && result.transaction_ids[0]
-            ? `<a href="https://waxblock.io/transaction/${result.transaction_ids[0]}" target="_blank" style="color: var(--primary);">View TX</a>`
-            : '';
-          statusHtml += `
-            <div style="padding: 8px; border-bottom: 1px solid var(--border);">
-              <strong>${result.reward_name || 'Reward #' + result.reward_id}</strong>
-              - Minted ${result.quantity_minted}x NFT(s) ${txLink}
-            </div>
-          `;
-        });
-        statusHtml += '</div>';
-      }
-
-      if (data.errors && data.errors.length > 0) {
-        statusHtml += '<div style="margin-top: 10px; color: var(--error);">⚠️ Some claims failed:</div>';
-        data.errors.forEach(err => {
-          statusHtml += `<div style="color: var(--text-secondary); font-size: 0.85rem;">${err.reward_name || 'Reward #' + err.reward_id}: ${err.error}</div>`;
-        });
-      }
-
-      statusEl.innerHTML = statusHtml;
-
-      // Show success message
-      showError(`🎉 Successfully claimed ${data.total_claimed} reward(s)!`, 'success');
-
-      // Reload user data after 5 seconds
-      setTimeout(() => {
-        loadUserData();
-        button.disabled = false;
-        button.textContent = '🎁 Claim All Available Rewards';
-        statusEl.innerHTML = '';
-      }, 5000);
-
-    } catch (error) {
-      statusEl.innerHTML = `<div style="color: var(--error);">❌ ${error.message}</div>`;
-      showError('Claim all failed: ' + error.message);
-      button.disabled = false;
-      button.textContent = '🎁 Claim All Available Rewards';
-
-      setTimeout(() => {
-        statusEl.innerHTML = '';
-      }, 5000);
-    }
-  }
-
-  // Start countdown timer
-  function startCountdown(element, seconds, onComplete) {
-    let remaining = seconds;
-
-    const updateCountdown = () => {
-      if (remaining <= 0) {
-        clearInterval(interval);
-        if (onComplete) onComplete();
-        return;
-      }
-
-      const hours = Math.floor(remaining / 3600);
-      const minutes = Math.floor((remaining % 3600) / 60);
-      const secs = remaining % 60;
-
-      element.textContent = `${hours}h ${minutes}m ${secs}s`;
-      remaining--;
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    countdownIntervals.push(interval);
-  }
-
-  // Clear all countdowns
-  function clearCountdowns() {
-    countdownIntervals.forEach(interval => clearInterval(interval));
-    countdownIntervals = [];
-  }
-
-  // UI State functions
-  function showNotConnectedState() {
-    notConnectedSection.style.display = 'block';
-    loadingSection.style.display = 'none';
-    eligibleSection.style.display = 'none';
-    notEligibleSection.style.display = 'none';
-    if (walletInfoDiv) walletInfoDiv.style.display = 'none';
-  }
-
-  function showConnectedState() {
-    notConnectedSection.style.display = 'none';
-    if (connectedAccountEl) connectedAccountEl.textContent = currentAccount;
-    if (walletInfoDiv) walletInfoDiv.style.display = 'block';
-  }
-
-  function showError(message, type = 'error') {
-    if (!errorSection) return;
-
-    errorSection.textContent = message;
-    errorSection.style.display = 'block';
-    errorSection.style.color = type === 'success' ? 'var(--success)' : 'var(--error)';
-    errorSection.style.background = type === 'success'
-      ? 'rgba(16, 185, 129, 0.1)'
-      : 'rgba(239, 68, 68, 0.1)';
-
-    setTimeout(() => {
-      errorSection.style.display = 'none';
-    }, 5000);
-  }
-
-  function hideError() {
-    if (errorSection) errorSection.style.display = 'none';
-  }
-
-  // Utility functions
-  function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
+}
+
+// Initialize module using the standard init function pattern
+window.init_claim_rewards = function(containerId, config = {}) {
+  return new ClaimRewardsModule(containerId, config);
 };
