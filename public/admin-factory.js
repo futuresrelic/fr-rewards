@@ -877,6 +877,12 @@ async function fulfillFailedCraft(craftId) {
   const fulfillBtn = document.getElementById(`fulfill-btn-${craftId}`);
   const refundBtn = document.getElementById(`refund-btn-${craftId}`);
 
+  // Check auth token exists
+  if (!authToken) {
+    statusEl.innerHTML = '<span style="color: #f87171;">❌ Not authenticated. Please refresh and login again.</span>';
+    return;
+  }
+
   if (!confirm('Attempt to fulfill this failed craft by transferring assets from pool.fr to the user?')) {
     return;
   }
@@ -887,7 +893,7 @@ async function fulfillFailedCraft(craftId) {
     refundBtn.disabled = true;
     statusEl.innerHTML = '<span style="color: #60a5fa;">🔄 Fulfilling craft...</span>';
 
-    const response = await fetch('/api/admin/factory/fulfill-failed', {
+    const response = await fetch(`${API_URL}/api/admin/factory/fulfill-failed`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,

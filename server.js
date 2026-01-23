@@ -5299,6 +5299,52 @@ app.post('/api/factory/craft', async (req, res) => {
       if (!recipe.pool_wallet || !recipe.pool_ingredients) {
         return res.status(400).json({ error: 'Recipe pool configuration incomplete', success: false });
       }
+
+      // SERVER-SIDE PREFLIGHT: Check pool inventory BEFORE processing craft
+      console.log('🔍 SERVER PREFLIGHT: Checking pool inventory before processing swap...');
+      const poolWallet = recipe.pool_wallet;
+      const resultTemplateIds = recipe.results.map(r => parseInt(r.template_id));
+
+      try {
+        const poolAssets = await wax.getUserAssetsLive(poolWallet, 'futuresrelic', resultTemplateIds);
+        console.log(`   Found ${poolAssets.length} asset(s) in pool`);
+
+        // Check if pool has sufficient inventory for each result
+        for (const result of recipe.results) {
+          const templateId = parseInt(result.template_id);
+          const neededCount = result.amount * batch_count;
+
+          const availableAssets = poolAssets.filter(a =>
+            parseInt(a.template.template_id) === templateId
+          );
+
+          if (availableAssets.length < neededCount) {
+            const templateName = availableAssets.length > 0
+              ? availableAssets[0].template.immutable_data.name || `Template #${templateId}`
+              : `Template #${templateId}`;
+
+            console.log(`   ❌ POOL EMPTY: ${templateName} - need ${neededCount}, have ${availableAssets.length}`);
+            return res.status(400).json({
+              error: `Pool inventory insufficient. ${templateName}: need ${neededCount}, have ${availableAssets.length}. Use MINT mode instead.`,
+              success: false,
+              pool_empty: true,
+              missing_inventory: {
+                template_id: templateId,
+                template_name: templateName,
+                needed: neededCount,
+                available: availableAssets.length
+              }
+            });
+          }
+        }
+        console.log('   ✅ Pool has all required inventory');
+      } catch (poolCheckError) {
+        console.error('   ❌ Pool check failed:', poolCheckError);
+        return res.status(500).json({
+          error: 'Failed to check pool inventory: ' + poolCheckError.message,
+          success: false
+        });
+      }
     }
 
     // 3. Validate batch count
