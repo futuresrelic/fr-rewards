@@ -615,9 +615,46 @@ function showAssetSelectionModal(groupedAssets) {
 // Execute craft
 async function executeCraft() {
   closeModal();
-  showProcessingModal('Step 1: Transfer Assets', 'Please sign the transaction in your wallet...');
+
+  const craftMode = window.currentCraftMode || 'mint';
 
   try {
+    // PREFLIGHT CHECK: For swap mode, verify pool still has inventory
+    if (craftMode === 'swap') {
+      showProcessingModal('Preflight Check', 'Verifying pool inventory...<br><small style="color: var(--text-secondary);">Ensuring assets are available</small>');
+
+      const poolCheckResponse = await fetch(`${API_URL}/api/factory/pool-inventory/${currentRecipe.id}?batch_count=${currentBatchCount}`);
+      const poolCheckData = await poolCheckResponse.json();
+
+      if (!poolCheckResponse.ok) {
+        hideProcessingModal();
+        alert(`Pool check failed: ${poolCheckData.error || 'Unknown error'}\n\nPlease try using MINT mode instead.`);
+        return;
+      }
+
+      if (!poolCheckData.swap_available) {
+        hideProcessingModal();
+        let errorMsg = '⚠️ Pool inventory is now empty!\n\n';
+
+        if (poolCheckData.availability && poolCheckData.availability.length > 0) {
+          errorMsg += 'Missing inventory:\n';
+          poolCheckData.availability.forEach(item => {
+            if (!item.has_enough) {
+              errorMsg += `• ${item.template_name}: need ${item.required}, have ${item.available}\n`;
+            }
+          });
+        }
+
+        errorMsg += '\n✅ Use the MINT button instead to create new assets.';
+        alert(errorMsg);
+        return;
+      }
+
+      console.log('✅ Preflight check passed - pool has required inventory');
+    }
+
+    showProcessingModal('Step 1: Transfer Assets', 'Please sign the transaction in your wallet...');
+
     // Prepare transfer transaction
     const transferWallet = currentRecipe.transfer_to_wallet || 'futuresrelic';
     const actions = [{
@@ -649,7 +686,6 @@ async function executeCraft() {
     await new Promise(resolve => setTimeout(resolve, 3000)); // Wait for blockchain confirmation
 
     // Call backend to verify + mint/swap
-    const craftMode = window.currentCraftMode || 'mint';
     const modeLabel = craftMode === 'swap' ? 'Swapping from Pool' : 'Minting Results';
     const modeDesc = craftMode === 'swap' ? 'Transferring assets from pool...' : 'Creating your new assets...';
     showProcessingModal(`Step 3: ${modeLabel}`, `${modeDesc}<br><small style="color: var(--text-secondary);">Using ${transferWallet} wallet</small>`);
