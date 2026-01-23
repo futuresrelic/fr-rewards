@@ -285,6 +285,11 @@ class UnifiedModuleBase {
   setState(state) {
     this.currentState = state;
 
+    // Check if elements are initialized (may not be if init failed early)
+    if (!this.elements || !this.elements.states) {
+      return;
+    }
+
     // Hide all states
     Object.values(this.elements.states).forEach(el => {
       if (el) el.classList.remove('active');
@@ -310,6 +315,24 @@ class UnifiedModuleBase {
    * Show error state
    */
   showError(message) {
+    // If elements aren't initialized yet, show error in container directly
+    if (!this.elements || !this.elements.errorMessage) {
+      if (this.container) {
+        this.container.innerHTML = `
+          <div class="unified-module">
+            <div class="unified-module-inner">
+              <div class="module-state module-state-error active">
+                <div class="module-error-icon">⚠️</div>
+                <div class="module-error-message">${message}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      console.error('Module error:', message);
+      return;
+    }
+
     if (this.elements.errorMessage) {
       this.elements.errorMessage.textContent = message;
     }

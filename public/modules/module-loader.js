@@ -26,18 +26,35 @@ class ModuleLoader {
     cssLink.href = '/modules/unified-module.css';
     document.head.appendChild(cssLink);
 
+    // Load wallet manager first (required dependency)
+    await this.loadScript('/modules/wallet-manager.js', 'WalletManager');
+
     // Load unified base JS
+    await this.loadScript('/modules/unified-module-base.js', 'UnifiedModuleBase');
+
+    this.unifiedSystemLoaded = true;
+    console.log('✅ Unified module system loaded');
+  }
+
+  /**
+   * Load a script file
+   */
+  static async loadScript(src, globalName) {
+    // Check if already loaded
+    if (globalName && window[globalName]) {
+      return;
+    }
+
     return new Promise((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = '/modules/unified-module-base.js';
+      script.src = src;
       script.onload = () => {
-        this.unifiedSystemLoaded = true;
-        console.log('✅ Unified module system loaded');
+        console.log(`✅ Loaded ${src}`);
         resolve();
       };
       script.onerror = () => {
-        console.error('❌ Failed to load unified module system');
-        reject(new Error('Failed to load unified-module-base.js'));
+        console.error(`❌ Failed to load ${src}`);
+        reject(new Error(`Failed to load ${src}`));
       };
       document.head.appendChild(script);
     });
