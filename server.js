@@ -148,6 +148,7 @@ app.get('/api/user/holdings/:account', async (req, res) => {
 app.get('/api/user/eligibility/:account', async (req, res) => {
   try {
     const { account } = req.params;
+    const { templates } = req.query; // Optional: filter to specific template IDs
 
     // Validate WAX account name format
     if (!validators.isValidWaxAccount(account)) {
@@ -155,7 +156,16 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
     }
 
     const config = db.config.get();
-    const enabledTemplates = db.templates.getEnabled();
+    let enabledTemplates = db.templates.getEnabled();
+
+    // Filter to specific templates if provided in query
+    if (templates) {
+      const requestedTemplates = templates.split(',').map(t => parseInt(t.trim())).filter(t => !isNaN(t));
+      if (requestedTemplates.length > 0) {
+        enabledTemplates = enabledTemplates.filter(t => requestedTemplates.includes(t.template_id));
+      }
+    }
+
     const whitelistTemplates = enabledTemplates.map(t => t.template_id);
 
     // Check if templates are configured

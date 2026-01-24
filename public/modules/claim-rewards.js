@@ -32,9 +32,20 @@ class ClaimRewardsModule extends UnifiedModuleBase {
       // Clear any existing countdowns
       this.clearCountdowns();
 
+      // Build eligibility URL with optional template filtering
+      let eligibilityUrl = `${this.API_URL}/api/user/eligibility/${this.currentAccount}`;
+
+      // If verification_templates is configured, only check those templates
+      if (this.config.verification_templates) {
+        const templates = this.config.verification_templates.toString().trim();
+        if (templates) {
+          eligibilityUrl += `?templates=${encodeURIComponent(templates)}`;
+        }
+      }
+
       // Load all data in parallel
       const [eligibilityData, cooldownData, claimsData] = await Promise.all([
-        fetch(`${this.API_URL}/api/user/eligibility/${this.currentAccount}`).then(r => r.json()),
+        fetch(eligibilityUrl).then(r => r.json()),
         fetch(`${this.API_URL}/api/user/cooldowns/${this.currentAccount}`).then(r => r.json()),
         fetch(`${this.API_URL}/api/user/claims/${this.currentAccount}`).then(r => r.json())
       ]);
