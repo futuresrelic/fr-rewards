@@ -76,7 +76,7 @@ class UnifiedModuleBase {
       // Auto-connect if configured
       if (this.config.auto_connect) {
         const walletState = window.WalletManager.getState();
-        if (walletState.connected) {
+        if (walletState.isConnected) {
           this.currentAccount = walletState.account;
           this.currentWalletType = walletState.walletType;
           await this.handleWalletConnected();
@@ -207,11 +207,11 @@ class UnifiedModuleBase {
    * Subscribe to wallet manager events
    */
   subscribeToWallet() {
-    window.WalletManager.subscribe(async (account, walletType) => {
-      this.currentAccount = account;
-      this.currentWalletType = walletType;
+    window.WalletManager.subscribe(async (event, state) => {
+      this.currentAccount = state.account;
+      this.currentWalletType = state.walletType;
 
-      if (account) {
+      if (state.isConnected) {
         await this.handleWalletConnected();
       } else {
         this.handleWalletDisconnected();
