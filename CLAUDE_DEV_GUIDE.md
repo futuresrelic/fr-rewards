@@ -744,6 +744,10 @@ Config stored in database, fetched via API at runtime.
 1. `c9e3d12` - Phase 1: Add database-backed module system (Option A)
 2. `e9f8689` - Phase 2: Enhance Claim Rewards and Factory Craft config UI
 3. `ba6ef99` - Fix: Use data-module-id in generated HTML when available
+4. `107535c` - Update CLAUDE_DEV_GUIDE.md with complete Option A changelog
+5. `8a87132` - Add module_instances migration to auto-migration system
+6. `53bde25` - Fix: Module instances migration handles existing incomplete tables
+7. `4220fba` - Fix: Claim Rewards module uses config instead of all database templates
 
 **Benefits Achieved:**
 - ✅ Better security (no client-side config manipulation)
@@ -768,8 +772,16 @@ Config stored in database, fetched via API at runtime.
 - Generated HTML uses data-module-id
 - Full backward compatibility with data-config
 
+**Important Fixes Made:**
+- ✅ Fixed Claim Rewards to use verification_templates config
+  - Was checking ALL database templates (hardcoded behavior)
+  - Now checks only templates specified in module config
+  - Templates checked individually (not requiring ALL)
+  - API accepts `?templates=` query parameter for filtering
+  - Backward compatible with existing pages
+
 **Next Steps for Future Claudes:**
-- Run database migration: `node scripts/migrate-module-instances.js`
+- ✅ Migration runs automatically on Railway deployment
 - Test creating new pages with enhanced configs
 - Test editing existing pages (backward compat)
 - Consider adding server-side validation for specific module types
