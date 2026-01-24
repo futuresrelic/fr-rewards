@@ -969,12 +969,19 @@ function exportCode() {
     }
 
     // For all other modules, use data-module attributes
-    const configJson = JSON.stringify(module.config).replace(/"/g, '&quot;');
     html += `<!-- ${moduleInfo.name} -->\n`;
     html += `<div\n`;
     html += `  id="module-${module.id}"\n`;
     html += `  data-module="${module.moduleType}"\n`;
-    html += `  data-config="${configJson}"\n`;
+
+    // Use database ID if available, otherwise inline config
+    if (module.moduleInstanceId) {
+      html += `  data-module-id="${module.moduleInstanceId}"\n`;
+    } else {
+      const configJson = JSON.stringify(module.config).replace(/"/g, '&quot;');
+      html += `  data-config="${configJson}"\n`;
+    }
+
     html += `></div>\n\n`;
   });
 
