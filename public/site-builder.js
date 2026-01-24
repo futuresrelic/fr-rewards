@@ -144,7 +144,7 @@ const AVAILABLE_MODULES = [
       title: { type: 'text', label: 'Custom Title', default: '', help: 'Override module title (optional)' },
       verification_templates: { type: 'text', label: 'Verification Template IDs', default: '', help: 'Comma-separated template IDs users must own to access (e.g., 247052,247053)' },
       payment_wallet: { type: 'text', label: 'Payment Wallet', default: 'futuresrelic', help: 'Wallet to receive WAX payments' },
-      rewards: { type: 'textarea', label: 'Rewards Configuration (JSON)', default: '[]', help: 'JSON array of rewards with template_id, template_name, template_image, price_wax, cooldown_hours, per_wallet_limit, max_supply. Example: [{"template_id":"123456","template_name":"Premium Pack","price_wax":"25.00000000","cooldown_hours":"24","per_wallet_limit":"5"}]' }
+      rewards: { type: 'custom-rewards-builder', label: 'Rewards', default: '[]', help: 'Configure rewards available for purchase' }
     }
   }
 ];
@@ -455,6 +455,14 @@ function renderConfigPanel() {
         </label>
         ${field.help ? `<div class="config-help">${field.help}</div>` : ''}
       `;
+    } else if (field.type === 'custom-rewards-builder') {
+      // Custom rewards builder for gated-paid-claim
+      section.innerHTML = `
+        <label class="config-label">${field.label}:</label>
+        <div id="rewards-builder-container"></div>
+        <button type="button" class="btn btn-success" id="add-reward-btn" style="margin-top: 10px; width: 100%;">+ Add Reward</button>
+        ${field.help ? `<div class="config-help">${field.help}</div>` : ''}
+      `;
     } else if (field.type === 'textarea') {
       section.innerHTML = `
         <label class="config-label">${field.label}:</label>
@@ -501,6 +509,11 @@ function renderConfigPanel() {
     if (fetchBtn) {
       fetchBtn.addEventListener('click', () => fetchTemplateData(module));
     }
+  }
+
+  // Setup rewards builder for gated-paid-claim module
+  if (module.moduleType === 'gated-paid-claim') {
+    setupRewardsBuilder(module);
   }
 
   // Add apply button
@@ -610,6 +623,226 @@ async function fetchTemplateData(module) {
 }
 
 // Apply configuration changes
+// Setup rewards builder for gated-paid-claim module
+function setupRewardsBuilder(module) {
+  const container = document.getElementById('rewards-builder-container');
+  const addBtn = document.getElementById('add-reward-btn');
+
+  // Parse existing rewards
+  let rewards = [];
+  try {
+    if (typeof module.config.rewards === 'string') {
+      rewards = JSON.parse(module.config.rewards || '[]');
+    } else if (Array.isArray(module.config.rewards)) {
+      rewards = module.config.rewards;
+    }
+  } catch (e) {
+    rewards = [];
+  }
+
+  // Render existing rewards
+  function renderRewards() {
+    container.innerHTML = '';
+
+    if (rewards.length === 0) {
+      container.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary); background: var(--bg-dark); border-radius: 8px; border: 1px dashed var(--border);">No rewards configured yet. Click "Add Reward" to get started.</div>';
+      return;
+    }
+
+    rewards.forEach((reward, index) => {
+      const rewardCard = document.createElement('div');
+      rewardCard.className = 'reward-builder-card';
+      rewardCard.style.cssText = 'background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 15px;';
+
+      rewardCard.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h4 style="margin: 0; color: var(--text-primary);">Reward #${index + 1}</h4>
+          <button type="button" class="btn btn-sm btn-danger remove-reward-btn" data-index="${index}">🗑️ Remove</button>
+        </div>
+
+        <div style="display: grid; gap: 12px;">
+          <div>
+            <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: var(--text-secondary);">Template ID:</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" class="config-input reward-field" data-index="${index}" data-field="template_id" value="${reward.template_id || ''}" placeholder="e.g., 123456" style="flex: 1;">
+              <button type="button" class="btn btn-secondary btn-sm fetch-reward-data-btn" data-index="${index}" style="white-space: nowrap;">📥 Fetch</button>
+            </div>
+          </div>
+
+          <div>
+            <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: var(--text-secondary);">Template Name:</label>
+            <input type="text" class="config-input reward-field" data-index="${index}" data-field="template_name" value="${reward.template_name || ''}" placeholder="e.g., Premium Pack">
+          </div>
+
+          <div>
+            <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: var(--text-secondary);">Template Image URL:</label>
+            <input type="text" class="config-input reward-field" data-index="${index}" data-field="template_image" value="${reward.template_image || ''}" placeholder="https://ipfs.io/ipfs/...">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: var(--text-secondary);">Price (WAX):</label>
+              <input type="text" class="config-input reward-field" data-index="${index}" data-field="price_wax" value="${reward.price_wax || '10.00000000'}" placeholder="10.00000000">
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: var(--text-secondary);">Cooldown (hours):</label>
+              <input type="text" class="config-input reward-field" data-index="${index}" data-field="cooldown_hours" value="${reward.cooldown_hours || ''}" placeholder="24 (optional)">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: var(--text-secondary);">Per Wallet Limit:</label>
+              <input type="text" class="config-input reward-field" data-index="${index}" data-field="per_wallet_limit" value="${reward.per_wallet_limit || ''}" placeholder="5 (optional)">
+            </div>
+            <div>
+              <label style="display: block; margin-bottom: 4px; font-size: 0.9rem; color: var(--text-secondary);">Max Supply:</label>
+              <input type="text" class="config-input reward-field" data-index="${index}" data-field="max_supply" value="${reward.max_supply || ''}" placeholder="1000 (optional)">
+            </div>
+          </div>
+        </div>
+      `;
+
+      container.appendChild(rewardCard);
+    });
+
+    // Add event listeners for remove buttons
+    container.querySelectorAll('.remove-reward-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt(e.target.dataset.index);
+        rewards.splice(index, 1);
+        renderRewards();
+      });
+    });
+
+    // Add event listeners for fetch buttons
+    container.querySelectorAll('.fetch-reward-data-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt(e.target.dataset.index);
+        fetchRewardTemplateData(index, module);
+      });
+    });
+
+    // Add event listeners for input fields to update rewards array
+    container.querySelectorAll('.reward-field').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const index = parseInt(e.target.dataset.index);
+        const field = e.target.dataset.field;
+        rewards[index][field] = e.target.value;
+      });
+    });
+  }
+
+  // Add reward button
+  addBtn.addEventListener('click', () => {
+    rewards.push({
+      template_id: '',
+      template_name: '',
+      template_image: '',
+      price_wax: '10.00000000',
+      cooldown_hours: '',
+      per_wallet_limit: '',
+      max_supply: ''
+    });
+    renderRewards();
+  });
+
+  // Initial render
+  renderRewards();
+
+  // Store rewards getter function for applyConfig to use
+  module._getRewards = () => rewards;
+}
+
+// Fetch template data for a specific reward in rewards builder
+async function fetchRewardTemplateData(index, module) {
+  const container = document.getElementById('rewards-builder-container');
+  const fetchBtn = container.querySelector(`.fetch-reward-data-btn[data-index="${index}"]`);
+  const templateIdInput = container.querySelector(`.reward-field[data-index="${index}"][data-field="template_id"]`);
+  const templateNameInput = container.querySelector(`.reward-field[data-index="${index}"][data-field="template_name"]`);
+  const templateImageInput = container.querySelector(`.reward-field[data-index="${index}"][data-field="template_image"]`);
+
+  const templateId = templateIdInput.value.trim();
+  const collectionName = module.config.collection || 'futuresrelic';
+
+  if (!templateId) {
+    alert('Please enter a Template ID first');
+    return;
+  }
+
+  // Show loading state
+  const originalBtnText = fetchBtn.textContent;
+  fetchBtn.disabled = true;
+  fetchBtn.textContent = '⏳';
+
+  try {
+    // AtomicAssets API endpoints to try
+    const endpoints = [
+      'https://aa-wax-public1.neftyblocks.com',
+      'https://wax.api.atomicassets.io'
+    ];
+
+    let templateData = null;
+
+    for (const endpoint of endpoints) {
+      try {
+        const url = `${endpoint}/atomicassets/v1/templates/${collectionName}/${templateId}`;
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            templateData = data.data;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch from ${endpoint}:`, err);
+        continue;
+      }
+    }
+
+    if (!templateData) {
+      throw new Error('Could not fetch template data from AtomicAssets API');
+    }
+
+    // Extract template info
+    const name = templateData.immutable_data?.name || templateData.name || `Template ${templateId}`;
+    let imageUrl = '';
+
+    // Try to get image/video from immutable_data
+    if (templateData.immutable_data) {
+      const img = templateData.immutable_data.img || templateData.immutable_data.image || templateData.immutable_data.video;
+      if (img) {
+        // Convert IPFS hash to gateway URL
+        imageUrl = img.startsWith('Qm') ? `https://ipfs.io/ipfs/${img}` : img;
+      }
+    }
+
+    // Update the input fields
+    templateNameInput.value = name;
+    templateImageInput.value = imageUrl;
+
+    // Trigger input event to update the rewards array
+    templateNameInput.dispatchEvent(new Event('input'));
+    templateImageInput.dispatchEvent(new Event('input'));
+
+    fetchBtn.textContent = '✅';
+    setTimeout(() => {
+      fetchBtn.textContent = originalBtnText;
+      fetchBtn.disabled = false;
+    }, 1500);
+
+  } catch (error) {
+    console.error('Error fetching template data:', error);
+    alert('Failed to fetch template data: ' + error.message);
+    fetchBtn.textContent = originalBtnText;
+    fetchBtn.disabled = false;
+  }
+}
+
 async function applyConfig() {
   if (selectedModuleIndex === null) return;
 
@@ -624,6 +857,12 @@ async function applyConfig() {
       module.config[key] = input.value;
     }
   });
+
+  // Special handling for gated-paid-claim rewards
+  if (module.moduleType === 'gated-paid-claim' && module._getRewards) {
+    const rewards = module._getRewards();
+    module.config.rewards = JSON.stringify(rewards);
+  }
 
   // Update database instance if this module has one
   if (module.moduleInstanceId) {
