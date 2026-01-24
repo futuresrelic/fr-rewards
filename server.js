@@ -2970,6 +2970,222 @@ app.get('/api/config/navigation', async (req, res) => {
   }
 });
 
+// ==================== MODULE INSTANCE ENDPOINTS ====================
+
+/**
+ * Helper function to generate unique module instance ID
+ */
+function generateModuleId(moduleType) {
+  const typeMap = {
+    'claim-rewards': 'claim',
+    'paid-claim': 'paid',
+    'factory-craft': 'craft',
+    'unpack': 'unpack',
+    'blend-array': 'blend',
+    'nefty-drop': 'drop',
+    'transfer-mode': 'transfer',
+    'text-block': 'text',
+    'image-block': 'image'
+  };
+
+  const shortType = typeMap[moduleType] || 'mod';
+  const random = Math.random().toString(36).substring(2, 10);
+  return `mod_${shortType}_${random}`;
+}
+
+/**
+ * POST /api/modules/create
+ * Create a new module instance (Admin only)
+ */
+app.post('/api/modules/create', authenticateAdmin, async (req, res) => {
+  try {
+    const { module_type, config, page_path } = req.body;
+
+    // Validation
+    if (!module_type) {
+      return res.status(400).json({ error: 'module_type is required' });
+    }
+
+    if (!config || typeof config !== 'object') {
+      return res.status(400).json({ error: 'config must be a valid object' });
+    }
+
+    // Generate unique ID
+    let moduleId = generateModuleId(module_type);
+
+    // Ensure uniqueness (retry if collision)
+    let attempts = 0;
+    while (db.moduleInstances.exists(moduleId) && attempts < 10) {
+      moduleId = generateModuleId(module_type);
+      attempts++;
+    }
+
+    if (attempts >= 10) {
+      return res.status(500).json({ error: 'Failed to generate unique module ID' });
+    }
+
+    // Get admin account from token
+    const adminAccount = req.adminAccount || 'admin';
+
+    // Create module instance
+    const result = db.moduleInstances.create({
+      id: moduleId,
+      module_type: module_type,
+      config: config,
+      page_path: page_path || null,
+      created_by: adminAccount
+    });
+
+    console.log(`✅ Module instance created: ${moduleId} (${module_type})`);
+
+    res.json({
+      success: true,
+      module_id: moduleId,
+      created_at: Date.now()
+    });
+
+  } catch (error) {
+    console.error('Error creating module instance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/modules/:id
+ * Get a module instance by ID (Public endpoint)
+ */
+app.get('/api/modules/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const module = db.moduleInstances.getById(id);
+
+    if (!module) {
+      return res.status(404).json({ error: 'Module instance not found' });
+    }
+
+    res.json({
+      success: true,
+      module: module
+    });
+
+  } catch (error) {
+    console.error('Error fetching module instance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/modules/list
+ * List module instances with optional filtering (Public endpoint)
+ */
+app.get('/api/modules/list', async (req, res) => {
+  try {
+    const { type, page, limit = 50, offset = 0 } = req.query;
+
+    let modules;
+
+    if (type) {
+      modules = db.moduleInstances.getByType(type);
+    } else if (page) {
+      modules = db.moduleInstances.getByPage(page);
+    } else {
+      modules = db.moduleInstances.getAll();
+    }
+
+    // Apply pagination
+    const total = modules.length;
+    const paginatedModules = modules.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
+
+    res.json({
+      success: true,
+      modules: paginatedModules,
+      total: total,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+  } catch (error) {
+    console.error('Error listing module instances:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/modules/:id
+ * Update a module instance (Admin only)
+ */
+app.put('/api/modules/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { config, page_path } = req.body;
+
+    // Check if module exists
+    if (!db.moduleInstances.exists(id)) {
+      return res.status(404).json({ error: 'Module instance not found' });
+    }
+
+    // Prepare update data
+    const updateData = {};
+
+    if (config !== undefined) {
+      if (typeof config !== 'object') {
+        return res.status(400).json({ error: 'config must be a valid object' });
+      }
+      updateData.config = config;
+    }
+
+    if (page_path !== undefined) {
+      updateData.page_path = page_path;
+    }
+
+    // Update module instance
+    const result = db.moduleInstances.update(id, updateData);
+
+    console.log(`✅ Module instance updated: ${id}`);
+
+    res.json({
+      success: true,
+      updated_at: Date.now(),
+      changes: result.changes
+    });
+
+  } catch (error) {
+    console.error('Error updating module instance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/modules/:id
+ * Delete a module instance (Admin only)
+ */
+app.delete('/api/modules/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if module exists
+    if (!db.moduleInstances.exists(id)) {
+      return res.status(404).json({ error: 'Module instance not found' });
+    }
+
+    // Delete module instance
+    const result = db.moduleInstances.delete(id);
+
+    console.log(`✅ Module instance deleted: ${id}`);
+
+    res.json({
+      success: true,
+      deleted_id: id,
+      changes: result.changes
+    });
+
+  } catch (error) {
+    console.error('Error deleting module instance:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /**
  * GET /api/user/assets-rpc/:account/:template_id
  * Query atomicassets contract DIRECTLY via blockchain RPC (no API cache!)
