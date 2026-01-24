@@ -173,24 +173,66 @@ try {
   // 4. Add module_instances table (Option A - Database-backed modules)
   console.log('Step 4: Adding module instances system...');
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS module_instances (
-      id TEXT PRIMARY KEY,
-      module_type TEXT NOT NULL,
-      config TEXT NOT NULL,
-      page_path TEXT,
-      created_by TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-  `);
+  // Check if table exists
+  const tableExists = db.prepare(`
+    SELECT name FROM sqlite_master
+    WHERE type='table' AND name='module_instances'
+  `).get();
 
+  if (tableExists) {
+    // Table exists, check if it has all required columns
+    const columns = db.prepare(`PRAGMA table_info(module_instances)`).all();
+    const columnNames = columns.map(col => col.name);
+
+    const requiredColumns = ['id', 'module_type', 'config', 'page_path', 'created_by', 'created_at', 'updated_at'];
+    const missingColumns = requiredColumns.filter(col => !columnNames.includes(col));
+
+    if (missingColumns.length > 0) {
+      console.log(`   ⚠️  Table exists but missing columns: ${missingColumns.join(', ')}`);
+      console.log('   🔄 Recreating table with proper schema...');
+
+      // Drop and recreate (safe since no production data yet)
+      db.exec(`DROP TABLE IF EXISTS module_instances`);
+
+      db.exec(`
+        CREATE TABLE module_instances (
+          id TEXT PRIMARY KEY,
+          module_type TEXT NOT NULL,
+          config TEXT NOT NULL,
+          page_path TEXT,
+          created_by TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      `);
+
+      console.log('   ✅ Table recreated with all columns');
+    } else {
+      console.log('   ✅ Table already exists with correct schema');
+    }
+  } else {
+    // Create table from scratch
+    db.exec(`
+      CREATE TABLE module_instances (
+        id TEXT PRIMARY KEY,
+        module_type TEXT NOT NULL,
+        config TEXT NOT NULL,
+        page_path TEXT,
+        created_by TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+    console.log('   ✅ Table created');
+  }
+
+  // Create indexes (idempotent)
   db.exec(`CREATE INDEX IF NOT EXISTS idx_module_instances_type ON module_instances(module_type);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_module_instances_page ON module_instances(page_path);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_module_instances_created ON module_instances(created_at DESC);`);
 
   const moduleInstanceCount = db.prepare('SELECT COUNT(*) as count FROM module_instances').get();
-  console.log(`✅ Module instances table ready (${moduleInstanceCount.count} instances)\n`);
+  console.log(`✅ Module instances system ready (${moduleInstanceCount.count} instances)\n`);
 
   console.log('🎉 All migrations completed successfully!\n');
 
