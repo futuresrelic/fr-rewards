@@ -377,12 +377,22 @@ class UnifiedModuleBase {
   createItemCard(item) {
     const card = document.createElement('div');
     card.className = 'module-item-card';
+
+    // Determine media element (video or image)
+    let mediaHtml = '';
+    if (item.image) {
+      if (item.isVideo) {
+        mediaHtml = `<video src="${item.image}" class="module-item-image" autoplay loop muted playsinline onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=&quot;display:flex;align-items:center;justify-content:center;height:180px;font-size:3rem;&quot;>📦</div>';"></video>`;
+      } else {
+        mediaHtml = `<img src="${item.image}" alt="${item.title}" class="module-item-image" onerror="this.src='/api/placeholder/180/180'">`;
+      }
+    } else {
+      mediaHtml = `<img src="/api/placeholder/180/180" alt="${item.title}" class="module-item-image" onerror="this.src='/api/placeholder/180/180'">`;
+    }
+
     card.innerHTML = `
       <div class="module-item-image-container">
-        <img src="${item.image || '/api/placeholder/180/180'}"
-             alt="${item.title}"
-             class="module-item-image"
-             onerror="this.src='/api/placeholder/180/180'">
+        ${mediaHtml}
       </div>
       <div class="module-item-details">
         <div class="module-item-header">

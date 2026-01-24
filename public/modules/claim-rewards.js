@@ -149,6 +149,7 @@ class ClaimRewardsModule extends UnifiedModuleBase {
     const card = this.createItemCard({
       title: asset.name || `Template #${templateId}`,
       image: asset.image_url,
+      isVideo: asset.is_video || false,
       badge: badge,
       badgeType: badgeType,
       description: `Template ID: ${templateId}`,
