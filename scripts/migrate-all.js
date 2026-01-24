@@ -170,6 +170,28 @@ try {
 
   console.log('✅ Story tabs system added\n');
 
+  // 4. Add module_instances table (Option A - Database-backed modules)
+  console.log('Step 4: Adding module instances system...');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS module_instances (
+      id TEXT PRIMARY KEY,
+      module_type TEXT NOT NULL,
+      config TEXT NOT NULL,
+      page_path TEXT,
+      created_by TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_module_instances_type ON module_instances(module_type);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_module_instances_page ON module_instances(page_path);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_module_instances_created ON module_instances(created_at DESC);`);
+
+  const moduleInstanceCount = db.prepare('SELECT COUNT(*) as count FROM module_instances').get();
+  console.log(`✅ Module instances table ready (${moduleInstanceCount.count} instances)\n`);
+
   console.log('🎉 All migrations completed successfully!\n');
 
   // Display summary
