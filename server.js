@@ -80,13 +80,13 @@ app.use('/uploads', express.static(uploadsDir));
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // limit each IP to 500 requests per windowMs (increased for testing)
+  max: 2000, // Increased limit for development/testing
   validate: { trustProxy: false } // Disable trust proxy validation warning
 });
 
 const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50, // stricter limit for claim endpoints (increased for testing)
+  max: 200, // Increased stricter limit for claim endpoints
   validate: { trustProxy: false } // Disable trust proxy validation warning
 });
 
