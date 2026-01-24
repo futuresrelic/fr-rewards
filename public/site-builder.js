@@ -37,7 +37,15 @@ const AVAILABLE_MODULES = [
     config: {
       collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
       auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true, help: 'Automatically connect wallet on load' },
-      title: { type: 'text', label: 'Custom Title', default: '', help: 'Override module title (optional)' }
+      title: { type: 'text', label: 'Custom Title', default: '', help: 'Override module title (optional)' },
+      verification_templates: { type: 'text', label: 'Verification Template IDs', default: '', help: 'Comma-separated template IDs users must own (e.g., 247050,247051,247052)' },
+      reward_template_id: { type: 'text', label: 'Reward Template ID', default: '', help: 'Template ID to mint as reward' },
+      reward_name: { type: 'text', label: 'Reward Name', default: '', help: 'Display name for the reward' },
+      reward_quantity: { type: 'text', label: 'Reward Quantity', default: '1', help: 'Number of NFTs to mint per claim' },
+      cooldown_hours: { type: 'text', label: 'Cooldown (hours)', default: '24', help: 'Hours before user can claim again' },
+      max_claims: { type: 'text', label: 'Max Claims', default: '', help: 'Maximum total claims allowed (optional)' },
+      show_only_reward_id: { type: 'text', label: 'Show Only Reward ID', default: '', help: 'Show only specific reward by ID (optional)' },
+      highlight_reward_id: { type: 'text', label: 'Highlight Reward ID', default: '', help: 'Highlight specific reward with border (optional)' }
     }
   },
   {
@@ -47,9 +55,19 @@ const AVAILABLE_MODULES = [
     description: 'Craft new NFTs using existing NFTs as ingredients',
     config: {
       collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true, help: 'Automatically restore session and load recipes' },
+      title: { type: 'text', label: 'Custom Title', default: '', help: 'Override module title (optional)' },
       show_category: { type: 'text', label: 'Filter by Category', default: '', help: 'Show only recipes from this category (optional)' },
       show_recipe_id: { type: 'text', label: 'Show Specific Recipe ID', default: '', help: 'Show only this recipe by ID (optional)' },
-      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true, help: 'Automatically restore session and load recipes' }
+      recipe_name: { type: 'text', label: 'Recipe Name', default: '', help: 'Display name for the craft recipe' },
+      category: { type: 'text', label: 'Category', default: '', help: 'Recipe category (e.g., Weapons, Armor, Tools)' },
+      ingredient_templates: { type: 'text', label: 'Ingredient Template IDs', default: '', help: 'Comma-separated template IDs and quantities (e.g., 219904:4,246504:1)' },
+      result_templates: { type: 'text', label: 'Result Template IDs', default: '', help: 'Comma-separated template IDs and quantities (e.g., 391378:1)' },
+      max_batch_size: { type: 'text', label: 'Max Batch Size', default: '5', help: 'Maximum number of crafts in one transaction' },
+      craft_cooldown: { type: 'text', label: 'Craft Cooldown (hours)', default: '0', help: 'Hours before user can craft again' },
+      enable_pool_mode: { type: 'checkbox', label: 'Enable Pool/Swap Mode', default: false, help: 'Allow swapping from pool wallet (pre-minted results)' },
+      pool_discount: { type: 'text', label: 'Pool Ingredient Discount', default: '1', help: 'Reduce ingredients needed for pool mode (e.g., 3 instead of 4)' },
+      pool_wallet: { type: 'text', label: 'Pool Wallet', default: 'pool.fr', help: 'Wallet holding pre-minted results for swap mode' }
     }
   },
   {
