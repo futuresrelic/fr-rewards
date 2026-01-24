@@ -156,17 +156,27 @@ app.get('/api/user/eligibility/:account', async (req, res) => {
     }
 
     const config = db.config.get();
-    let enabledTemplates = db.templates.getEnabled();
+    let whitelistTemplates = [];
+    let enabledTemplates = [];
 
-    // Filter to specific templates if provided in query
+    // If specific templates requested via query param, use those directly (for gated claims)
+    // Otherwise use database-enabled templates (for regular claims)
     if (templates) {
       const requestedTemplates = templates.split(',').map(t => parseInt(t.trim())).filter(t => !isNaN(t));
       if (requestedTemplates.length > 0) {
-        enabledTemplates = enabledTemplates.filter(t => requestedTemplates.includes(t.template_id));
+        // Use requested templates directly - don't require them to be in database
+        whitelistTemplates = requestedTemplates;
+        console.log(`🔐 GATED MODE: Checking specific templates ${whitelistTemplates.join(', ')} (bypassing database)`);
+      } else {
+        // Empty or invalid templates param, fall back to database
+        enabledTemplates = db.templates.getEnabled();
+        whitelistTemplates = enabledTemplates.map(t => t.template_id);
       }
+    } else {
+      // No templates param, use database-enabled templates
+      enabledTemplates = db.templates.getEnabled();
+      whitelistTemplates = enabledTemplates.map(t => t.template_id);
     }
-
-    const whitelistTemplates = enabledTemplates.map(t => t.template_id);
 
     // Check if templates are configured
     if (whitelistTemplates.length === 0) {
