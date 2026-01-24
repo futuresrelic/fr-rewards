@@ -620,6 +620,71 @@ subscribeToWallet() {
 
 ---
 
+### 9. **🎥 Videos Showing as Broken Images in Modules**
+
+**Problem:** Video NFTs display correctly in index.html but show as broken images in modules (phase3.html)
+
+**Root Cause:** Modules were rendering all media as `<img>` tags instead of detecting videos
+
+**Symptoms:**
+- Main claim page (index.html) shows video NFTs correctly with `<video>` tags
+- Module version (phase3.html) shows placeholder images for video NFTs
+- API returns `is_video: true` but module ignores it
+
+**How index.html Does It:**
+```javascript
+// app.js detects video and renders accordingly
+const isVideo = asset.is_video;
+if (isVideo) {
+  mediaHtml = `<video src="${url}" class="nft-image" autoplay loop muted playsinline></video>`;
+} else {
+  mediaHtml = `<img src="${url}" alt="NFT" class="nft-image">`;
+}
+```
+
+**Solution (FIXED in commit 7975644):**
+
+**UnifiedModuleBase.createItemCard():**
+```javascript
+// ❌ WRONG (old code - always image)
+card.innerHTML = `
+  <div class="module-item-image-container">
+    <img src="${item.image}" alt="${item.title}" class="module-item-image">
+  </div>
+`;
+
+// ✅ CORRECT (fixed - detects video)
+let mediaHtml = '';
+if (item.image) {
+  if (item.isVideo) {
+    mediaHtml = `<video src="${item.image}" class="module-item-image" autoplay loop muted playsinline></video>`;
+  } else {
+    mediaHtml = `<img src="${item.image}" alt="${item.title}" class="module-item-image">`;
+  }
+}
+
+card.innerHTML = `
+  <div class="module-item-image-container">
+    ${mediaHtml}
+  </div>
+`;
+```
+
+**Module Update:**
+```javascript
+// Claim Rewards module now passes isVideo flag
+const card = this.createItemCard({
+  title: asset.name,
+  image: asset.image_url,
+  isVideo: asset.is_video || false,  // Add this!
+  // ...
+});
+```
+
+**Key Lesson:** Always copy working patterns from index.html. Don't reinvent media rendering - the API already provides `is_video` flag, use it!
+
+---
+
 ## 🧪 TESTING GUIDE
 
 ### Local Testing (If Possible)
@@ -800,6 +865,9 @@ Config stored in database, fetched via API at runtime.
 7. `4220fba` - Fix: Claim Rewards module uses config instead of all database templates
 8. `8425f27` - Update CLAUDE_DEV_GUIDE.md with Claim Rewards fix details
 9. `3d20c7c` - **CRITICAL FIX:** Module receives actual wallet account instead of 'connected' string
+10. `b963655` - Update CLAUDE_DEV_GUIDE.md with critical bug fix details
+11. `7c833da` - Fix: Increase rate limits to prevent 429 errors during testing
+12. `7975644` - Fix: Modules now render videos correctly (not as images)
 
 **Benefits Achieved:**
 - ✅ Better security (no client-side config manipulation)
