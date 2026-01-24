@@ -966,8 +966,18 @@ Config stored in database, fetched via API at runtime.
 - ✅ Extensible for future features (whitelist, airdrops, etc.)
 
 **Commits Made (Gated Paid Claim):**
-- TBD: Creating gated paid claim module with API endpoints
-- TBD: Update CLAUDE_DEV_GUIDE.md with gated paid claim documentation
+- `20fe68a` - Feature: Add Gated Paid Claim module - NFT sales for verified holders
+- `fdb7459` - Improve: Replace JSON textarea with visual rewards builder UI
+
+**UX Improvement:**
+- **BEFORE:** Users had to manually write JSON in a textarea (error-prone!)
+- **AFTER:** Visual rewards builder with:
+  - "Add Reward" button to add new rewards
+  - Individual input fields for each reward property
+  - "Fetch" button to auto-populate name/image from AtomicAssets API
+  - "Remove" button to delete rewards
+  - JSON auto-generated behind the scenes
+- Much more user-friendly for non-coders!
 
 ---
 
