@@ -570,6 +570,56 @@ Edit('/home/user/fr-rewards/server.js', ...)
 
 ---
 
+### 8. **⚠️ CRITICAL: Module Using "connected" Instead of Actual Wallet Account**
+
+**Problem:** Module queries `/api/user/eligibility/connected` instead of `/api/user/eligibility/czkua.wam`
+
+**Root Cause:** UnifiedModuleBase was misinterpreting WalletManager callback signature
+
+**Symptoms:**
+- Railway logs show: `🔴 LIVE MODE: Querying blockchain directly for connected`
+- Module doesn't find eligible assets even though index.html works perfectly
+- `this.currentAccount` is set to the literal string "connected"
+
+**Why This Happened:**
+```javascript
+// WalletManager actually calls listeners with:
+callback(event, state)  // event = 'connected', state = {account: 'czkua.wam', ...}
+
+// UnifiedModuleBase expected:
+callback(account, walletType)  // Expected first param to be account!
+
+// Result:
+this.currentAccount = account;  // Sets to 'connected' (the event type!)
+```
+
+**Solution (FIXED in commit 3d20c7c):**
+```javascript
+// ❌ WRONG (old code)
+subscribeToWallet() {
+  window.WalletManager.subscribe(async (account, walletType) => {
+    this.currentAccount = account;  // Gets 'connected' string!
+    this.currentWalletType = walletType;
+    // ...
+  });
+}
+
+// ✅ CORRECT (fixed)
+subscribeToWallet() {
+  window.WalletManager.subscribe(async (event, state) => {
+    this.currentAccount = state.account;  // Gets actual wallet account
+    this.currentWalletType = state.walletType;
+    // ...
+  });
+}
+```
+
+**Also Fixed:** Auto-connect code in `init()` to use `state.isConnected` instead of `state.connected`
+
+**Key Lesson:** Always verify callback signatures! Don't assume parameter names match expectations.
+
+---
+
 ## 🧪 TESTING GUIDE
 
 ### Local Testing (If Possible)
@@ -748,6 +798,8 @@ Config stored in database, fetched via API at runtime.
 5. `8a87132` - Add module_instances migration to auto-migration system
 6. `53bde25` - Fix: Module instances migration handles existing incomplete tables
 7. `4220fba` - Fix: Claim Rewards module uses config instead of all database templates
+8. `8425f27` - Update CLAUDE_DEV_GUIDE.md with Claim Rewards fix details
+9. `3d20c7c` - **CRITICAL FIX:** Module receives actual wallet account instead of 'connected' string
 
 **Benefits Achieved:**
 - ✅ Better security (no client-side config manipulation)
