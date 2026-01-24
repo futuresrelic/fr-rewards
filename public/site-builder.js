@@ -132,6 +132,20 @@ const AVAILABLE_MODULES = [
       auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false, help: 'Automatically connect wallet on load' },
       show_purchase_history: { type: 'checkbox', label: 'Show Purchase History', default: true, help: 'Display user\'s purchase history' }
     }
+  },
+  {
+    id: 'gated-paid-claim',
+    name: 'Gated Paid Claim',
+    icon: '🔐',
+    description: 'Sell NFTs to users who hold specific verification templates',
+    config: {
+      collection: { type: 'text', label: 'Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: true, help: 'Automatically connect wallet on load' },
+      title: { type: 'text', label: 'Custom Title', default: '', help: 'Override module title (optional)' },
+      verification_templates: { type: 'text', label: 'Verification Template IDs', default: '', help: 'Comma-separated template IDs users must own to access (e.g., 247052,247053)' },
+      payment_wallet: { type: 'text', label: 'Payment Wallet', default: 'futuresrelic', help: 'Wallet to receive WAX payments' },
+      rewards: { type: 'textarea', label: 'Rewards Configuration (JSON)', default: '[]', help: 'JSON array of rewards with template_id, template_name, template_image, price_wax, cooldown_hours, per_wallet_limit, max_supply. Example: [{"template_id":"123456","template_name":"Premium Pack","price_wax":"25.00000000","cooldown_hours":"24","per_wallet_limit":"5"}]' }
+    }
   }
 ];
 

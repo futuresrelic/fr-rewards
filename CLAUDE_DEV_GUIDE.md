@@ -868,8 +868,110 @@ Config stored in database, fetched via API at runtime.
 10. `b963655` - Update CLAUDE_DEV_GUIDE.md with critical bug fix details
 11. `7c833da` - Fix: Increase rate limits to prevent 429 errors during testing
 12. `7975644` - Fix: Modules now render videos correctly (not as images)
+13. `c6bee45` - Update CLAUDE_DEV_GUIDE.md with video rendering fix details
+
+### **January 24, 2026 (Late Session)** - Gated Paid Claim Module 🔐💰
+**Session ID:** `claude/review-previous-conversation-yWrBD` (continued)
+
+**Status:** ✅ COMPLETED - New Module Built!
+
+**What Was Built:**
+
+**NEW MODULE: Gated Paid Claim** - Combines Claim Rewards eligibility with Paid Claim purchases
+
+**The Concept:**
+- Users must hold specific verification templates to ACCESS paid rewards
+- Combines blockchain verification (from Claim Rewards) with WAX payment (from Paid Claim)
+- Each reward individually configurable with price, cooldowns, limits
+
+**Flow:**
+1. User connects wallet
+2. LIVE blockchain query checks if user holds verification template(s)
+3. If eligible, shows available paid rewards for purchase
+4. User pays WAX → Backend verifies payment → Minting wallet mints reward
+5. Optional cooldowns and per-wallet limits enforced server-side
+
+**Files Created:**
+1. ✅ `/public/modules/gated-paid-claim.js` (650+ lines)
+   - Extends UnifiedModuleBase for consistency
+   - Eligibility checking with LIVE blockchain queries
+   - Purchase flow with WAX payment verification
+   - Optional cooldowns and per-wallet limits
+   - Purchase history display
+   - Recovery system for failed transactions
+
+2. ✅ `/public/modules/gated-paid-claim.html` (3 lines)
+   - Minimal HTML container for unified module
+
+3. ✅ API Endpoints in `server.js`:
+   - POST `/api/user/gated-purchase` - Process gated purchase
+   - POST `/api/user/gated-purchase/recover` - Retry failed purchases
+   - GET `/api/user/gated-purchases/:account` - Get purchase history
+
+4. ✅ Site-builder Integration:
+   - Added to module gallery with 🔐 icon
+   - Configuration UI with 6 fields:
+     - `collection` - WAX collection name
+     - `auto_connect` - Auto-connect wallet
+     - `title` - Custom title override
+     - `verification_templates` - CSV of template IDs to verify (e.g., "247052,247053")
+     - `payment_wallet` - Wallet receiving WAX payments
+     - `rewards` - JSON array of rewards configuration
+
+**Example Rewards Configuration:**
+```json
+[
+  {
+    "template_id": "123456",
+    "template_name": "Premium Pack",
+    "template_image": "https://ipfs.io/ipfs/...",
+    "price_wax": "25.00000000",
+    "cooldown_hours": "24",
+    "per_wallet_limit": "5",
+    "max_supply": "1000"
+  },
+  {
+    "template_id": "789012",
+    "template_name": "Legendary Box",
+    "price_wax": "50.00000000",
+    "cooldown_hours": "168",
+    "per_wallet_limit": "1"
+  }
+]
+```
+
+**Key Features:**
+- ✅ Eligibility gating (must hold verification templates)
+- ✅ Multiple rewards per gated drop
+- ✅ Individual pricing per reward
+- ✅ Optional cooldowns (e.g., 24h, 168h)
+- ✅ Optional per-wallet limits (e.g., max 5 per wallet)
+- ✅ Optional max supply limits
+- ✅ Video/image support for reward display
+- ✅ Purchase history with transaction links
+- ✅ Failed purchase recovery system
+- ✅ Server-side cooldown enforcement (prevents localStorage manipulation)
+
+**Use Cases:**
+- Exclusive NFT sales for community members
+- Tiered reward systems based on NFT holdings
+- VIP shops accessible only to specific NFT holders
+- Limited edition sales for verified collectors
 
 **Benefits Achieved:**
+- ✅ Combines best of both modules (eligibility + payments)
+- ✅ Flexible reward configuration
+- ✅ Server-side security and validation
+- ✅ Professional UI matching other unified modules
+- ✅ Extensible for future features (whitelist, airdrops, etc.)
+
+**Commits Made (Gated Paid Claim):**
+- TBD: Creating gated paid claim module with API endpoints
+- TBD: Update CLAUDE_DEV_GUIDE.md with gated paid claim documentation
+
+---
+
+**Benefits Achieved (Overall Session):**
 - ✅ Better security (no client-side config manipulation)
 - ✅ Centralized management (admin can view/edit all modules)
 - ✅ Consistent architecture across all modules

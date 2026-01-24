@@ -1122,6 +1122,342 @@ app.post('/api/user/purchase/recover', strictLimiter, async (req, res) => {
 });
 
 /**
+ * POST /api/user/gated-purchase
+ * Process gated NFT purchase (requires holding verification templates)
+ */
+app.post('/api/user/gated-purchase', strictLimiter, async (req, res) => {
+  try {
+    const {
+      account,
+      template_id,
+      payment_transaction_id,
+      price_wax,
+      payment_wallet,
+      per_wallet_limit,
+      cooldown_hours
+    } = req.body;
+
+    // Validate required fields
+    if (!account || !template_id || !payment_transaction_id || !price_wax || !payment_wallet) {
+      return res.status(400).json({
+        error: 'Missing required fields: account, template_id, payment_transaction_id, price_wax, payment_wallet'
+      });
+    }
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    // Validate template_id
+    const validatedTemplateId = validators.validateTemplateId(template_id);
+    if (validatedTemplateId === null) {
+      return res.status(400).json({ error: 'Invalid template_id - must be a positive integer' });
+    }
+
+    // Check if this payment has already been processed (prevent double-minting)
+    if (db.purchases.exists(payment_transaction_id)) {
+      const existingPurchase = db.purchases.getByPaymentTx(payment_transaction_id);
+
+      if (existingPurchase.status === 'completed') {
+        return res.status(409).json({
+          error: 'This payment has already been processed',
+          purchase: existingPurchase
+        });
+      } else if (existingPurchase.status === 'pending' && existingPurchase.verification_status === 'verified') {
+        return res.status(409).json({
+          error: 'This payment is currently being processed'
+        });
+      } else if (existingPurchase.verification_status === 'verification_failed' || existingPurchase.status === 'failed') {
+        // Allow retry for failed verifications
+        console.log(`♻️ Retrying failed gated purchase: ${payment_transaction_id}`);
+      }
+    }
+
+    // SERVER-SIDE COOLDOWN ENFORCEMENT
+    if (per_wallet_limit && cooldown_hours) {
+      const walletCheck = db.purchases.checkWalletCooldown(
+        account,
+        validatedTemplateId,
+        per_wallet_limit,
+        cooldown_hours
+      );
+
+      if (!walletCheck.allowed) {
+        const remainingTime = walletCheck.cooldownEndsAt ? new Date(walletCheck.cooldownEndsAt).toISOString() : 'unknown';
+        console.log(`🚫 Wallet cooldown active for ${account} on gated template ${validatedTemplateId}`);
+        return res.status(429).json({
+          error: 'Wallet purchase limit reached',
+          details: `You have reached the purchase limit of ${walletCheck.limit} per ${cooldown_hours} hours. Cooldown ends at: ${remainingTime}`,
+          cooldown_active: true,
+          cooldown_ends_at: walletCheck.cooldownEndsAt,
+          purchases_in_window: walletCheck.count,
+          limit: walletCheck.limit
+        });
+      }
+    }
+
+    console.log(`🔍 Verifying gated payment: ${payment_transaction_id}`);
+
+    // Record purchase as pending verification if not exists
+    if (!db.purchases.exists(payment_transaction_id)) {
+      db.purchases.add(account, validatedTemplateId, price_wax, payment_transaction_id);
+    }
+
+    // Wait 3 seconds for transaction to propagate
+    console.log(`⏳ Waiting 3 seconds for transaction propagation...`);
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Verify the token payment on-chain
+    let paymentVerification;
+    try {
+      paymentVerification = await wax.verifyTokenPayment(
+        payment_transaction_id,
+        price_wax,
+        payment_wallet,
+        account
+      );
+
+      if (!paymentVerification.verified) {
+        console.error(`❌ Payment verification failed:`, paymentVerification.error);
+        db.purchases.markVerificationFailed(payment_transaction_id, paymentVerification.error);
+        return res.status(400).json({
+          error: 'Payment verification failed',
+          details: paymentVerification.error,
+          can_retry: true
+        });
+      }
+    } catch (verifyError) {
+      console.error(`❌ Payment verification error:`, verifyError);
+      db.purchases.markVerificationFailed(payment_transaction_id, verifyError.message);
+      return res.status(400).json({
+        error: 'Payment verification failed',
+        details: verifyError.message,
+        can_retry: true
+      });
+    }
+
+    console.log(`✅ Payment verified: ${price_wax} from ${account} to ${payment_wallet}`);
+
+    // Mark payment as verified
+    db.purchases.markVerified(payment_transaction_id);
+
+    // Get collection from config
+    const config = db.config.get();
+
+    // Mint the NFT to the user
+    console.log(`🎨 Minting gated NFT template ${validatedTemplateId} to ${account}...`);
+    const mintResult = await wax.mintNFT(account, config.collection_name, validatedTemplateId);
+
+    console.log(`✅ Gated NFT minted successfully: ${mintResult.transaction_id}`);
+
+    // Update purchase record to completed
+    db.purchases.markCompleted(payment_transaction_id, mintResult.transaction_id);
+
+    res.json({
+      success: true,
+      message: 'Gated purchase completed successfully!',
+      payment_transaction_id: payment_transaction_id,
+      mint_transaction_id: mintResult.transaction_id,
+      template_id: validatedTemplateId,
+      price_paid: price_wax
+    });
+
+  } catch (error) {
+    console.error('Error processing gated purchase:', error);
+
+    // Try to mark purchase as failed if it exists
+    if (req.body.payment_transaction_id && db.purchases.exists(req.body.payment_transaction_id)) {
+      const purchase = db.purchases.getByPaymentTx(req.body.payment_transaction_id);
+
+      // If verification succeeded but minting failed, keep verification status
+      if (purchase && purchase.verification_status === 'verified') {
+        db.purchases.markFailed(req.body.payment_transaction_id, error.message);
+      }
+    }
+
+    // Handle CPU exhaustion errors
+    if (error.message && error.message.toLowerCase().includes('cpu')) {
+      return res.status(503).json({
+        error: 'Server temporarily unavailable - insufficient CPU resources. Your payment was verified but minting failed. Please contact admin with transaction ID: ' + req.body.payment_transaction_id
+      });
+    }
+
+    res.status(500).json({
+      error: error.message,
+      payment_transaction_id: req.body.payment_transaction_id
+    });
+  }
+});
+
+/**
+ * POST /api/user/gated-purchase/recover
+ * Recovery endpoint for failed gated purchases
+ */
+app.post('/api/user/gated-purchase/recover', strictLimiter, async (req, res) => {
+  try {
+    const { payment_transaction_id, payment_wallet } = req.body;
+
+    if (!payment_transaction_id) {
+      return res.status(400).json({
+        error: 'Missing required field: payment_transaction_id'
+      });
+    }
+
+    // Check if purchase exists
+    if (!db.purchases.exists(payment_transaction_id)) {
+      return res.status(404).json({
+        error: 'Purchase not found'
+      });
+    }
+
+    const purchase = db.purchases.getByPaymentTx(payment_transaction_id);
+
+    // Cannot recover completed purchases
+    if (purchase.status === 'completed') {
+      return res.status(409).json({
+        error: 'This purchase is already completed',
+        purchase: purchase
+      });
+    }
+
+    // Cannot recover pending purchases (already being processed)
+    if (purchase.status === 'pending' && purchase.verification_status === 'verified') {
+      return res.status(409).json({
+        error: 'This purchase is currently being processed'
+      });
+    }
+
+    console.log(`♻️ Gated purchase recovery attempt: ${payment_transaction_id}`);
+    console.log(`   Current status: ${purchase.status}`);
+    console.log(`   Verification status: ${purchase.verification_status}`);
+
+    // If verification failed, retry verification
+    if (purchase.verification_status === 'verification_failed' || purchase.verification_status === 'pending_verification') {
+      console.log(`🔍 Re-verifying gated payment...`);
+
+      try {
+        const paymentVerification = await wax.verifyTokenPayment(
+          payment_transaction_id,
+          purchase.price_wax,
+          payment_wallet || process.env.WAX_ACCOUNT,
+          purchase.wallet_account
+        );
+
+        if (!paymentVerification.verified) {
+          console.error(`❌ Payment re-verification failed:`, paymentVerification.error);
+          db.purchases.markVerificationFailed(payment_transaction_id, paymentVerification.error);
+          return res.status(400).json({
+            error: 'Payment verification failed',
+            details: paymentVerification.error,
+            can_retry: true
+          });
+        }
+
+        console.log(`✅ Payment re-verified successfully`);
+        db.purchases.markVerified(payment_transaction_id);
+
+        // After successful verification, immediately proceed to minting
+        console.log(`🎨 Minting gated NFT after successful re-verification...`);
+        const config = db.config.get();
+        const mintResult = await wax.mintNFT(purchase.wallet_account, config.collection_name, purchase.template_id);
+
+        console.log(`✅ Gated NFT minted successfully: ${mintResult.transaction_id}`);
+        db.purchases.markCompleted(payment_transaction_id, mintResult.transaction_id);
+
+        return res.json({
+          success: true,
+          message: 'Recovery successful! NFT minted.',
+          payment_transaction_id: payment_transaction_id,
+          mint_transaction_id: mintResult.transaction_id,
+          template_id: purchase.template_id,
+          price_paid: purchase.price_wax
+        });
+
+      } catch (verifyError) {
+        console.error(`❌ Payment re-verification error:`, verifyError);
+        db.purchases.markVerificationFailed(payment_transaction_id, verifyError.message);
+        return res.status(400).json({
+          error: 'Payment verification failed',
+          details: verifyError.message,
+          can_retry: true
+        });
+      }
+    }
+
+    // If verification succeeded earlier but mint failed, retry minting
+    if (purchase.verification_status === 'verified' && (purchase.status === 'failed' || purchase.status === 'pending')) {
+      console.log(`🎨 Re-attempting gated NFT mint (verification was already successful)...`);
+
+      const config = db.config.get();
+      const mintResult = await wax.mintNFT(purchase.wallet_account, config.collection_name, purchase.template_id);
+
+      console.log(`✅ Gated NFT minted successfully: ${mintResult.transaction_id}`);
+      db.purchases.markCompleted(payment_transaction_id, mintResult.transaction_id);
+
+      return res.json({
+        success: true,
+        message: 'Recovery successful! NFT minted.',
+        payment_transaction_id: payment_transaction_id,
+        mint_transaction_id: mintResult.transaction_id,
+        template_id: purchase.template_id,
+        price_paid: purchase.price_wax
+      });
+    }
+
+    // If we get here, purchase is in an unexpected state
+    res.json({
+      success: true,
+      message: 'Purchase verified, waiting for mint',
+      purchase: purchase
+    });
+
+  } catch (error) {
+    console.error('Error in gated purchase recovery:', error);
+
+    // Handle CPU exhaustion errors
+    if (error.message && error.message.toLowerCase().includes('cpu')) {
+      return res.status(503).json({
+        error: 'Server temporarily unavailable - insufficient CPU resources. Please try again later.',
+        can_retry: true
+      });
+    }
+
+    res.status(500).json({
+      error: error.message,
+      can_retry: true
+    });
+  }
+});
+
+/**
+ * GET /api/user/gated-purchases/:account
+ * Get gated purchase history for an account
+ */
+app.get('/api/user/gated-purchases/:account', async (req, res) => {
+  try {
+    const { account } = req.params;
+
+    // Validate WAX account name format
+    if (!validators.isValidWaxAccount(account)) {
+      return res.status(400).json({ error: 'Invalid WAX account name format' });
+    }
+
+    // Use the same purchases table - just return all purchases for this account
+    const purchases = db.purchases.getByAccount(account);
+
+    res.json({
+      success: true,
+      purchases: purchases
+    });
+
+  } catch (error) {
+    console.error('Error fetching gated purchase history:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/user/purchases/:account
  * Get purchase history for an account
  */
