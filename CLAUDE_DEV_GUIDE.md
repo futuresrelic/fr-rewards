@@ -968,6 +968,8 @@ Config stored in database, fetched via API at runtime.
 **Commits Made (Gated Paid Claim):**
 - `20fe68a` - Feature: Add Gated Paid Claim module - NFT sales for verified holders
 - `fdb7459` - Improve: Replace JSON textarea with visual rewards builder UI
+- `0358629` - Update CLAUDE_DEV_GUIDE.md with rewards builder UX improvement
+- `c652d47` - **CRITICAL FIX:** Gated claims now check arbitrary templates (no database requirement)
 
 **UX Improvement:**
 - **BEFORE:** Users had to manually write JSON in a textarea (error-prone!)
@@ -978,6 +980,19 @@ Config stored in database, fetched via API at runtime.
   - "Remove" button to delete rewards
   - JSON auto-generated behind the scenes
 - Much more user-friendly for non-coders!
+
+**Critical Fix - Eligibility API:**
+- **ISSUE:** Gated claims were checking database-enabled templates only
+  - If verification template (e.g., 557200) wasn't in database, user marked as "not eligible"
+  - Even if user owned the template in their wallet!
+- **ROOT CAUSE:** API was filtering database templates by query parameter
+  - `enabledTemplates.filter(t => requestedTemplates.includes(t.template_id))`
+  - Returns empty array if template not in database
+- **FIX:** When `?templates=` parameter provided, bypass database entirely
+  - Query blockchain directly for those specific templates
+  - No need to add verification templates to database
+  - Gated claims now work with ANY template ID
+- **BACKWARD COMPATIBLE:** Regular claims (no templates param) still use database
 
 ---
 
