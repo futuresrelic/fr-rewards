@@ -82,11 +82,9 @@ window.WalletManager = (function() {
       if (savedWallet === 'wcw') {
         const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
         if (WaxJS) {
-          // IMPORTANT: Use tryAutoLogin: false even for restore
-          // tryAutoLogin: true doesn't properly initialize wax.api
           wax = new WaxJS({
             rpcEndpoint: 'https://wax.greymass.com',
-            tryAutoLogin: false  // Changed from true - forces proper api initialization
+            tryAutoLogin: false
           });
 
           // Call login explicitly - this will use cached session if available
@@ -95,14 +93,7 @@ window.WalletManager = (function() {
           if (autoLoginAccount) {
             currentAccount = autoLoginAccount;
             currentWalletType = 'wcw';
-
-            // Verify api is initialized (should be ready now with tryAutoLogin: false)
-            if (!wax.api) {
-              console.error('❌ WaxJS api STILL not initialized after restore with tryAutoLogin:false');
-              throw new Error('WaxJS api not initialized');
-            }
-
-            console.log('✅ WCW session restored:', currentAccount, '(api ready)');
+            console.log('✅ WCW session restored:', currentAccount);
             notifyListeners('connected');
             return true;
           } else {
@@ -145,8 +136,10 @@ window.WalletManager = (function() {
       throw new Error('Connection already in progress');
     }
 
+    // Allow multiple modules to use the same connection
     if (currentAccount) {
-      throw new Error('Already connected. Disconnect first.');
+      console.log('Already connected to', currentAccount, '- reusing connection');
+      return currentAccount;
     }
 
     isConnecting = true;
@@ -187,12 +180,7 @@ window.WalletManager = (function() {
       tryAutoLogin: false
     });
     currentAccount = await wax.login();
-
-    // Verify api is initialized (should always be ready with tryAutoLogin: false)
-    if (!wax.api) {
-      console.error('❌ WaxJS api not initialized after connect - this should not happen!');
-      throw new Error('WaxJS api not initialized');
-    }
+    console.log('✅ WCW connected:', currentAccount);
   }
 
   /**
@@ -252,41 +240,9 @@ window.WalletManager = (function() {
     };
 
     if (currentWalletType === 'wcw' && wax) {
-      // Verify wax.api is initialized (can be null after auto-restore)
       if (!wax.api) {
-        console.warn('⚠️ WaxJS api not initialized, recreating instance...');
-        // Recreate the entire WaxJS instance (calling login() on broken instance doesn't work)
-        try {
-          const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
-          if (!WaxJS) {
-            throw new Error('WaxJS not available');
-          }
-
-          // Create new instance with tryAutoLogin: false (manual mode)
-          wax = new WaxJS({
-            rpcEndpoint: 'https://wax.greymass.com',
-            tryAutoLogin: false
-          });
-
-          // Login to initialize the api
-          const account = await wax.login();
-
-          if (!account || account !== currentAccount) {
-            throw new Error('Login returned different account or failed');
-          }
-
-          // Verify api is now initialized
-          if (!wax.api) {
-            throw new Error('API still not initialized after recreating instance');
-          }
-
-          console.log('✅ WaxJS instance recreated and api initialized');
-        } catch (error) {
-          console.error('Failed to reinitialize WaxJS:', error);
-          throw new Error('WaxJS api not initialized. Please disconnect and reconnect your wallet.');
-        }
+        throw new Error('WaxJS api not initialized. Make sure you are loading /waxjs.js (not /waxjs-simple.js) for pages that use transactions.');
       }
-
       return await wax.api.transact({ actions }, transactOptions);
     } else if (currentWalletType === 'anchor' && anchor) {
       return await anchor.transact({ actions }, transactOptions);
