@@ -91,6 +91,19 @@ window.WalletManager = (function() {
           if (autoLoginAccount) {
             currentAccount = autoLoginAccount;
             currentWalletType = 'wcw';
+
+            // Verify api is initialized (critical for transactions)
+            if (!wax.api) {
+              console.warn('⚠️ WaxJS api not ready after restore, waiting...');
+              // Give it a moment to initialize
+              await new Promise(resolve => setTimeout(resolve, 500));
+
+              // If still not ready, log warning but continue
+              if (!wax.api) {
+                console.warn('⚠️ WaxJS api still not initialized after restore. Transactions may require reconnection.');
+              }
+            }
+
             console.log('✅ WCW session restored:', currentAccount);
             notifyListeners('connected');
             return true;
@@ -176,6 +189,16 @@ window.WalletManager = (function() {
       tryAutoLogin: false
     });
     currentAccount = await wax.login();
+
+    // Verify api is initialized
+    if (!wax.api) {
+      console.warn('⚠️ WaxJS api not ready after connect, waiting...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      if (!wax.api) {
+        console.warn('⚠️ WaxJS api not initialized after manual connect');
+      }
+    }
   }
 
   /**
@@ -235,6 +258,22 @@ window.WalletManager = (function() {
     };
 
     if (currentWalletType === 'wcw' && wax) {
+      // Verify wax.api is initialized (can be null after auto-restore)
+      if (!wax.api) {
+        console.warn('⚠️ WaxJS api not initialized, reinitializing...');
+        // Reinitialize by calling login again
+        try {
+          await wax.login();
+        } catch (error) {
+          throw new Error('WaxJS api not initialized. Please reconnect your wallet.');
+        }
+      }
+
+      // Double-check api is now available
+      if (!wax.api) {
+        throw new Error('WaxJS api unavailable. Please disconnect and reconnect your wallet.');
+      }
+
       return await wax.api.transact({ actions }, transactOptions);
     } else if (currentWalletType === 'anchor' && anchor) {
       return await anchor.transact({ actions }, transactOptions);
