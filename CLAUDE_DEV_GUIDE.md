@@ -971,7 +971,9 @@ Config stored in database, fetched via API at runtime.
 - `0358629` - Update CLAUDE_DEV_GUIDE.md with rewards builder UX improvement
 - `c652d47` - **CRITICAL FIX:** Gated claims now check arbitrary templates (no database requirement)
 - `39ef1f2` - Update CLAUDE_DEV_GUIDE.md with eligibility API fix details
-- `bdb4e7a` - **CRITICAL FIX:** WalletManager now properly initializes wax.api for transactions
+- `bdb4e7a` - **CRITICAL FIX:** WalletManager now properly initializes wax.api for transactions (partial fix)
+- `8504e74` - Update CLAUDE_DEV_GUIDE.md with transaction fix details
+- `544cdcd` - **FINAL FIX:** Use tryAutoLogin:false for session restore to ensure wax.api initialization
 
 **UX Improvement:**
 - **BEFORE:** Users had to manually write JSON in a textarea (error-prone!)
@@ -996,21 +998,38 @@ Config stored in database, fetched via API at runtime.
   - Gated claims now work with ANY template ID
 - **BACKWARD COMPATIBLE:** Regular claims (no templates param) still use database
 
-**Critical Fix - Transaction Failures:**
-- **ISSUE:** Clicking "Purchase" threw error: `Cannot read properties of null (reading 'transact')`
+**Critical Fix - Transaction Failures (Two-Part Fix):**
+
+**ISSUE:** Clicking "Purchase" threw error: `Cannot read properties of null (reading 'transact')`
   - Session auto-restored successfully ✅
   - Eligibility check worked ✅
   - But transactions failed ❌
-- **ROOT CAUSE:** After auto-restore with `tryAutoLogin:true`, `wax.api` property was null
-  - WaxJS instance created but api not fully initialized
-  - First transaction attempt failed because `wax.api.transact()` → `null.transact()`
-  - Only affected modules with `auto_connect:true` (like gated-paid-claim)
-  - Paid-claim worked because it uses `auto_connect:false` (users manually connect)
-- **FIXES APPLIED:**
-  1. **Defensive check in `transact()`:** If `wax.api` is null, call `wax.login()` to reinitialize
-  2. **Verification in `restoreSession()`:** After auto-login, verify api exists, wait 500ms if needed
-  3. **Verification in `connectWCW()`:** Ensure api ready after manual connect
-- **RESULT:** Transactions now work correctly after auto-restore! ✅
+
+**ROOT CAUSE:** `tryAutoLogin: true` doesn't properly initialize `wax.api`
+  - During auto-restore, WaxJS created with `tryAutoLogin: true`
+  - Instance creates successfully, login works
+  - But `wax.api` property NEVER gets initialized with this mode
+  - When transaction attempted: `wax.api.transact()` → `null.transact()` → Error!
+
+**FIX ATTEMPT 1 (commit bdb4e7a - Partial):**
+  - Added defensive checks in `transact()`
+  - Tried calling `wax.login()` to reinitialize
+  - **DIDN'T WORK:** Calling login() on broken instance doesn't initialize api
+
+**FINAL FIX (commit 544cdcd - Complete):**
+  1. **Changed `restoreSession()` to use `tryAutoLogin: false`**
+     - WaxJS with `tryAutoLogin: false` properly initializes api
+     - `login()` still uses cached session (no popup shown to user)
+     - Api is ready immediately after restore
+  2. **Enhanced `transact()` reinitialize logic**
+     - If api is null, RECREATE entire WaxJS instance (not just call login())
+     - Create new instance with `tryAutoLogin: false`
+     - Ensures api gets properly initialized
+  3. **Simplified `connectWCW()`**
+     - Removed wait/check code (not needed with tryAutoLogin: false)
+     - Just throw error if api not ready (shouldn't happen)
+
+**RESULT:** Transactions work correctly after auto-restore! No more api errors! ✅
 
 ---
 
