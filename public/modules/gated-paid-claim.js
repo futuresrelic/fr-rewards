@@ -241,13 +241,26 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
     const rewardsGrid = document.createElement('div');
     rewardsGrid.className = 'module-items-grid';
 
+    // Store countdown data for starting timers after DOM append
+    const countdownsToStart = [];
+
     // Render each reward
     this.rewards.forEach(reward => {
-      const card = this.createRewardCard(reward);
-      rewardsGrid.appendChild(card);
+      const result = this.createRewardCard(reward);
+      rewardsGrid.appendChild(result.card);
+
+      // Collect countdown data if present
+      if (result.countdownData) {
+        countdownsToStart.push(result.countdownData);
+      }
     });
 
     this.elements.content.appendChild(rewardsGrid);
+
+    // NOW start all countdown timers (after cards are in DOM)
+    countdownsToStart.forEach(data => {
+      this.startCooldownTimer(data.elementId, data.remainingMs);
+    });
 
     // Show purchase history if exists
     if (this.purchaseHistory && this.purchaseHistory.length > 0) {
@@ -288,6 +301,9 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
       info: []
     });
 
+    // Track countdown data (to start timer after card is in DOM)
+    let countdownData = null;
+
     // Add purchase info and button
     const actionsContainer = card.querySelector('[data-actions-container]');
     if (actionsContainer) {
@@ -306,8 +322,11 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
           const countdownId = `cooldown-${templateId}-${Date.now()}`;
           limitInfo.innerHTML = `⏳ Cooldown: <span id="${countdownId}"></span>`;
 
-          // Start countdown timer
-          this.startCooldownTimer(countdownId, cooldown.remainingMs);
+          // Save countdown data to start later (after DOM append)
+          countdownData = {
+            elementId: countdownId,
+            remainingMs: cooldown.remainingMs
+          };
         } else if (reward.cooldown_hours) {
           limitInfo.textContent = `Limit: ${reward.per_wallet_limit} per ${reward.cooldown_hours}h (${purchaseCount}/${reward.per_wallet_limit} used)`;
         } else {
@@ -345,7 +364,10 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
       actionsContainer.appendChild(statusDiv);
     }
 
-    return card;
+    return {
+      card: card,
+      countdownData: countdownData
+    };
   }
 
   /**
