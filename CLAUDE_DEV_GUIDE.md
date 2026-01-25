@@ -775,6 +775,84 @@ sleep 4 && git push -u origin claude/your-branch-name
 
 ## 📝 CHANGELOG
 
+### **January 25, 2026** - WaxJS Library Fix for Module Transactions 🔧
+**Session ID:** `claude/review-previous-conversation-yWrBD` (continued)
+
+**Status:** ✅ COMPLETED - Fixed WaxJS api initialization issue
+
+**CRITICAL ISSUE IDENTIFIED:**
+- **Problem:** Module pages using transaction modules (Paid Claim, Gated Paid Claim) failed with "WaxJS api not initialized" error
+- **Symptoms:**
+  - Login succeeded ✅
+  - Session auto-restore worked ✅
+  - But `wax.api.transact()` threw error: Cannot read properties of null ❌
+  - Even after waiting 2 seconds with wait loops ❌
+- **User Impact:** Phase3.html and other module pages couldn't execute blockchain transactions
+
+**ROOT CAUSE ANALYSIS:**
+1. **Two WaxJS Libraries in Project:**
+   - `/waxjs-simple.js` - Custom lightweight implementation (only for login)
+     - Sets `this.api = null` in constructor (line 13)
+     - Has `api()` method but never initializes `this.api` property
+     - Used by story/phase3.html and other simple pages
+   - `/waxjs.js` - Real WaxJS library with eosjs (351KB, minified)
+     - Properly initializes `this.api` with eosjs API instance after login
+     - Used by paid-claim-example.html (line 222)
+
+2. **wallet-manager.js assumptions:**
+   - Checked for `wax.api` property and waited for it to initialize
+   - Added wait loops (up to 2 seconds) expecting api to become available
+   - But waxjs-simple.js NEVER initializes this property!
+   - Wait loops always timed out because property stays null forever
+
+3. **Why index.html worked but modules failed:**
+   - index.html uses app.js which doesn't call `transact()` (backend handles claims)
+   - Module pages use wallet-manager.js which calls `transact()` for transactions
+   - Transaction modules NEED the real waxjs.js library
+
+**THE FIX:**
+
+**Commit:** `454ad95` - "Fix: Remove wax.api wait loops - use real waxjs.js for transaction modules"
+
+**Changes Made:**
+1. **Removed Wait Loops (connectWCW & restoreSession):**
+   - Deleted 20+ lines of wait loop code checking for `wax.api`
+   - Removed error throwing when api not initialized during connect
+   - Trust that pages load correct library
+
+2. **Fixed "Already connected" Error:**
+   - Changed from throwing error to returning existing connection
+   - Allows multiple modules on same page to share connection
+   - Fixes: "Already connected. Disconnect first." error
+
+3. **Simplified transact() Method:**
+   - Removed complex reinitialize logic (40+ lines)
+   - Simple check: if `!wax.api`, throw helpful error message
+   - Error tells user to load `/waxjs.js` instead of `/waxjs-simple.js`
+
+**SOLUTION FOR USERS:**
+- **Pages with transaction modules** (Paid Claim, Gated Paid Claim) → use `<script src="/waxjs.js"></script>`
+- **Pages with simple modules** (Claim Rewards without transactions) → can use `<script src="/waxjs-simple.js"></script>`
+- **Example:** See `/public/paid-claim-example.html` line 222 for correct pattern
+
+**Files Modified:**
+- `/public/modules/wallet-manager.js` - Removed wait loops, fixed multi-module support
+
+**Key Commits:**
+- `454ad95` - Remove wax.api wait loops and checks ⭐
+
+**Testing Notes:**
+- User needs to update phase3.html on Railway to load `/waxjs.js` instead of `/waxjs-simple.js`
+- After this change, Gated Paid Claim transactions should work correctly
+
+**Lessons Learned:**
+- Always investigate WHY a property is null before adding wait loops
+- Check what libraries are loaded and their actual implementations
+- Compare working vs. broken pages to find differences
+- Simple fixes > complex workarounds
+
+---
+
 ### **January 24, 2026** - Option A Implementation Complete! 🎉
 **Session ID:** `claude/review-previous-conversation-yWrBD`
 
