@@ -905,6 +905,99 @@ sleep 4 && git push -u origin claude/your-branch-name
 
 ## 📝 CHANGELOG
 
+### **January 25, 2026** - Gated Paid Claim Cooldown Sync Fix ⏰
+**Session ID:** `claude/review-previous-conversation-yWrBD` (continued)
+
+**Status:** ✅ COMPLETED - Fixed cooldown display and backend sync
+
+**ISSUE IDENTIFIED:**
+- **Problem:** Schedule Pack showed "Purchase for 2 WAX" even though backend enforced cooldown (429 error)
+- **Symptoms:**
+  - Backend returns 429 "Wallet purchase limit reached" ✅ (correctly enforced)
+  - Day and Pencil show "Unavailable" with cooldown timer ✅ (working)
+  - Schedule Pack still shows "Purchase" button ❌ (not working)
+  - Console: "POST /api/user/gated-purchase 429 (Too Many Requests)"
+- **User Impact:** Confusing UX - button appears available but purchase fails
+
+**ROOT CAUSE:**
+- Frontend checked **localStorage only** for cooldowns
+- Backend tracks cooldowns in **database**
+- Mismatch when:
+  1. User attempts purchase but fails (closes wallet popup)
+  2. OR backend rejects due to cooldown
+  3. localStorage never updated with cooldown timestamp
+  4. Backend enforces cooldown, but frontend doesn't know about it
+
+**THE FIX:**
+
+**Commit:** `24b9eb0` - "Sync Gated Paid Claim cooldowns from backend + live countdown timers"
+
+**Changes Made:**
+
+1. **Backend Cooldown Sync:**
+   ```javascript
+   syncCooldownsFromHistory() {
+     // Groups purchases by template_id
+     // Finds most recent completed purchase
+     // Syncs timestamp from backend to localStorage
+     // Keeps frontend in sync with backend truth
+   }
+   ```
+
+2. **429 Error Detection & Reload:**
+   - Detects cooldown errors (429, "limit reached", "cooldown")
+   - Immediately reloads purchase history from backend
+   - Re-renders UI to show correct cooldown state
+
+3. **Live Countdown Timers:**
+   - Added `startCooldownTimer()` - updates every second
+   - Shows "⏳ Cooldown: 23h 37m" (live ticking)
+   - Auto-reloads when countdown reaches 0
+   - Prevents memory leaks with `clearCooldownTimers()`
+
+**HOW IT WORKS:**
+
+1. **On Page Load:**
+   - Fetches purchase history from backend
+   - Calls `syncCooldownsFromHistory()`
+   - Updates localStorage with backend cooldown timestamps
+   - Renders UI with correct cooldown state
+
+2. **On Purchase Attempt (Cooldown Active):**
+   - User clicks "Purchase"
+   - Wallet transaction initiated
+   - Backend returns 429 with cooldown info
+   - Frontend detects 429 error
+   - Reloads purchase history
+   - Re-renders showing "Unavailable" with countdown
+
+3. **Live Countdown:**
+   - Countdown element created: `<span id="cooldown-582322-...">`
+   - Timer updates every 1000ms
+   - Displays "23h 37m", "23h 36m", "23h 35m"...
+   - When reaches 0: auto-reloads data, enables purchase button
+
+**RESULT:**
+- ✅ All cooldowns now sync from backend truth
+- ✅ Schedule Pack correctly shows "Unavailable" during cooldown
+- ✅ Live countdown timers match claim-rewards UX
+- ✅ No more confusing "available but fails" state
+
+**Files Modified:**
+- `/public/modules/gated-paid-claim.js` - Added cooldown sync & timers
+
+**Key Commits:**
+- `24b9eb0` - Sync cooldowns from backend + live timers ⭐
+
+**Testing Instructions:**
+1. Deploy to Railway
+2. Attempt to purchase Schedule Pack (should hit cooldown)
+3. Verify it shows "⏳ Cooldown: Xh Xm" with live countdown
+4. Verify countdown ticks down every second
+5. Verify button is disabled during cooldown
+
+---
+
 ### **January 25, 2026** - WaxJS Library Fix for Module Transactions 🔧
 **Session ID:** `claude/review-previous-conversation-yWrBD` (continued)
 
