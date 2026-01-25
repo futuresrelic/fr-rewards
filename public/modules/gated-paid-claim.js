@@ -89,7 +89,7 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
   }
 
   /**
-   * Load purchase history
+   * Load purchase history and sync cooldowns with backend
    */
   async loadPurchaseHistory() {
     try {
@@ -98,6 +98,9 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
 
       if (response.ok) {
         this.purchaseHistory = data.purchases || [];
+
+        // Sync cooldowns from backend purchase history to localStorage
+        this.syncCooldownsFromHistory();
       } else {
         this.purchaseHistory = [];
       }
@@ -108,10 +111,61 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
   }
 
   /**
+   * Sync cooldowns from backend purchase history to localStorage
+   * This ensures frontend cooldown state matches backend reality
+   */
+  syncCooldownsFromHistory() {
+    if (!this.purchaseHistory || !this.currentAccount) return;
+
+    // Group purchases by template_id
+    const purchasesByTemplate = {};
+    this.purchaseHistory.forEach(purchase => {
+      const templateId = purchase.template_id.toString();
+      if (!purchasesByTemplate[templateId]) {
+        purchasesByTemplate[templateId] = [];
+      }
+      purchasesByTemplate[templateId].push(purchase);
+    });
+
+    // For each template, find the most recent completed purchase
+    // and sync cooldown to localStorage
+    Object.keys(purchasesByTemplate).forEach(templateId => {
+      const purchases = purchasesByTemplate[templateId];
+
+      // Filter to completed purchases only
+      const completedPurchases = purchases.filter(p => p.status === 'completed');
+
+      if (completedPurchases.length > 0) {
+        // Sort by purchased_at descending (most recent first)
+        completedPurchases.sort((a, b) => {
+          const timeA = new Date(a.purchased_at).getTime();
+          const timeB = new Date(b.purchased_at).getTime();
+          return timeB - timeA;
+        });
+
+        const mostRecent = completedPurchases[0];
+        const purchaseTime = new Date(mostRecent.purchased_at).getTime();
+
+        // Update localStorage with backend timestamp
+        const key = this.getCooldownKey(templateId);
+        const existingTime = localStorage.getItem(key);
+
+        // Only update if backend has more recent timestamp
+        if (!existingTime || purchaseTime > parseInt(existingTime)) {
+          localStorage.setItem(key, purchaseTime.toString());
+        }
+      }
+    });
+  }
+
+  /**
    * Render module content
    * Called by base class after data is loaded
    */
   renderContent() {
+    // Clear any existing countdown timers
+    this.clearCooldownTimers();
+
     this.elements.content.innerHTML = '';
 
     // Check if user is eligible
@@ -248,7 +302,12 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
 
         if (cooldown.active) {
           limitInfo.style.color = 'var(--warning)';
-          limitInfo.innerHTML = `⏳ Cooldown: ${cooldown.remainingTime}`;
+          // Create countdown element
+          const countdownId = `cooldown-${templateId}-${Date.now()}`;
+          limitInfo.innerHTML = `⏳ Cooldown: <span id="${countdownId}"></span>`;
+
+          // Start countdown timer
+          this.startCooldownTimer(countdownId, cooldown.remainingMs);
         } else if (reward.cooldown_hours) {
           limitInfo.textContent = `Limit: ${reward.per_wallet_limit} per ${reward.cooldown_hours}h (${purchaseCount}/${reward.per_wallet_limit} used)`;
         } else {
@@ -367,6 +426,19 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
 
     } catch (error) {
       console.error('Purchase error:', error);
+
+      // Check if this is a cooldown error (429)
+      const isCooldownError = error.status_code === 429 || error.message?.includes('cooldown') || error.message?.includes('limit reached');
+
+      // If cooldown error, reload data to sync backend state
+      if (isCooldownError) {
+        // Reload purchase history to sync cooldowns from backend
+        setTimeout(async () => {
+          await this.loadPurchaseHistory();
+          // Re-render to show cooldown state
+          this.renderContent();
+        }, 500);
+      }
 
       // Check if can retry
       const canRetry = error.can_retry || (error.message && error.message.includes('verification'));
@@ -577,6 +649,42 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
     } else {
       return `${seconds}s`;
     }
+  }
+
+  /**
+   * Start countdown timer for cooldown display
+   */
+  startCooldownTimer(elementId, remainingMs) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    let remaining = remainingMs;
+
+    const updateTimer = () => {
+      if (remaining <= 0) {
+        // Cooldown ended - reload data to update UI
+        clearInterval(interval);
+        this.handleWalletConnected();
+        return;
+      }
+
+      element.textContent = this.formatCooldownTime(remaining);
+      remaining -= 1000;
+    };
+
+    updateTimer(); // Initial update
+    const interval = setInterval(updateTimer, 1000);
+
+    // Store interval for cleanup
+    this.cooldownIntervals.push(interval);
+  }
+
+  /**
+   * Clear all countdown timers (called when module is destroyed or refreshed)
+   */
+  clearCooldownTimers() {
+    this.cooldownIntervals.forEach(interval => clearInterval(interval));
+    this.cooldownIntervals = [];
   }
 
   getWalletPurchaseCount(templateId) {
