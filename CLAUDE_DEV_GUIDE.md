@@ -988,13 +988,26 @@ sleep 4 && git push -u origin claude/your-branch-name
 
 **Key Commits:**
 - `24b9eb0` - Sync cooldowns from backend + live timers ⭐
+- `401633a` - Fix countdown timer DOM timing issue ⭐
+
+**Follow-up Fix (Countdown Display):**
+- **Issue:** User reported countdown showed "⏳ Cooldown:" with no time displayed
+- **Cause:** `startCooldownTimer()` was called immediately after creating the countdown `<span>`, but BEFORE the card was appended to DOM. When the function called `document.getElementById()`, it returned null (element not in DOM yet), causing early return without starting timer.
+- **Fix:** Deferred timer start until after DOM append
+  - `createRewardCard()` returns `{ card, countdownData }` instead of just `card`
+  - `countdownData` contains `{ elementId, remainingMs }` for deferred start
+  - `renderEligible()` collects all countdown data while building cards
+  - After all cards appended to DOM, starts all timers in batch
+  - NOW `document.getElementById()` finds elements and timers start correctly
+- **Result:** Timers now display and update correctly (23h 37m → 23h 36m → ...)
 
 **Testing Instructions:**
 1. Deploy to Railway
-2. Attempt to purchase Schedule Pack (should hit cooldown)
-3. Verify it shows "⏳ Cooldown: Xh Xm" with live countdown
-4. Verify countdown ticks down every second
+2. Attempt to purchase Schedule Pack (should hit cooldown from earlier purchase)
+3. Verify it shows "⏳ Cooldown: 23h 37m" (actual time, not blank)
+4. Verify countdown updates every second
 5. Verify button is disabled during cooldown
+6. Wait for countdown to reach 0, verify button becomes enabled
 
 ---
 
