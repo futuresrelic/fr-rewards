@@ -272,6 +272,108 @@ Move ALL module configurations to a database table with server-side management.
 
 ---
 
+## 📚 WALLET LIBRARIES - CRITICAL UNDERSTANDING
+
+### Two WaxJS Libraries Exist in This Project
+
+**IMPORTANT:** Understanding these two libraries is critical for debugging wallet issues!
+
+#### 1. `/public/waxjs-simple.js` - Lightweight Login-Only Library (60KB)
+
+**Purpose:** Fast page loads, wallet connection only
+**Capabilities:**
+- ✅ WAX Cloud Wallet login
+- ✅ Session restoration via localStorage
+- ✅ Account detection
+
+**Limitations:**
+- ❌ NO transaction support (`this.api` = null always)
+- ❌ NO eosjs integration
+- ❌ Cannot call `wax.api.transact()`
+
+**Code Structure:**
+```javascript
+class WaxJS {
+  constructor(options) {
+    this.api = null;  // ← NEVER gets initialized!
+  }
+
+  async api() {  // ← This is a METHOD, not the property
+    return { rpc: this.rpcEndpoint };
+  }
+}
+```
+
+**Used By:**
+- story/phase*.html (most pages)
+- Any page that only needs login (no transactions)
+
+---
+
+#### 2. `/public/waxjs.js` - Full Library with Transaction Support (351KB)
+
+**Purpose:** Complete blockchain interaction
+**Capabilities:**
+- ✅ WAX Cloud Wallet login
+- ✅ Session restoration
+- ✅ Transaction signing via `wax.api.transact()`
+- ✅ Full eosjs integration bundled
+
+**Code Structure:**
+```javascript
+// Real WaxJS library (minified)
+// After login, initializes:
+this.api = new eosjs.Api({ ... });  // ← Actually initialized!
+```
+
+**Used By:**
+- paid-claim-example.html
+- Any page with Paid Claim or Gated Paid Claim modules
+- **Auto-loaded by wallet-manager.js** when transactions needed
+
+---
+
+### Automatic Library Upgrading (Since Jan 25, 2026)
+
+**The Smart Solution:** Pages can load `waxjs-simple.js` for performance, and wallet-manager.js will **automatically upgrade** to the full library when transactions are needed.
+
+**How It Works:**
+1. Page loads with `<script src="/waxjs-simple.js"></script>`
+2. User connects wallet - works fine!
+3. User clicks "Purchase" - module calls `WalletManager.transact()`
+4. Wallet-manager detects `!wax.api` (simple library loaded)
+5. **Auto-loads** `/waxjs.js` dynamically via script injection
+6. **Recreates** wax instance with full library
+7. **Restores** user session (no popup)
+8. **Executes** transaction successfully ✅
+
+**Key Functions in wallet-manager.js:**
+- `hasTransactionSupport()` - Detects which library is loaded
+- `ensureFullWaxJS()` - Dynamically loads full library if needed
+- `transact()` - Auto-upgrades before executing transactions
+
+**Console Output:**
+```
+⚠️ WaxJS api not initialized, attempting to load full library...
+⚠️ Transaction support not available, loading full WaxJS library...
+✅ Full WaxJS library loaded successfully
+✅ WaxJS instance recreated with full library support
+```
+
+---
+
+### When to Use Which Library
+
+| Library | Use When | File Size | Transaction Support |
+|---------|----------|-----------|---------------------|
+| `waxjs-simple.js` | Login only, Claim Rewards module (backend handles minting) | 60KB | ❌ No |
+| `waxjs.js` | Paid Claim, Gated Paid Claim, any client-side transactions | 351KB | ✅ Yes |
+| **Auto-load** | Default choice - let wallet-manager upgrade when needed | 60KB → 351KB | ✅ Smart |
+
+**Recommendation:** Use `waxjs-simple.js` by default. Let the auto-loading handle upgrades.
+
+---
+
 ## 🧩 MODULE SYSTEM EXPLAINED
 
 ### What is a Module?
@@ -452,7 +554,35 @@ CREATE TABLE module_instances (
 
 ## 🚧 COMMON PITFALLS & SOLUTIONS
 
-### 1. **"db.craftHistory.getById is not a function"**
+### 1. **"WaxJS api not initialized" or "Cannot read properties of null (reading 'transact')"**
+
+**Problem:** Transaction modules failing because `wax.api` is null
+
+**Root Cause:** Page loaded `waxjs-simple.js` which doesn't initialize `wax.api`
+
+**What to Check:**
+```bash
+# Check which library the page loads
+grep "waxjs" public/story/phase3.html
+
+# Check if module needs transactions
+grep "transact\|WalletManager.transact" public/modules/gated-paid-claim.js
+```
+
+**Solution (as of Jan 25, 2026):**
+- ✅ **Nothing!** Wallet-manager.js now auto-loads the full library when needed
+- The auto-upgrade happens transparently when `transact()` is called
+- Console will show: "✅ Full WaxJS library loaded successfully"
+
+**Old Solution (deprecated):**
+- Manually change HTML to load `/waxjs.js` instead of `/waxjs-simple.js`
+- This is no longer needed thanks to auto-loading
+
+**Reference:** See "WALLET LIBRARIES" section above for full explanation
+
+---
+
+### 2. **"db.craftHistory.getById is not a function"**
 
 **Problem:** Calling a database function that doesn't exist
 
@@ -830,26 +960,82 @@ sleep 4 && git push -u origin claude/your-branch-name
    - Simple check: if `!wax.api`, throw helpful error message
    - Error tells user to load `/waxjs.js` instead of `/waxjs-simple.js`
 
-**SOLUTION FOR USERS:**
-- **Pages with transaction modules** (Paid Claim, Gated Paid Claim) → use `<script src="/waxjs.js"></script>`
-- **Pages with simple modules** (Claim Rewards without transactions) → can use `<script src="/waxjs-simple.js"></script>`
-- **Example:** See `/public/paid-claim-example.html` line 222 for correct pattern
+**BETTER SOLUTION IMPLEMENTED:**
+
+**Commit:** `ad215d9` - "Fix: Auto-load full waxjs.js when transaction modules need it"
+
+User pointed out the real issue: **Don't change HTML pages, fix the modules instead!**
+
+**Final Implementation:**
+1. **Smart Library Detection:**
+   - Added `hasTransactionSupport()` function in wallet-manager.js
+   - Detects if full waxjs.js is loaded vs waxjs-simple.js
+   - Checks for eosjs bundling in the library
+
+2. **Auto-Loading Full Library:**
+   - Added `ensureFullWaxJS()` function
+   - Dynamically injects `<script src="/waxjs.js">` when needed
+   - Returns promise that resolves when library loaded
+
+3. **Intelligent Transaction Handling:**
+   - Updated `transact()` method to detect missing `wax.api`
+   - Automatically calls `ensureFullWaxJS()` to load full library
+   - Recreates wax instance with full library support
+   - Restores user session (no popup, uses cached credentials)
+   - Then executes the transaction successfully
+
+**HOW IT WORKS IN PRACTICE:**
+
+1. **Page loads with waxjs-simple.js** (60KB - fast!)
+   ```html
+   <script src="/waxjs-simple.js"></script>
+   ```
+
+2. **User connects wallet** - Simple library handles login fine ✅
+
+3. **User clicks "Purchase"** - Module calls `WalletManager.transact()`
+
+4. **Auto-detection triggers:**
+   ```
+   ⚠️ WaxJS api not initialized, attempting to load full library...
+   ⚠️ Transaction support not available, loading full WaxJS library...
+   ✅ Full WaxJS library loaded successfully
+   ✅ WaxJS instance recreated with full library support
+   ```
+
+5. **Transaction executes** successfully! ✅
+
+**BENEFITS:**
+- ✅ **Better Performance** - Pages load with 60KB instead of 351KB
+- ✅ **Zero Configuration** - No manual HTML changes needed per page
+- ✅ **Smart Upgrade** - Full library only loads when transaction attempted
+- ✅ **User Friendly** - Transparent to users, no extra popups or steps
+- ✅ **Backward Compatible** - Works with all existing pages
+
+**REAL-WORLD TESTING:**
+Tested on Railway production (phase3.html):
+- ✅ Page loaded with waxjs-simple.js
+- ✅ Auto-connected wallet successfully
+- ✅ Clicked "Purchase for 1 WAX" on Day NFT
+- ✅ Full library auto-loaded
+- ✅ Transaction succeeded: `f15e10dab4368053423a6b134f9b7a0cb91e74e8723defaf2ddeca0762e92f1a`
+- ✅ NFT minted to user's wallet
 
 **Files Modified:**
-- `/public/modules/wallet-manager.js` - Removed wait loops, fixed multi-module support
+- `/public/modules/wallet-manager.js` - Added auto-loading functions ⭐
 
 **Key Commits:**
-- `454ad95` - Remove wax.api wait loops and checks ⭐
-
-**Testing Notes:**
-- User needs to update phase3.html on Railway to load `/waxjs.js` instead of `/waxjs-simple.js`
-- After this change, Gated Paid Claim transactions should work correctly
+- `454ad95` - Remove wax.api wait loops and checks
+- `7691c5d` - Update phase3/phase7 to use waxjs.js (experiment)
+- `ad215d9` - Auto-load full waxjs.js when needed ✅ FINAL SOLUTION
 
 **Lessons Learned:**
 - Always investigate WHY a property is null before adding wait loops
 - Check what libraries are loaded and their actual implementations
-- Compare working vs. broken pages to find differences
-- Simple fixes > complex workarounds
+- Listen to user feedback - "fix the modules, not the HTML pages"
+- Smart auto-loading > manual configuration
+- Let code adapt to environment rather than requiring specific setup
+- Test in production to verify real-world behavior
 
 ---
 
