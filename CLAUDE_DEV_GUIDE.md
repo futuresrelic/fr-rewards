@@ -970,6 +970,8 @@ Config stored in database, fetched via API at runtime.
 - `fdb7459` - Improve: Replace JSON textarea with visual rewards builder UI
 - `0358629` - Update CLAUDE_DEV_GUIDE.md with rewards builder UX improvement
 - `c652d47` - **CRITICAL FIX:** Gated claims now check arbitrary templates (no database requirement)
+- `39ef1f2` - Update CLAUDE_DEV_GUIDE.md with eligibility API fix details
+- `bdb4e7a` - **CRITICAL FIX:** WalletManager now properly initializes wax.api for transactions
 
 **UX Improvement:**
 - **BEFORE:** Users had to manually write JSON in a textarea (error-prone!)
@@ -993,6 +995,22 @@ Config stored in database, fetched via API at runtime.
   - No need to add verification templates to database
   - Gated claims now work with ANY template ID
 - **BACKWARD COMPATIBLE:** Regular claims (no templates param) still use database
+
+**Critical Fix - Transaction Failures:**
+- **ISSUE:** Clicking "Purchase" threw error: `Cannot read properties of null (reading 'transact')`
+  - Session auto-restored successfully ✅
+  - Eligibility check worked ✅
+  - But transactions failed ❌
+- **ROOT CAUSE:** After auto-restore with `tryAutoLogin:true`, `wax.api` property was null
+  - WaxJS instance created but api not fully initialized
+  - First transaction attempt failed because `wax.api.transact()` → `null.transact()`
+  - Only affected modules with `auto_connect:true` (like gated-paid-claim)
+  - Paid-claim worked because it uses `auto_connect:false` (users manually connect)
+- **FIXES APPLIED:**
+  1. **Defensive check in `transact()`:** If `wax.api` is null, call `wax.login()` to reinitialize
+  2. **Verification in `restoreSession()`:** After auto-login, verify api exists, wait 500ms if needed
+  3. **Verification in `connectWCW()`:** Ensure api ready after manual connect
+- **RESULT:** Transactions now work correctly after auto-restore! ✅
 
 ---
 
