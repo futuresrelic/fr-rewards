@@ -64,6 +64,55 @@ window.WalletManager = (function() {
   }
 
   /**
+   * Check if full WaxJS library is loaded (with transaction support)
+   * Returns true if waxjs.js is loaded, false if waxjs-simple.js
+   */
+  function hasTransactionSupport() {
+    // If WaxJS exists but doesn't have proper API initialization, it's the simple version
+    // The simple version sets api as a method, not a property that gets initialized
+    const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
+    if (!WaxJS) return false;
+
+    // Create a test instance to check if it has transaction support
+    // The real waxjs.js will have eosjs bundled, the simple one won't
+    return typeof window.eosjs !== 'undefined' || WaxJS.toString().includes('eosjs');
+  }
+
+  /**
+   * Dynamically load the full WaxJS library if not already loaded
+   */
+  async function ensureFullWaxJS() {
+    // If already loaded, return
+    if (hasTransactionSupport()) {
+      console.log('✅ Full WaxJS library already loaded');
+      return true;
+    }
+
+    console.log('⚠️ Transaction support not available, loading full WaxJS library...');
+
+    return new Promise((resolve, reject) => {
+      // Check if script already exists
+      if (document.querySelector('script[src="/waxjs.js"]')) {
+        resolve(true);
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = '/waxjs.js';
+      script.onload = () => {
+        console.log('✅ Full WaxJS library loaded successfully');
+        resolve(true);
+      };
+      script.onerror = () => {
+        console.error('❌ Failed to load full WaxJS library');
+        reject(new Error('Failed to load waxjs.js'));
+      };
+
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
    * Restore existing session from localStorage
    */
   async function restoreSession() {
@@ -240,9 +289,46 @@ window.WalletManager = (function() {
     };
 
     if (currentWalletType === 'wcw' && wax) {
+      // If wax.api is not initialized, we might be using waxjs-simple.js
+      // Try to load the full library and recreate the instance
       if (!wax.api) {
-        throw new Error('WaxJS api not initialized. Make sure you are loading /waxjs.js (not /waxjs-simple.js) for pages that use transactions.');
+        console.warn('⚠️ WaxJS api not initialized, attempting to load full library...');
+
+        try {
+          // Load full WaxJS library
+          await ensureFullWaxJS();
+
+          // Recreate WaxJS instance with the full library
+          const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
+          if (!WaxJS) {
+            throw new Error('WaxJS not available after loading');
+          }
+
+          // Create new instance
+          wax = new WaxJS({
+            rpcEndpoint: 'https://wax.greymass.com',
+            tryAutoLogin: false
+          });
+
+          // Login to restore session (will use cached credentials, no popup)
+          const account = await wax.login();
+
+          if (!account || account !== currentAccount) {
+            throw new Error('Account mismatch after reinitializing WaxJS');
+          }
+
+          // Verify api is now initialized
+          if (!wax.api) {
+            throw new Error('WaxJS api still not initialized after loading full library');
+          }
+
+          console.log('✅ WaxJS instance recreated with full library support');
+        } catch (error) {
+          console.error('Failed to initialize transaction support:', error);
+          throw new Error('Transaction support unavailable. ' + error.message);
+        }
       }
+
       return await wax.api.transact({ actions }, transactOptions);
     } else if (currentWalletType === 'anchor' && anchor) {
       return await anchor.transact({ actions }, transactOptions);
