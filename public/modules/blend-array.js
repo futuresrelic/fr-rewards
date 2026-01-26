@@ -97,74 +97,51 @@ window.init_blend_array = function(containerId, config = {}) {
 
   // Check for existing session
   async function checkExistingSession() {
-    const savedAccount = localStorage.getItem('wax_account');
-    const savedWallet = localStorage.getItem('wax_wallet');
+    // Wait for WalletManager to initialize
+    let attempts = 0;
+    while (!window.WalletManager && attempts < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
 
-    if (savedAccount && savedWallet) {
-      currentAccount = savedAccount;
-      currentWalletType = savedWallet;
+    if (!window.WalletManager) {
+      console.warn('⚠️ WalletManager not available');
+      return;
+    }
 
-      if (savedWallet === 'anchor' && window.AnchorWallet) {
-        try {
-          const restored = await window.AnchorWallet.restoreSession();
-          if (restored) {
-            anchor = window.AnchorWallet;
-            currentAccount = restored;
-            showConnectedState();
-            console.log('✅ Auto-logged in with Anchor:', currentAccount);
-          }
-        } catch (error) {
-          console.log('⚠️ Anchor auto-login not available');
-          return;
-        }
-      } else if (savedWallet === 'wcw') {
-        // Initialize WaxJS for auto-login
-        const WaxLib = window.waxjs?.WaxJS || window.WaxJS;
-        if (WaxLib) {
-          try {
-            wax = new WaxLib({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: true });
+    // Get state from global WalletManager
+    const walletState = window.WalletManager.getState();
 
-            // Check if auto-login is available before calling login()
-            const isAutoLoginAvailable = await wax.isAutoLoginAvailable();
-
-            if (isAutoLoginAvailable) {
-              const autoLoginAccount = await wax.login();
-              if (autoLoginAccount) {
-                currentAccount = autoLoginAccount;
-                if (autoLoginAccount !== savedAccount) {
-                  localStorage.setItem('wax_account', autoLoginAccount);
-                }
-                showConnectedState();
-                console.log('✅ Auto-logged in with WCW:', currentAccount);
-              }
-            } else {
-              console.log('⚠️ WCW auto-login not available (user needs to connect manually)');
-              // Don't call login() - it would show the popup
-              // User will need to click connect button
-            }
-          } catch (error) {
-            console.log('⚠️ WCW auto-login failed:', error.message);
-          }
-        }
-      }
+    if (walletState.isConnected) {
+      currentAccount = walletState.account;
+      currentWalletType = walletState.walletType;
+      wax = walletState.wax;
+      anchor = walletState.anchor;
+      showConnectedState();
+      console.log('✅ Session restored from WalletManager:', currentAccount);
     }
   }
 
-  // Connect wallet
+  // Connect wallet (use WalletManager)
   async function connectWallet(walletType) {
     try {
       hideError();
 
-      if (walletType === 'wcw') {
-        await connectWCW();
-      } else if (walletType === 'anchor') {
-        await connectAnchor();
+      if (!window.WalletManager) {
+        throw new Error('WalletManager not initialized. Please refresh the page.');
       }
 
-      if (currentAccount) {
-        currentWalletType = walletType;
-        localStorage.setItem('wax_account', currentAccount);
-        localStorage.setItem('wax_wallet', walletType);
+      // Use global WalletManager to connect
+      await window.WalletManager.connect(walletType);
+
+      // Get updated state from WalletManager
+      const walletState = window.WalletManager.getState();
+
+      if (walletState.isConnected) {
+        currentAccount = walletState.account;
+        currentWalletType = walletState.walletType;
+        wax = walletState.wax;
+        anchor = walletState.anchor;
         showConnectedState();
       }
     } catch (error) {
@@ -173,41 +150,20 @@ window.init_blend_array = function(containerId, config = {}) {
     }
   }
 
-  // Connect WCW
-  async function connectWCW() {
-    const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
-    if (!WaxJS) throw new Error('WaxJS not loaded');
-
-    wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: false });
-    currentAccount = await wax.login();
-  }
-
-  // Connect Anchor
-  async function connectAnchor() {
-    if (!window.AnchorWallet) {
-      throw new Error('Anchor wallet not loaded. Please refresh the page or use WAX Cloud Wallet.');
-    }
-
-    anchor = window.AnchorWallet;
-    currentAccount = await anchor.login();
-  }
-
-  // Disconnect wallet
+  // Disconnect wallet (use WalletManager)
   async function disconnect() {
-    if (currentWalletType === 'anchor' && anchor) {
-      try {
-        await anchor.logout();
-      } catch (error) {
-        console.error('Error logging out of Anchor:', error);
-      }
+    if (!window.WalletManager) {
+      console.warn('WalletManager not available');
+      return;
     }
 
+    await window.WalletManager.disconnect();
+
+    // Clear local state
     currentAccount = null;
     wax = null;
     anchor = null;
     currentWalletType = null;
-    localStorage.removeItem('wax_account');
-    localStorage.removeItem('wax_wallet');
     userAssets = [];
     availableBlends = [];
     showNotConnectedState();
@@ -609,8 +565,10 @@ window.init_blend_array = function(containerId, config = {}) {
 
       showProcessingModal('Executing Blend', 'Please sign the transaction in your wallet...');
 
-      // Get wallet API
-      const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
+      // Use global WalletManager for transaction
+      if (!window.WalletManager) {
+        throw new Error('WalletManager not initialized. Please refresh the page.');
+      }
 
       // Prepare NeftyBlocks blend transaction (3 actions)
       // Action 1: announcedepo - Announce deposit to contract
@@ -666,8 +624,8 @@ window.init_blend_array = function(containerId, config = {}) {
         assets: assetIdsArray
       });
 
-      // Execute blend transaction
-      const result = await walletApi.transact({ actions }, {
+      // Execute blend transaction using WalletManager (auto-loads full library if needed)
+      const result = await window.WalletManager.transact(actions, {
         blocksBehind: 3,
         expireSeconds: 30
       });
