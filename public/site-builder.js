@@ -146,6 +146,46 @@ const AVAILABLE_MODULES = [
       payment_wallet: { type: 'text', label: 'Payment Wallet', default: 'futuresrelic', help: 'Wallet to receive WAX payments' },
       rewards: { type: 'custom-rewards-builder', label: 'Rewards', default: '[]', help: 'Configure rewards available for purchase' }
     }
+  },
+  {
+    id: 'unified-module',
+    name: '⭐ Unified Module',
+    icon: '🎯',
+    description: 'All-in-one module with dropdown selector - RECOMMENDED',
+    config: {
+      module_type: {
+        type: 'select',
+        label: 'Module Type',
+        default: 'paid-claim',
+        options: ['paid-claim', 'nefty-drop', 'text-block', 'image-block', 'claim-rewards', 'factory-craft', 'transfer-mode', 'unpack', 'blend-array', 'gated-paid-claim'],
+        help: 'Select the type of functionality for this module'
+      },
+      // Paid Claim configs
+      template_id: { type: 'text', label: '[Paid Claim] Template ID', default: '', help: 'NFT template ID to sell' },
+      template_name: { type: 'text', label: '[Paid Claim] Template Name', default: 'NFT', help: 'Display name for the NFT' },
+      template_image: { type: 'text', label: '[Paid Claim] Image URL', default: '', help: 'Image/video URL for the NFT' },
+      price_wax: { type: 'text', label: '[Paid Claim] Price (WAX)', default: '10', help: 'Price in WAX tokens' },
+      payment_wallet: { type: 'text', label: '[Paid Claim] Payment Wallet', default: 'futuresrelic', help: 'Wallet to receive payments' },
+      max_supply: { type: 'text', label: '[Paid Claim] Max Supply', default: '', help: 'Maximum supply available (optional)' },
+      per_wallet_limit: { type: 'text', label: '[Paid Claim] Per Wallet Limit', default: '', help: 'Max purchases per wallet (optional)' },
+      wallet_limit_cooldown: { type: 'text', label: '[Paid Claim] Wallet Cooldown (hrs)', default: '', help: 'Hours before wallet limit resets' },
+      // NeftyBlocks Drop configs
+      collection: { type: 'text', label: '[NeftyDrop] Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
+      drop_id: { type: 'text', label: '[NeftyDrop] Drop ID', default: '', help: 'NeftyBlocks drop ID' },
+      // Text Block configs
+      heading: { type: 'text', label: '[TextBlock] Heading', default: '', help: 'Optional heading' },
+      content: { type: 'textarea', label: '[TextBlock] Content', default: 'Enter your text here...', help: 'Main text content (supports HTML)' },
+      style: { type: 'select', label: '[TextBlock] Style', default: 'normal', options: ['normal', 'narrative', 'alert', 'quote'], help: 'Visual style' },
+      // Image Block configs
+      image_url: { type: 'text', label: '[ImageBlock] Image URL', default: '', help: 'URL to the image file' },
+      alt_text: { type: 'text', label: '[ImageBlock] Alt Text', default: 'Image', help: 'Alternative text for accessibility' },
+      caption: { type: 'text', label: '[ImageBlock] Caption', default: '', help: 'Optional caption below the image' },
+      width: { type: 'select', label: '[ImageBlock] Width', default: 'auto', options: ['auto', '300px', '500px', '100%'], help: 'Image width' },
+      alignment: { type: 'select', label: '[ImageBlock] Alignment', default: 'center', options: ['left', 'center', 'right'], help: 'Image alignment' },
+      // Common configs
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false, help: 'Automatically connect wallet on load (for wallet-based modules)' },
+      show_purchase_history: { type: 'checkbox', label: 'Show Purchase History', default: true, help: 'Display user purchase history (for paid claim)' }
+    }
   }
 ];
 

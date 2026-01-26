@@ -194,7 +194,9 @@ window.WalletManager = (function() {
     isConnecting = true;
 
     try {
+      // Ensure full WaxJS is loaded before connecting WCW
       if (walletType === 'wcw') {
+        await ensureFullWaxJS();
         await connectWCW();
       } else if (walletType === 'anchor') {
         await connectAnchor();
