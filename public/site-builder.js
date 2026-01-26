@@ -481,11 +481,29 @@ function renderConfigPanel() {
   configTitle.textContent = `${moduleInfo.icon} ${moduleInfo.name} Configuration`;
   configForm.innerHTML = '';
 
+  // Check if this is the unified module
+  const isUnifiedModule = module.moduleType === 'unified-module';
+
   // Render config fields
   Object.keys(moduleInfo.config).forEach(key => {
     const field = moduleInfo.config[key];
     const section = document.createElement('div');
     section.className = 'config-section';
+
+    // For unified module, add data attribute for field type filtering
+    if (isUnifiedModule) {
+      // Extract module type from label (e.g., "[Paid Claim]" -> "paid-claim")
+      const match = field.label.match(/^\[(.*?)\]/);
+      if (match) {
+        const fieldModuleType = match[1].toLowerCase().replace(/\s+/g, '-');
+        section.setAttribute('data-unified-field-type', fieldModuleType);
+      } else if (key === 'module_type') {
+        section.setAttribute('data-unified-field-type', 'always-show');
+      } else {
+        // Common fields (auto_connect, show_purchase_history)
+        section.setAttribute('data-unified-field-type', 'common');
+      }
+    }
 
     if (field.type === 'checkbox') {
       section.innerHTML = `
@@ -556,6 +574,11 @@ function renderConfigPanel() {
     setupRewardsBuilder(module);
   }
 
+  // Setup unified module field filtering
+  if (isUnifiedModule) {
+    setupUnifiedModuleFieldFiltering(module);
+  }
+
   // Add apply button
   const applyBtn = document.createElement('button');
   applyBtn.className = 'btn btn-primary';
@@ -564,6 +587,70 @@ function renderConfigPanel() {
   applyBtn.textContent = '✓ Apply Changes';
   applyBtn.addEventListener('click', applyConfig);
   configForm.appendChild(applyBtn);
+}
+
+// Setup unified module field filtering
+function setupUnifiedModuleFieldFiltering(module) {
+  const moduleTypeDropdown = configForm.querySelector('[data-key="module_type"]');
+  if (!moduleTypeDropdown) return;
+
+  // Function to filter fields based on selected module type
+  function filterFields() {
+    const selectedType = moduleTypeDropdown.value;
+    console.log(`🎯 Unified Module: Filtering fields for type "${selectedType}"`);
+
+    // Get all config sections
+    const sections = configForm.querySelectorAll('.config-section');
+
+    sections.forEach(section => {
+      const fieldType = section.getAttribute('data-unified-field-type');
+
+      if (!fieldType) {
+        // No attribute = regular module, always show
+        section.style.display = '';
+        return;
+      }
+
+      if (fieldType === 'always-show') {
+        // Always show (module_type dropdown itself)
+        section.style.display = '';
+        return;
+      }
+
+      if (fieldType === 'common') {
+        // Common fields - show for wallet-based modules
+        const walletModules = ['paid-claim', 'gated-paid-claim', 'claim-rewards', 'factory-craft', 'transfer-mode', 'unpack', 'blend-array'];
+        section.style.display = walletModules.includes(selectedType) ? '' : 'none';
+        return;
+      }
+
+      // Field belongs to specific module type
+      // Map friendly names to module types
+      const typeMap = {
+        'paid-claim': 'paid-claim',
+        'neftydrop': 'nefty-drop',
+        'textblock': 'text-block',
+        'imageblock': 'image-block',
+        'claim-rewards': 'claim-rewards',
+        'gated-paid-claim': 'gated-paid-claim',
+        'factory-craft': 'factory-craft',
+        'transfer-mode': 'transfer-mode',
+        'unpack': 'unpack',
+        'blend-array': 'blend-array'
+      };
+
+      const mappedType = typeMap[fieldType] || fieldType;
+
+      // Show if field type matches selected type
+      section.style.display = mappedType === selectedType ? '' : 'none';
+    });
+  }
+
+  // Run filter immediately
+  filterFields();
+
+  // Add event listener for dropdown changes
+  moduleTypeDropdown.addEventListener('change', filterFields);
 }
 
 // Fetch template data from AtomicAssets API (for paid-claim module)
