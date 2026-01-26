@@ -905,6 +905,81 @@ sleep 4 && git push -u origin claude/your-branch-name
 
 ## 📝 CHANGELOG
 
+### **January 25, 2026** - Fixed All Transaction Modules to Use WalletManager 🔧
+**Session ID:** `claude/review-previous-conversation-yWrBD` (continued)
+
+**Status:** ✅ COMPLETED - All modules now use WalletManager
+
+**CRITICAL ISSUE:**
+User reported Unpack module failing with "Cannot read properties of null (reading 'transact')".
+Investigation revealed **ALL old-style modules** had same issue - calling `wax.api.transact()` directly
+instead of using `WalletManager.transact()` with auto-loading support.
+
+**AFFECTED MODULES:**
+- ❌ unpack.js - Pack unpacking (AtomicPacksX)
+- ❌ blend-array.js - NeftyBlocks blending
+- ❌ factory-craft.js - Factory crafting system
+- ❌ transfer-mode.js - NFT transfer tool
+
+**ROOT CAUSE:**
+Old-style modules (using `window.init_` pattern) managed their own wallet connections separately
+from global WalletManager. They created local `wax` instances using `waxjs-simple.js` which doesn't
+initialize `wax.api`, causing `wax.api.transact()` to fail with null reference.
+
+**THE FIX:**
+
+Refactored all four modules to use global WalletManager for ALL wallet operations:
+
+**1. Session Restore:**
+```javascript
+// OLD: Created own wax instance with session restore logic
+// NEW: Use WalletManager.getState()
+const walletState = window.WalletManager.getState();
+if (walletState.isConnected) {
+  currentAccount = walletState.account;
+  // ... use shared state
+}
+```
+
+**2. Connect Wallet:**
+```javascript
+// OLD: Created own wax instance
+// NEW: Use WalletManager.connect()
+await window.WalletManager.connect(walletType);
+const walletState = window.WalletManager.getState();
+```
+
+**3. Transactions:**
+```javascript
+// OLD: const walletApi = wax.api; await walletApi.transact({ actions }, options);
+// NEW: await window.WalletManager.transact(actions, options);
+```
+
+**4. Disconnect:**
+```javascript
+// OLD: Manual logout + localStorage cleanup
+// NEW: await window.WalletManager.disconnect();
+```
+
+**BENEFITS:**
+- ✅ Auto-loads full waxjs.js when transactions needed (60KB → 351KB only when needed)
+- ✅ Shares wallet state across all modules on same page
+- ✅ No duplicate wallet connection logic
+- ✅ Consistent behavior across ALL modules
+- ✅ **Modules reduced by ~50-100 lines** (removed duplicate wallet code)
+
+**KEY COMMITS:**
+- `458be7b` - Fix Unpack module ⭐
+- `73cb2bc` - Fix Blend-Array module ⭐
+- `427dbd0` - Fix Factory-Craft module ⭐
+- `d7a60ca` - Fix Transfer-Mode module ⭐
+
+**RESULT:**
+All transaction modules now work with `waxjs-simple.js` loaded by default,
+automatically upgrading to full library when transactions executed!
+
+---
+
 ### **January 25, 2026** - Gated Paid Claim Cooldown Sync Fix ⏰
 **Session ID:** `claude/review-previous-conversation-yWrBD` (continued)
 
