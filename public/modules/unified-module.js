@@ -22,10 +22,18 @@ window.init_unified_module = function(containerId, config = {}) {
   console.log(`✅ Unified Module initialized in #${containerId}`);
   console.log('Config:', config);
 
-  const container = document.getElementById(containerId);
+  // Get container - it might be passed as ID or the element itself
+  const container = typeof containerId === 'string' ? document.getElementById(containerId) : containerId;
   if (!container) {
     console.error('Container not found:', containerId);
     return;
+  }
+
+  // Find the unified-module-container div within this container
+  let targetContainer = container.querySelector('.unified-module-container');
+  if (!targetContainer) {
+    // If not found, use the container directly
+    targetContainer = container;
   }
 
   const MODULE_TYPE = config.module_type || 'paid-claim';
@@ -47,18 +55,18 @@ window.init_unified_module = function(containerId, config = {}) {
 
   // Special handlers for simple modules (text-block, image-block)
   if (MODULE_TYPE === 'text-block') {
-    initTextBlock(container, config);
+    initTextBlock(targetContainer, config);
     return;
   }
 
   if (MODULE_TYPE === 'image-block') {
-    initImageBlock(container, config);
+    initImageBlock(targetContainer, config);
     return;
   }
 
   // Special handler for nefty-drop (doesn't need a module file)
   if (MODULE_TYPE === 'nefty-drop') {
-    initNeftyDrop(container, config);
+    initNeftyDrop(targetContainer, config);
     return;
   }
 
@@ -66,7 +74,7 @@ window.init_unified_module = function(containerId, config = {}) {
   const initFunctionName = MODULE_INIT_FUNCTIONS[MODULE_TYPE];
 
   if (!initFunctionName) {
-    container.innerHTML = `
+    targetContainer.innerHTML = `
       <div class="card" style="padding: 20px; text-align: center; background: var(--bg-dark); border: 2px solid var(--error);">
         <p style="color: var(--error); font-weight: 600; margin: 0;">⚠️ Unknown Module Type</p>
         <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 10px 0 0;">
@@ -77,14 +85,21 @@ window.init_unified_module = function(containerId, config = {}) {
     return;
   }
 
+  // Create a unique ID for the target container if it doesn't have one
+  if (!targetContainer.id) {
+    targetContainer.id = `unified-module-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  const targetContainerId = targetContainer.id;
+
   // Wait for the module's init function to be available
   const checkAndInit = setInterval(() => {
     if (window[initFunctionName]) {
       clearInterval(checkAndInit);
-      console.log(`✅ Calling ${initFunctionName}()`);
+      console.log(`✅ Calling ${initFunctionName}() with container #${targetContainerId}`);
 
-      // Call the existing module's init function with the container ID and config
-      window[initFunctionName](containerId, config);
+      // Call the existing module's init function with the target container ID and config
+      window[initFunctionName](targetContainerId, config);
     }
   }, 100);
 
@@ -93,7 +108,7 @@ window.init_unified_module = function(containerId, config = {}) {
     clearInterval(checkAndInit);
     if (!window[initFunctionName]) {
       console.error(`❌ Failed to load ${initFunctionName} after 10 seconds`);
-      container.innerHTML = `
+      targetContainer.innerHTML = `
         <div class="card" style="padding: 20px; text-align: center; background: var(--bg-dark); border: 2px solid var(--warning);">
           <p style="color: var(--warning); font-weight: 600; margin: 0;">⚠️ Module Not Loaded</p>
           <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 10px 0 0;">
