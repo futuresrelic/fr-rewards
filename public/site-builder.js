@@ -160,31 +160,69 @@ const AVAILABLE_MODULES = [
         options: ['paid-claim', 'nefty-drop', 'text-block', 'image-block', 'claim-rewards', 'factory-craft', 'transfer-mode', 'unpack', 'blend-array', 'gated-paid-claim'],
         help: 'Select the type of functionality for this module'
       },
-      // Paid Claim configs
+
+      // === PAID CLAIM CONFIGS ===
       template_id: { type: 'text', label: '[Paid Claim] Template ID', default: '', help: 'NFT template ID to sell' },
       template_name: { type: 'text', label: '[Paid Claim] Template Name', default: 'NFT', help: 'Display name for the NFT' },
       template_image: { type: 'text', label: '[Paid Claim] Image URL', default: '', help: 'Image/video URL for the NFT' },
       price_wax: { type: 'text', label: '[Paid Claim] Price (WAX)', default: '10', help: 'Price in WAX tokens' },
       payment_wallet: { type: 'text', label: '[Paid Claim] Payment Wallet', default: 'futuresrelic', help: 'Wallet to receive payments' },
+      collection_name: { type: 'text', label: '[Paid Claim] Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
       max_supply: { type: 'text', label: '[Paid Claim] Max Supply', default: '', help: 'Maximum supply available (optional)' },
       per_wallet_limit: { type: 'text', label: '[Paid Claim] Per Wallet Limit', default: '', help: 'Max purchases per wallet (optional)' },
       wallet_limit_cooldown: { type: 'text', label: '[Paid Claim] Wallet Cooldown (hrs)', default: '', help: 'Hours before wallet limit resets' },
-      // NeftyBlocks Drop configs
+      supply_limit_cooldown: { type: 'text', label: '[Paid Claim] Supply Cooldown (hrs)', default: '', help: 'Hours before supply limit resets (optional)' },
+      show_purchase_history: { type: 'checkbox', label: '[Paid Claim] Show Purchase History', default: true, help: 'Display user purchase history' },
+
+      // === NEFTYBLOCKS DROP CONFIGS ===
       collection: { type: 'text', label: '[NeftyDrop] Collection Name', default: 'futuresrelic', help: 'WAX collection name' },
-      drop_id: { type: 'text', label: '[NeftyDrop] Drop ID', default: '', help: 'NeftyBlocks drop ID' },
-      // Text Block configs
+      drop_id: { type: 'text', label: '[NeftyDrop] Drop ID', default: '', help: 'NeftyBlocks drop ID (e.g., 229014)' },
+      limit: { type: 'text', label: '[NeftyDrop] Limit', default: '1', help: 'Number of drops to show' },
+
+      // === TEXT BLOCK CONFIGS ===
       heading: { type: 'text', label: '[TextBlock] Heading', default: '', help: 'Optional heading' },
       content: { type: 'textarea', label: '[TextBlock] Content', default: 'Enter your text here...', help: 'Main text content (supports HTML)' },
       style: { type: 'select', label: '[TextBlock] Style', default: 'normal', options: ['normal', 'narrative', 'alert', 'quote'], help: 'Visual style' },
-      // Image Block configs
+
+      // === IMAGE BLOCK CONFIGS ===
       image_url: { type: 'text', label: '[ImageBlock] Image URL', default: '', help: 'URL to the image file' },
       alt_text: { type: 'text', label: '[ImageBlock] Alt Text', default: 'Image', help: 'Alternative text for accessibility' },
       caption: { type: 'text', label: '[ImageBlock] Caption', default: '', help: 'Optional caption below the image' },
       width: { type: 'select', label: '[ImageBlock] Width', default: 'auto', options: ['auto', '300px', '500px', '100%'], help: 'Image width' },
       alignment: { type: 'select', label: '[ImageBlock] Alignment', default: 'center', options: ['left', 'center', 'right'], help: 'Image alignment' },
-      // Common configs
-      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false, help: 'Automatically connect wallet on load (for wallet-based modules)' },
-      show_purchase_history: { type: 'checkbox', label: 'Show Purchase History', default: true, help: 'Display user purchase history (for paid claim)' }
+
+      // === CLAIM REWARDS CONFIGS ===
+      title: { type: 'text', label: '[Claim Rewards] Custom Title', default: '', help: 'Override module title (optional)' },
+      verification_templates: { type: 'text', label: '[Claim Rewards] Verification Template IDs', default: '', help: 'Comma-separated template IDs users must own (e.g., 247050,247051,247052)' },
+      reward_template_id: { type: 'text', label: '[Claim Rewards] Reward Template ID', default: '', help: 'Template ID to mint as reward' },
+      reward_name: { type: 'text', label: '[Claim Rewards] Reward Name', default: '', help: 'Display name for the reward' },
+      reward_quantity: { type: 'text', label: '[Claim Rewards] Reward Quantity', default: '1', help: 'Number of NFTs to mint per claim' },
+      cooldown_hours: { type: 'text', label: '[Claim Rewards] Cooldown (hours)', default: '24', help: 'Hours before user can claim again' },
+      max_claims: { type: 'text', label: '[Claim Rewards] Max Claims', default: '', help: 'Maximum total claims allowed (optional)' },
+      show_only_reward_id: { type: 'text', label: '[Claim Rewards] Show Only Reward ID', default: '', help: 'Show only specific reward by ID (optional)' },
+      highlight_reward_id: { type: 'text', label: '[Claim Rewards] Highlight Reward ID', default: '', help: 'Highlight specific reward with border (optional)' },
+
+      // === GATED PAID CLAIM CONFIGS ===
+      rewards: { type: 'custom-rewards-builder', label: '[Gated Paid Claim] Rewards', default: '[]', help: 'Configure rewards available for purchase' },
+
+      // === FACTORY CRAFT CONFIGS ===
+      show_category: { type: 'text', label: '[Factory Craft] Filter by Category', default: '', help: 'Show only recipes from this category (optional)' },
+      show_recipe_id: { type: 'text', label: '[Factory Craft] Show Specific Recipe ID', default: '', help: 'Show only this recipe by ID (optional)' },
+      recipe_name: { type: 'text', label: '[Factory Craft] Recipe Name', default: '', help: 'Display name for the craft recipe' },
+      category: { type: 'text', label: '[Factory Craft] Category', default: '', help: 'Recipe category (e.g., Weapons, Armor, Tools)' },
+      ingredient_templates: { type: 'text', label: '[Factory Craft] Ingredient Template IDs', default: '', help: 'Comma-separated template IDs and quantities (e.g., 219904:4,246504:1)' },
+      result_templates: { type: 'text', label: '[Factory Craft] Result Template IDs', default: '', help: 'Comma-separated template IDs and quantities (e.g., 391378:1)' },
+      max_batch_size: { type: 'text', label: '[Factory Craft] Max Batch Size', default: '5', help: 'Maximum number of crafts in one transaction' },
+      craft_cooldown: { type: 'text', label: '[Factory Craft] Craft Cooldown (hours)', default: '0', help: 'Hours before user can craft again' },
+      enable_pool_mode: { type: 'checkbox', label: '[Factory Craft] Enable Pool/Swap Mode', default: false, help: 'Allow swapping from pool wallet (pre-minted results)' },
+      pool_discount: { type: 'text', label: '[Factory Craft] Pool Ingredient Discount', default: '1', help: 'Reduce ingredients needed for pool mode (e.g., 3 instead of 4)' },
+      pool_wallet: { type: 'text', label: '[Factory Craft] Pool Wallet', default: 'pool.fr', help: 'Wallet holding pre-minted results for swap mode' },
+
+      // === BLEND ARRAY CONFIGS ===
+      blend_ids: { type: 'text', label: '[Blend Array] Blend IDs', default: '', help: 'Comma-separated NeftyBlocks blend IDs' },
+
+      // === COMMON WALLET CONFIGS (shown for wallet-based modules) ===
+      auto_connect: { type: 'checkbox', label: 'Auto-connect wallet', default: false, help: 'Automatically connect wallet on load (for wallet-based modules)' }
     }
   }
 ];
@@ -642,7 +680,23 @@ function setupUnifiedModuleFieldFiltering(module) {
       const mappedType = typeMap[fieldType] || fieldType;
 
       // Show if field type matches selected type
-      section.style.display = mappedType === selectedType ? '' : 'none';
+      // Also show shared fields for modules that use them
+      const sharedFields = {
+        'collection': ['nefty-drop', 'claim-rewards', 'gated-paid-claim', 'factory-craft', 'transfer-mode', 'unpack', 'blend-array'],
+        'title': ['claim-rewards', 'gated-paid-claim', 'factory-craft'],
+        'verification_templates': ['claim-rewards', 'gated-paid-claim'],
+        'payment_wallet': ['paid-claim', 'gated-paid-claim'],
+        'template_id': ['paid-claim', 'unpack']
+      };
+
+      const input = section.querySelector('input, select, textarea');
+      const fieldKey = input ? input.getAttribute('data-key') : null;
+
+      if (fieldKey && sharedFields[fieldKey]) {
+        section.style.display = sharedFields[fieldKey].includes(selectedType) ? '' : 'none';
+      } else {
+        section.style.display = mappedType === selectedType ? '' : 'none';
+      }
     });
   }
 
