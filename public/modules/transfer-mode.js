@@ -92,49 +92,53 @@ window.init_transfer_mode = function(containerId, config = {}) {
     if (sendBtn) sendBtn.addEventListener('click', sendTransfer);
   }
 
-  // Check for existing session
+  // Check for existing session (use WalletManager)
   async function checkExistingSession() {
-    const savedAccount = localStorage.getItem('wax_account');
-    const savedWallet = localStorage.getItem('wax_wallet');
+    // Wait for WalletManager to initialize
+    let attempts = 0;
+    while (!window.WalletManager && attempts < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
 
-    if (savedAccount && savedWallet) {
-      currentAccount = savedAccount;
-      currentWalletType = savedWallet;
+    if (!window.WalletManager) {
+      console.warn('⚠️ WalletManager not available');
+      return;
+    }
 
-      if (savedWallet === 'anchor' && window.AnchorWallet) {
-        try {
-          const restored = await window.AnchorWallet.restoreSession();
-          if (restored) {
-            anchor = window.AnchorWallet;
-            currentAccount = restored;
-          }
-        } catch (error) {
-          console.warn('Could not restore Anchor session:', error);
-          localStorage.removeItem('wax_account');
-          localStorage.removeItem('wax_wallet');
-          return;
-        }
-      }
+    // Get state from global WalletManager
+    const walletState = window.WalletManager.getState();
 
+    if (walletState.isConnected) {
+      currentAccount = walletState.account;
+      currentWalletType = walletState.walletType;
+      wax = walletState.wax;
+      anchor = walletState.anchor;
       showConnectedState();
+      console.log('✅ Session restored from WalletManager:', currentAccount);
     }
   }
 
-  // Connect wallet
+  // Connect wallet (use WalletManager)
   async function connectWallet(walletType) {
     try {
       hideError();
 
-      if (walletType === 'wcw') {
-        await connectWCW();
-      } else if (walletType === 'anchor') {
-        await connectAnchor();
+      if (!window.WalletManager) {
+        throw new Error('WalletManager not initialized. Please refresh the page.');
       }
 
-      if (currentAccount) {
-        currentWalletType = walletType;
-        localStorage.setItem('wax_account', currentAccount);
-        localStorage.setItem('wax_wallet', walletType);
+      // Use global WalletManager to connect
+      await window.WalletManager.connect(walletType);
+
+      // Get updated state from WalletManager
+      const walletState = window.WalletManager.getState();
+
+      if (walletState.isConnected) {
+        currentAccount = walletState.account;
+        currentWalletType = walletState.walletType;
+        wax = walletState.wax;
+        anchor = walletState.anchor;
         showConnectedState();
       }
     } catch (error) {
@@ -143,41 +147,20 @@ window.init_transfer_mode = function(containerId, config = {}) {
     }
   }
 
-  // Connect Wax Cloud Wallet
-  async function connectWCW() {
-    const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
-    if (!WaxJS) throw new Error('WaxJS not loaded');
-
-    wax = new WaxJS({ rpcEndpoint: 'https://wax.greymass.com', tryAutoLogin: false });
-    currentAccount = await wax.login();
-  }
-
-  // Connect Anchor
-  async function connectAnchor() {
-    if (!window.AnchorWallet) {
-      throw new Error('Anchor wallet not loaded. Please refresh the page or use WAX Cloud Wallet.');
-    }
-
-    anchor = window.AnchorWallet;
-    currentAccount = await anchor.login();
-  }
-
-  // Disconnect wallet
+  // Disconnect wallet (use WalletManager)
   async function disconnect() {
-    if (currentWalletType === 'anchor' && anchor) {
-      try {
-        await anchor.logout();
-      } catch (error) {
-        console.error('Error logging out of Anchor:', error);
-      }
+    if (!window.WalletManager) {
+      console.warn('WalletManager not available');
+      return;
     }
 
+    await window.WalletManager.disconnect();
+
+    // Clear local state
     currentAccount = null;
     wax = null;
     anchor = null;
     currentWalletType = null;
-    localStorage.removeItem('wax_account');
-    localStorage.removeItem('wax_wallet');
     userAssets = [];
     selectedAssetIds.clear();
     showNotConnectedState();
@@ -366,8 +349,10 @@ window.init_transfer_mode = function(containerId, config = {}) {
 
       showProcessingModal('Preparing Transfer', 'Please sign the transaction in your wallet...');
 
-      // Get the correct wallet API
-      const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
+      // Use global WalletManager for transaction
+      if (!window.WalletManager) {
+        throw new Error('WalletManager not initialized. Please refresh the page.');
+      }
 
       // Prepare transfer transaction
       const actions = [{
@@ -385,8 +370,8 @@ window.init_transfer_mode = function(containerId, config = {}) {
         }
       }];
 
-      // Execute transfer
-      const result = await walletApi.transact({ actions }, {
+      // Execute transfer using WalletManager (auto-loads full library if needed)
+      const result = await window.WalletManager.transact(actions, {
         blocksBehind: 3,
         expireSeconds: 30
       });
