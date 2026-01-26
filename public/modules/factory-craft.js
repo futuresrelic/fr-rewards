@@ -47,26 +47,10 @@ window.init_factory_craft = function(containerId, config = {}) {
 
   // Wait for wallet libraries to load
   async function waitForLibraries() {
-    // Check WaxJS
-    if (window.WaxJS || window.waxjs?.WaxJS) {
-      console.log('✅ WaxJS loaded');
-    } else {
-      console.error('❌ WaxJS not loaded');
-    }
-
-    // Wait for Anchor to load
-    let attempts = 0;
-    while (!window.AnchorWallet && attempts < 50) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      attempts++;
-    }
-
-    if (window.AnchorWallet) {
-      console.log('✅ Anchor wallet loaded');
-    } else {
-      console.warn('⚠️ Anchor wallet not loaded (will be disabled)');
-    }
-
+    // NOTE: WalletManager now auto-loads WaxJS when needed for transactions.
+    // We don't need to wait for libraries here - they'll be loaded on-demand.
+    // This function kept for compatibility but is effectively a no-op.
+    console.log('ℹ️ Using WalletManager for on-demand library loading');
     return true;
   }
 

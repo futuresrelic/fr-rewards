@@ -238,15 +238,18 @@ function initNeftyDrop(container, config) {
 
   console.log(`✅ NeftyBlocks Drop initialized: ${collection} - Drop #${dropId}`);
 
+  // Use the correct embed URL format
+  const embedUrl = `https://neftyblocks.com/c/${collection}/drops/${dropId}/embed`;
+
   container.innerHTML = `
     <div class="card" style="padding: 0; overflow: hidden;">
       <iframe
-        src="https://neftyblocks.com/c/${collection}/drops/${dropId}/embed"
+        src="${embedUrl}"
         width="100%"
         height="800"
         style="border: none; border-radius: 8px; display: block;"
         allow="payment"
-        title="NeftyBlocks Drop"
+        title="NeftyBlocks Drop #${dropId}"
       ></iframe>
     </div>
   `;
