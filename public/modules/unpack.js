@@ -536,12 +536,9 @@ window.init_unpack = function(containerId, config = {}) {
         throw new Error('Wallet not connected. Please connect your wallet first.');
       }
 
-      if (currentWalletType === 'anchor' && !anchor) {
-        throw new Error('Anchor wallet not initialized. Please reconnect your wallet.');
-      }
-
-      if (currentWalletType === 'wcw' && !wax) {
-        throw new Error('WaxJS wallet not initialized. Please reconnect your wallet.');
+      // Use global WalletManager for transaction (supports auto-loading full waxjs.js)
+      if (!window.WalletManager) {
+        throw new Error('WalletManager not initialized. Please refresh the page.');
       }
 
       const rollIds = asset.roll_ids || [];
@@ -561,9 +558,6 @@ window.init_unpack = function(containerId, config = {}) {
         console.warn('Could not fetch unbox details:', err);
       }
 
-      // Get wallet API
-      const walletApi = currentWalletType === 'anchor' ? anchor.api : wax.api;
-
       // Prepare claim transaction
       const actions = [{
         account: 'atomicpacksx',
@@ -578,8 +572,8 @@ window.init_unpack = function(containerId, config = {}) {
         }
       }];
 
-      // Execute claim
-      const result = await walletApi.transact({ actions }, {
+      // Execute claim using WalletManager (auto-loads full library if needed)
+      const result = await window.WalletManager.transact(actions, {
         blocksBehind: 3,
         expireSeconds: 90
       });
