@@ -39,18 +39,18 @@ window.init_unified_module = function(containerId, config = {}) {
   const MODULE_TYPE = config.module_type || 'paid-claim';
   console.log(`🎯 Module Type: ${MODULE_TYPE}`);
 
-  // Module type to init function mapping
+  // Module type to init function and file mapping
   const MODULE_INIT_FUNCTIONS = {
-    'paid-claim': 'init_paid_claim',
-    'nefty-drop': 'init_nefty_drop',
-    'claim-rewards': 'init_claim_rewards',
-    'gated-paid-claim': 'init_gated_paid_claim',
-    'factory-craft': 'init_factory_craft',
-    'transfer-mode': 'init_transfer_mode',
-    'unpack': 'init_unpack',
-    'blend-array': 'init_blend_array',
-    'text-block': 'init_text_block',
-    'image-block': 'init_image_block'
+    'paid-claim': { init: 'init_paid_claim', file: 'paid-claim.js' },
+    'nefty-drop': { init: 'init_nefty_drop', file: null },
+    'claim-rewards': { init: 'init_claim_rewards', file: 'claim-rewards.js' },
+    'gated-paid-claim': { init: 'init_gated_paid_claim', file: 'gated-paid-claim.js' },
+    'factory-craft': { init: 'init_factory_craft', file: 'factory-craft.js' },
+    'transfer-mode': { init: 'init_transfer_mode', file: 'transfer-mode.js' },
+    'unpack': { init: 'init_unpack', file: 'unpack.js' },
+    'blend-array': { init: 'init_blend_array', file: 'blend-array.js' },
+    'text-block': { init: 'init_text_block', file: null },
+    'image-block': { init: 'init_image_block', file: null }
   };
 
   // Special handlers for simple modules (text-block, image-block)
@@ -70,10 +70,10 @@ window.init_unified_module = function(containerId, config = {}) {
     return;
   }
 
-  // Get the init function name for this module type
-  const initFunctionName = MODULE_INIT_FUNCTIONS[MODULE_TYPE];
+  // Get the init function name and file for this module type
+  const moduleInfo = MODULE_INIT_FUNCTIONS[MODULE_TYPE];
 
-  if (!initFunctionName) {
+  if (!moduleInfo) {
     targetContainer.innerHTML = `
       <div class="card" style="padding: 20px; text-align: center; background: var(--bg-dark); border: 2px solid var(--error);">
         <p style="color: var(--error); font-weight: 600; margin: 0;">⚠️ Unknown Module Type</p>
@@ -85,6 +85,9 @@ window.init_unified_module = function(containerId, config = {}) {
     return;
   }
 
+  const initFunctionName = moduleInfo.init;
+  const moduleFile = moduleInfo.file;
+
   // Create a unique ID for the target container if it doesn't have one
   if (!targetContainer.id) {
     targetContainer.id = `unified-module-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -92,32 +95,61 @@ window.init_unified_module = function(containerId, config = {}) {
 
   const targetContainerId = targetContainer.id;
 
-  // Wait for the module's init function to be available
-  const checkAndInit = setInterval(() => {
-    if (window[initFunctionName]) {
-      clearInterval(checkAndInit);
-      console.log(`✅ Calling ${initFunctionName}() with container #${targetContainerId}`);
+  // If module needs a file loaded, load it first
+  if (moduleFile && !window[initFunctionName]) {
+    console.log(`📦 Loading module file: /modules/${moduleFile}`);
 
-      // Call the existing module's init function with the target container ID and config
-      window[initFunctionName](targetContainerId, config);
-    }
-  }, 100);
-
-  // Timeout after 10 seconds
-  setTimeout(() => {
-    clearInterval(checkAndInit);
-    if (!window[initFunctionName]) {
-      console.error(`❌ Failed to load ${initFunctionName} after 10 seconds`);
+    const script = document.createElement('script');
+    script.src = `/modules/${moduleFile}`;
+    script.onload = () => {
+      console.log(`✅ Module file loaded: ${moduleFile}`);
+      initializeModule();
+    };
+    script.onerror = () => {
+      console.error(`❌ Failed to load module file: ${moduleFile}`);
       targetContainer.innerHTML = `
-        <div class="card" style="padding: 20px; text-align: center; background: var(--bg-dark); border: 2px solid var(--warning);">
-          <p style="color: var(--warning); font-weight: 600; margin: 0;">⚠️ Module Not Loaded</p>
+        <div class="card" style="padding: 20px; text-align: center; background: var(--bg-dark); border: 2px solid var(--error);">
+          <p style="color: var(--error); font-weight: 600; margin: 0;">⚠️ Failed to Load Module</p>
           <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 10px 0 0;">
-            The ${MODULE_TYPE} module could not be loaded. Please check that the module file is included in your page.
+            Could not load ${moduleFile}. Please check your configuration.
           </p>
         </div>
       `;
-    }
-  }, 10000);
+    };
+    document.head.appendChild(script);
+  } else {
+    // Module file already loaded or not needed
+    initializeModule();
+  }
+
+  function initializeModule() {
+    // Wait for the module's init function to be available
+    const checkAndInit = setInterval(() => {
+      if (window[initFunctionName]) {
+        clearInterval(checkAndInit);
+        console.log(`✅ Calling ${initFunctionName}() with container #${targetContainerId}`);
+
+        // Call the existing module's init function with the target container ID and config
+        window[initFunctionName](targetContainerId, config);
+      }
+    }, 100);
+
+    // Timeout after 10 seconds
+    setTimeout(() => {
+      clearInterval(checkAndInit);
+      if (!window[initFunctionName]) {
+        console.error(`❌ Failed to load ${initFunctionName} after 10 seconds`);
+        targetContainer.innerHTML = `
+          <div class="card" style="padding: 20px; text-align: center; background: var(--bg-dark); border: 2px solid var(--warning);">
+            <p style="color: var(--warning); font-weight: 600; margin: 0;">⚠️ Module Not Loaded</p>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 10px 0 0;">
+              The ${MODULE_TYPE} module could not be loaded. Please check that the module file is included in your page.
+            </p>
+          </div>
+        `;
+      }
+    }, 10000);
+  }
 };
 
 /**
