@@ -328,7 +328,7 @@ window.init_blend_array = function(containerId, config = {}) {
         </div>
 
         ${canExecute ? `
-          <button class="btn btn-success btn-sm" style="width: 100%; margin-top: 15px;" onclick="event.stopPropagation();">
+          <button class="btn btn-success btn-sm" style="width: 100%; margin-top: 15px;">
             🔀 Select This Blend
           </button>
         ` : ''}
