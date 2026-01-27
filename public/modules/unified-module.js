@@ -41,16 +41,16 @@ window.init_unified_module = function(containerId, config = {}) {
 
   // Module type to init function and file mapping
   const MODULE_INIT_FUNCTIONS = {
-    'paid-claim': { init: 'init_paid_claim', file: 'paid-claim.js' },
-    'nefty-drop': { init: 'init_nefty_drop', file: null },
-    'claim-rewards': { init: 'init_claim_rewards', file: 'claim-rewards.js' },
-    'gated-paid-claim': { init: 'init_gated_paid_claim', file: 'gated-paid-claim.js' },
-    'factory-craft': { init: 'init_factory_craft', file: 'factory-craft.js' },
-    'transfer-mode': { init: 'init_transfer_mode', file: 'transfer-mode.js' },
-    'unpack': { init: 'init_unpack', file: 'unpack.js' },
-    'blend-array': { init: 'init_blend_array', file: 'blend-array.js' },
-    'text-block': { init: 'init_text_block', file: null },
-    'image-block': { init: 'init_image_block', file: null }
+    'paid-claim': { init: 'init_paid_claim', file: 'paid-claim.js', html: 'paid-claim.html' },
+    'nefty-drop': { init: 'init_nefty_drop', file: null, html: null },
+    'claim-rewards': { init: 'init_claim_rewards', file: 'claim-rewards.js', html: 'claim-rewards.html' },
+    'gated-paid-claim': { init: 'init_gated_paid_claim', file: 'gated-paid-claim.js', html: 'gated-paid-claim.html' },
+    'factory-craft': { init: 'init_factory_craft', file: 'factory-craft.js', html: 'factory-craft.html' },
+    'transfer-mode': { init: 'init_transfer_mode', file: 'transfer-mode.js', html: 'transfer-mode.html' },
+    'unpack': { init: 'init_unpack', file: 'unpack.js', html: 'unpack.html' },
+    'blend-array': { init: 'init_blend_array', file: 'blend-array.js', html: 'blend-array.html' },
+    'text-block': { init: 'init_text_block', file: null, html: null },
+    'image-block': { init: 'init_image_block', file: null, html: null }
   };
 
   // Special handlers for simple modules (text-block, image-block)
@@ -87,6 +87,7 @@ window.init_unified_module = function(containerId, config = {}) {
 
   const initFunctionName = moduleInfo.init;
   const moduleFile = moduleInfo.file;
+  const moduleHtml = moduleInfo.html;
 
   // Create a unique ID for the target container if it doesn't have one
   if (!targetContainer.id) {
@@ -95,32 +96,53 @@ window.init_unified_module = function(containerId, config = {}) {
 
   const targetContainerId = targetContainer.id;
 
-  // If module needs a file loaded, load it first
-  if (moduleFile && !window[initFunctionName]) {
-    console.log(`📦 Loading module file: /modules/${moduleFile}`);
+  // Load module HTML template first (if needed), then JS file, then init
+  async function loadModuleResources() {
+    try {
+      // Step 1: Load HTML template if needed
+      if (moduleHtml) {
+        console.log(`📄 Loading module HTML: /modules/${moduleHtml}`);
+        const htmlResponse = await fetch(`/modules/${moduleHtml}`);
+        if (!htmlResponse.ok) {
+          throw new Error(`Failed to load HTML template: ${moduleHtml}`);
+        }
+        const htmlContent = await htmlResponse.text();
+        targetContainer.innerHTML = htmlContent;
+        console.log(`✅ Module HTML loaded: ${moduleHtml}`);
+      }
 
-    const script = document.createElement('script');
-    script.src = `/modules/${moduleFile}`;
-    script.onload = () => {
-      console.log(`✅ Module file loaded: ${moduleFile}`);
+      // Step 2: Load JS file if needed
+      if (moduleFile && !window[initFunctionName]) {
+        console.log(`📦 Loading module file: /modules/${moduleFile}`);
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = `/modules/${moduleFile}`;
+          script.onload = () => {
+            console.log(`✅ Module file loaded: ${moduleFile}`);
+            resolve();
+          };
+          script.onerror = () => reject(new Error(`Failed to load ${moduleFile}`));
+          document.head.appendChild(script);
+        });
+      }
+
+      // Step 3: Initialize module
       initializeModule();
-    };
-    script.onerror = () => {
-      console.error(`❌ Failed to load module file: ${moduleFile}`);
+
+    } catch (error) {
+      console.error(`❌ Failed to load module resources:`, error);
       targetContainer.innerHTML = `
         <div class="card" style="padding: 20px; text-align: center; background: var(--bg-dark); border: 2px solid var(--error);">
           <p style="color: var(--error); font-weight: 600; margin: 0;">⚠️ Failed to Load Module</p>
           <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 10px 0 0;">
-            Could not load ${moduleFile}. Please check your configuration.
+            ${error.message}
           </p>
         </div>
       `;
-    };
-    document.head.appendChild(script);
-  } else {
-    // Module file already loaded or not needed
-    initializeModule();
+    }
   }
+
+  loadModuleResources();
 
   function initializeModule() {
     // Wait for the module's init function to be available
@@ -236,10 +258,11 @@ function initNeftyDrop(container, config) {
     return;
   }
 
-  console.log(`✅ NeftyBlocks Drop initialized: ${collection} - Drop #${dropId}`);
-
   // Use the correct embed URL format
   const embedUrl = `https://neftyblocks.com/c/${collection}/drops/${dropId}/embed`;
+
+  console.log(`✅ NeftyBlocks Drop initialized: ${collection} - Drop #${dropId}`);
+  console.log(`🔗 Embed URL: ${embedUrl}`);
 
   container.innerHTML = `
     <div class="card" style="padding: 0; overflow: hidden;">
