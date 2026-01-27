@@ -6281,39 +6281,99 @@ app.post('/api/factory/retry-failed', async (req, res) => {
         }
 
         console.log(`      ✅ Transfer to ${expectedRecipient} verified!`);
-        console.log(`      🔨 Attempting to mint results from futuresrelic wallet...`);
 
-        // Mint results
-        const mintTransactions = [];
+        // Determine mode: swap or mint
+        const isSwapMode = recipe.pool_mode_enabled === 1;
+        const mode = isSwapMode ? 'swap' : 'mint';
+        console.log(`      🔨 Attempting ${mode} mode...`);
+
+        const transactions = [];
         try {
-          for (const result of recipe.results) {
-            const mintCount = result.amount * craft.batch_count;
-            console.log(`         Minting ${mintCount}x Template ${result.template_id}...`);
+          if (isSwapMode) {
+            // SWAP MODE: Transfer from pool wallet to user
+            const poolWallet = recipe.pool_wallet || 'pool.fr';
+            const poolPrivateKey = process.env.POOL_PRIVATE_KEY;
 
-            for (let i = 0; i < mintCount; i++) {
-              const mintResult = await wax.mintNFT(
-                user_wallet,
-                'futuresrelic',
-                result.template_id
-              );
-              mintTransactions.push(mintResult.transaction_id);
+            if (!poolPrivateKey) {
+              throw new Error('POOL_PRIVATE_KEY not configured');
             }
+
+            console.log(`      🔄 Swapping from pool wallet ${poolWallet}...`);
+
+            // Get pool assets
+            const poolAssets = await wax.getUserAssetsLive(poolWallet, 'futuresrelic');
+
+            // Collect assets to transfer
+            const assetsToTransfer = [];
+            for (const result of recipe.results) {
+              const templateId = parseInt(result.template_id);
+              const neededCount = result.amount * craft.batch_count;
+
+              const availableAssets = poolAssets.filter(a =>
+                parseInt(a.template.template_id) === templateId &&
+                !assetsToTransfer.includes(a.asset_id)
+              );
+
+              if (availableAssets.length < neededCount) {
+                throw new Error(`Insufficient pool inventory for template ${templateId}. Need ${neededCount}, have ${availableAssets.length}`);
+              }
+
+              for (let i = 0; i < neededCount; i++) {
+                assetsToTransfer.push(availableAssets[i].asset_id);
+              }
+            }
+
+            console.log(`         Transferring ${assetsToTransfer.length} asset(s) from pool to user...`);
+
+            // Transfer with retry logic and CPU checking
+            const transferResult = await wax.transferNFTs(
+              poolWallet,
+              user_wallet,
+              assetsToTransfer,
+              `Crafted via recipe: ${recipe.name}`,
+              poolPrivateKey,
+              { maxRetries: 5, minCpuUs: 500 } // More retries for recovery
+            );
+
+            transactions.push(transferResult.transaction_id);
+            console.log(`      ✅ Swap successful! TX: ${transferResult.transaction_id}`);
+
+          } else {
+            // MINT MODE: Mint from futuresrelic wallet
+            console.log(`      🔨 Minting from futuresrelic wallet...`);
+
+            for (const result of recipe.results) {
+              const mintCount = result.amount * craft.batch_count;
+              console.log(`         Minting ${mintCount}x Template ${result.template_id}...`);
+
+              for (let i = 0; i < mintCount; i++) {
+                const mintResult = await wax.mintNFT(
+                  user_wallet,
+                  'futuresrelic',
+                  result.template_id
+                );
+                transactions.push(mintResult.transaction_id);
+              }
+            }
+
+            console.log(`      ✅ Mint successful!`);
           }
 
           // Update craft as completed
           db.craftHistory.update(craft.id, {
-            mint_transaction_id: mintTransactions[0],
+            mint_transaction_id: transactions[0],
             result_info: recipe.results,
             status: 'completed'
           });
 
-          console.log(`      ✅ Mint successful! Craft #${craft.id} completed`);
+          console.log(`      ✅ Craft #${craft.id} completed`);
 
           results.push({
             craft_id: craft.id,
             recipe_name: recipe.name,
             success: true,
-            mint_transaction_id: mintTransactions[0],
+            mode: mode,
+            transaction_id: transactions[0],
             results: recipe.results.map(r => ({
               template_id: r.template_id,
               amount: r.amount * craft.batch_count
@@ -6322,13 +6382,13 @@ app.post('/api/factory/retry-failed', async (req, res) => {
 
           retriedCount++;
 
-        } catch (mintError) {
-          console.error(`      ❌ Mint failed:`, mintError);
+        } catch (executionError) {
+          console.error(`      ❌ ${mode} failed:`, executionError);
           results.push({
             craft_id: craft.id,
             recipe_name: recipe.name,
             success: false,
-            error: 'Mint failed: ' + mintError.message
+            error: `${mode} failed: ` + executionError.message
           });
         }
 

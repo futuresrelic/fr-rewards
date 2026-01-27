@@ -764,7 +764,7 @@ async function getUserAssetsLive(account, collection = null, templateFilter = nu
  * @param {string} privateKey - Private key of source wallet
  * @returns {Promise<object>} Transaction result
  */
-async function transferNFTs(fromWallet, toWallet, assetIds, memo, privateKey) {
+async function transferNFTs(fromWallet, toWallet, assetIds, memo, privateKey, options = {}) {
   const { Api, JsonRpc } = require('eosjs');
   const { JsSignatureProvider } = require('eosjs/dist/eosjs-jssig');
   const fetch = require('node-fetch');
@@ -776,60 +776,124 @@ async function transferNFTs(fromWallet, toWallet, assetIds, memo, privateKey) {
     'https://api.wax.alohaeos.com'
   ];
 
-  let lastError = null;
+  const maxRetries = options.maxRetries || 3;
+  const checkCpu = options.checkCpu !== false; // Default true
+  const minCpuUs = options.minCpuUs || 500; // Minimum CPU microseconds needed
 
-  for (const endpoint of rpcEndpoints) {
+  // Helper function to check CPU availability
+  const checkCpuAvailability = async (endpoint) => {
+    if (!checkCpu) return true;
+
     try {
-      console.log(`🔗 Attempting transfer via ${endpoint}...`);
       const rpc = new JsonRpc(endpoint, { fetch });
-      const signatureProvider = new JsSignatureProvider([privateKey]);
-      const api = new Api({
-        rpc,
-        signatureProvider,
-        textDecoder: new TextDecoder(),
-        textEncoder: new TextEncoder()
-      });
+      const accountInfo = await rpc.get_account(fromWallet);
+      const cpuAvailable = accountInfo.cpu_limit?.available || 0;
 
-      const result = await api.transact(
-        {
-          actions: [{
-            account: 'atomicassets',
-            name: 'transfer',
-            authorization: [{
-              actor: fromWallet,
-              permission: 'active',
-            }],
-            data: {
-              from: fromWallet,
-              to: toWallet,
-              asset_ids: assetIds,
-              memo: memo || ''
-            },
-          }]
-        },
-        {
-          blocksBehind: 3,
-          expireSeconds: 30,
-        }
-      );
+      console.log(`   CPU check for ${fromWallet}: ${cpuAvailable} us available (need ~${minCpuUs} us)`);
 
-      console.log(`✅ Transfer successful! TX: ${result.transaction_id}`);
-      return {
-        transaction_id: result.transaction_id,
-        from: fromWallet,
-        to: toWallet,
-        asset_count: assetIds.length,
-        asset_ids: assetIds
-      };
-
+      return cpuAvailable >= minCpuUs;
     } catch (error) {
-      console.warn(`❌ ${endpoint} failed:`, error.message);
-      lastError = error;
-      continue;
+      console.warn(`   ⚠️ CPU check failed, proceeding anyway:`, error.message);
+      return true; // Proceed if check fails
+    }
+  };
+
+  // Helper function to wait with exponential backoff
+  const waitWithBackoff = (attemptNumber) => {
+    const delayMs = Math.min(1000 * Math.pow(2, attemptNumber), 10000); // Max 10s
+    console.log(`   ⏳ Waiting ${delayMs}ms before retry...`);
+    return new Promise(resolve => setTimeout(resolve, delayMs));
+  };
+
+  let lastError = null;
+  let globalAttempt = 0;
+
+  // Retry loop with exponential backoff
+  for (let retry = 0; retry < maxRetries; retry++) {
+    if (retry > 0) {
+      await waitWithBackoff(retry - 1);
+      console.log(`🔄 Retry attempt ${retry + 1}/${maxRetries}`);
+    }
+
+    // Try each endpoint
+    for (const endpoint of rpcEndpoints) {
+      try {
+        globalAttempt++;
+
+        // Check CPU availability before attempting transfer
+        const cpuOk = await checkCpuAvailability(endpoint);
+        if (!cpuOk && retry < maxRetries - 1) {
+          console.log(`   ⚠️ Low CPU detected, will retry after delay`);
+          lastError = new Error(`Low CPU: account has less than ${minCpuUs} us available`);
+          continue; // Try next endpoint
+        }
+
+        console.log(`🔗 Attempting transfer via ${endpoint}... (attempt ${globalAttempt})`);
+        const rpc = new JsonRpc(endpoint, { fetch });
+        const signatureProvider = new JsSignatureProvider([privateKey]);
+        const api = new Api({
+          rpc,
+          signatureProvider,
+          textDecoder: new TextDecoder(),
+          textEncoder: new TextEncoder()
+        });
+
+        const result = await api.transact(
+          {
+            actions: [{
+              account: 'atomicassets',
+              name: 'transfer',
+              authorization: [{
+                actor: fromWallet,
+                permission: 'active',
+              }],
+              data: {
+                from: fromWallet,
+                to: toWallet,
+                asset_ids: assetIds,
+                memo: memo || ''
+              },
+            }]
+          },
+          {
+            blocksBehind: 3,
+            expireSeconds: 30,
+          }
+        );
+
+        console.log(`✅ Transfer successful! TX: ${result.transaction_id}`);
+        return {
+          transaction_id: result.transaction_id,
+          from: fromWallet,
+          to: toWallet,
+          asset_count: assetIds.length,
+          asset_ids: assetIds
+        };
+
+      } catch (error) {
+        const isCpuError = error.message?.includes('cpu') || error.message?.includes('CPU');
+        console.warn(`❌ ${endpoint} failed:`, error.message);
+        lastError = error;
+
+        // If CPU error and not last retry, wait longer before next attempt
+        if (isCpuError && retry < maxRetries - 1) {
+          console.log(`   🔋 CPU limit reached, will retry with longer delay`);
+        }
+
+        continue;
+      }
     }
   }
 
-  throw new Error(`All RPC endpoints failed. Last: ${lastError?.message}`);
+  // All retries exhausted
+  const errorMessage = lastError?.message || 'Unknown error';
+  const isCpuError = errorMessage.includes('cpu') || errorMessage.includes('CPU');
+
+  if (isCpuError) {
+    throw new Error(`CPU resources exhausted for account ${fromWallet}. The account needs more CPU staked or must wait for CPU to regenerate. Original error: ${errorMessage}`);
+  }
+
+  throw new Error(`All RPC endpoints failed after ${maxRetries} retry attempts. Last error: ${errorMessage}`);
 }
 
 module.exports = {

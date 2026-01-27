@@ -607,9 +607,13 @@ function renderConfigPanel() {
     }
   }
 
-  // Setup rewards builder for gated-paid-claim module
-  if (module.moduleType === 'gated-paid-claim') {
-    setupRewardsBuilder(module);
+  // Setup rewards builder for gated-paid-claim module OR unified module (which includes gated-paid-claim)
+  if (module.moduleType === 'gated-paid-claim' || isUnifiedModule) {
+    // Check if rewards-builder-container exists (might be hidden initially for unified module)
+    const rewardsContainer = document.getElementById('rewards-builder-container');
+    if (rewardsContainer) {
+      setupRewardsBuilder(module);
+    }
   }
 
   // Setup unified module field filtering
@@ -698,6 +702,18 @@ function setupUnifiedModuleFieldFiltering(module) {
         section.style.display = mappedType === selectedType ? '' : 'none';
       }
     });
+
+    // After filtering, if gated-paid-claim is selected, ensure rewards builder is initialized
+    if (selectedType === 'gated-paid-claim') {
+      const rewardsContainer = document.getElementById('rewards-builder-container');
+      const addBtn = document.getElementById('add-reward-btn');
+
+      // Only initialize if container exists and hasn't been initialized yet
+      if (rewardsContainer && addBtn && !addBtn.dataset.initialized) {
+        setupRewardsBuilder(module);
+        addBtn.dataset.initialized = 'true';
+      }
+    }
   }
 
   // Run filter immediately
