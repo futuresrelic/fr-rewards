@@ -15,15 +15,15 @@ Systematically test all 10 module types in the Unified Module to ensure they wor
 | # | Module Type | Status | Issues Found | Fixed |
 |---|-------------|--------|--------------|-------|
 | 1 | paid-claim | ⚠️ | TBD | No |
-| 2 | nefty-drop | ❌ | drop_id not passed to iframe, X-Frame-Options error | 🔧 |
-| 3 | text-block | ⚠️ | TBD | No |
-| 4 | image-block | ⚠️ | TBD | No |
+| 2 | nefty-drop | ❌ | X-Frame-Options error, possible caching | 🔧 |
+| 3 | text-block | ✅ | None | N/A |
+| 4 | image-block | ✅ | None | N/A |
 | 5 | claim-rewards | ⚠️ | TBD | No |
 | 6 | gated-paid-claim | ⚠️ | TBD | No |
 | 7 | factory-craft | ⚠️ | TBD | No |
 | 8 | transfer-mode | ⚠️ | TBD | No |
-| 9 | unpack | ❌ | Old module checking for wax/anchor directly | 🔧 |
-| 10 | blend-array | ❌ | Old module checking for wax/anchor directly | 🔧 |
+| 9 | unpack | ❌ | HTML template not loaded, no UI | ✅ |
+| 10 | blend-array | ❌ | HTML template not loaded, no UI | ✅ |
 
 ## Test Procedure
 
@@ -172,9 +172,37 @@ We'll test in this order (simple → complex):
 **Tester:** User
 **Session:** Review and fix unified module issues
 
-### Tests Completed
+### Test Session #1 - 2025-01-26
 
-#### Test 1: nefty-drop
+#### Test 1: text-block
+**Status:** ✅ PASSED
+**Config Used:**
+```json
+{
+  "module_type": "text-block",
+  "heading": "Welcome Test",
+  "content": "This is a test of the text block.",
+  "style": "normal"
+}
+```
+**Result:** Clean console, text displays correctly, no errors
+
+#### Test 2: image-block
+**Status:** ✅ PASSED
+**Config Used:**
+```json
+{
+  "module_type": "image-block",
+  "image_url": "https://ipfs.io/ipfs/QmPQNbkVAh3ektjrYvwn...",
+  "alt_text": "Test Pack",
+  "caption": "Starter Pack Image",
+  "width": "500px",
+  "alignment": "center"
+}
+```
+**Result:** Clean console, image displays correctly with caption
+
+#### Test 3: nefty-drop
 **Status:** ❌ FAILED
 **Config Used:**
 ```json
@@ -196,9 +224,54 @@ Refused to display 'https://neftyblocks.com/' in a frame because it set 'X-Frame
 1. drop_id not being used in iframe URL
 2. URL is just 'https://neftyblocks.com/' instead of embed URL
 
-**Next Step:** Fix initNeftyDrop() in unified-module.js
+**Console Output:**
+```
+✅ NeftyBlocks Drop initialized: futuresrelic - Drop #229014
+Failed to load resource: the server responded with a status of 404 ()
+Refused to display 'https://neftyblocks.com/' in a frame because it set 'X-Frame-Options' to 'deny'.
+```
+**Issues:**
+1. Still trying to load base URL instead of embed URL
+2. Possible caching issue or old module loading
 
-#### Test 2: unpack
+**Fix Applied:** Added embed URL logging for debugging (commit 26eb7c1)
+**Status:** Needs retest after cache clear
+
+#### Test 4: unpack
+**Status:** ❌ FAILED → ✅ FIXED
+**Config Used:**
+```json
+{
+  "module_type": "unpack",
+  "template_id": "204194",
+  "collection": "futuresrelic",
+  "auto_connect": true
+}
+```
+**Console Output:**
+```
+✅ Unified Module initialized
+🎯 Module Type: unpack
+✅ Calling init_unpack() with container #unified-module-...
+✅ Unpack module initialized
+ℹ️ Using WalletManager for on-demand library loading
+```
+**Issues:**
+1. Module initialized successfully
+2. No console errors
+3. **But UI showed nothing** - blank space where module should be
+
+**Root Cause:** Unified module was loading .js file but NOT .html template
+- unpack.js expects DOM elements like `.unpack-packs-grid` to exist
+- HTML template was never loaded into container
+- Module initialized but had no DOM to work with
+
+**Fix Applied:**
+- Added HTML template loading to unified module (commit 26eb7c1)
+- Load order: HTML template → JS file → init function
+- Ensures DOM exists before module runs
+
+#### Test 5: blend-array
 **Status:** ❌ FAILED
 **Config Used:**
 ```json
@@ -221,7 +294,29 @@ Refused to display 'https://neftyblocks.com/' in a frame because it set 'X-Frame
 
 **Next Step:** Fix unpack.js waitForLibraries
 
-#### Test 3: blend-array
+**Status:** ❌ FAILED → ✅ FIXED
+**Config Used:**
+```json
+{
+  "module_type": "blend-array",
+  "collection": "futuresrelic",
+  "blend_ids": "15941,15942,15943...",
+  "auto_connect": true
+}
+```
+**Console Output:**
+```
+✅ Calling init_blend_array() with container #unified-module-...
+✅ Blend Array module initialized
+ℹ️ Using WalletManager for on-demand library loading
+```
+**Issues:**
+1. Same as unpack - initialized but no UI
+2. HTML template not loaded
+
+**Fix Applied:** Same fix as unpack (commit 26eb7c1)
+
+## Previous Test Results (from initial debugging)
 **Status:** ❌ FAILED
 **Config Used:**
 ```json
@@ -246,20 +341,45 @@ Refused to display 'https://neftyblocks.com/' in a frame because it set 'X-Frame
 
 ## Fixes Applied
 
-### Fix #1: NeftyDrop iframe URL
+### Fix #1: HTML Template Loading (CRITICAL)
+**File:** `/public/modules/unified-module.js`
+**Commit:** 26eb7c1
+**Status:** ✅ APPLIED
+
+**Problem:** Old-style modules need HTML templates with DOM elements
+- Modules like unpack.js, blend-array.js expect specific DOM elements
+- Unified module was only loading .js files, not .html templates
+- Modules initialized but showed no UI
+
+**Solution:**
+1. Added `html` property to MODULE_INIT_FUNCTIONS mapping
+2. Created async `loadModuleResources()` function
+3. Load order: HTML template → JS file → init function
+4. Ensures DOM exists before module runs
+
+**Affected Modules:** unpack, blend-array, factory-craft, transfer-mode, paid-claim, claim-rewards, gated-paid-claim
+
+### Fix #2: NeftyDrop embed URL
 **File:** `/public/modules/unified-module.js`
 **Function:** `initNeftyDrop()`
-**Status:** 🔧 Pending
+**Commit:** 62ab64f, 26eb7c1
+**Status:** ✅ APPLIED (needs retest)
 
-### Fix #2: Unpack WalletManager integration
-**File:** `/public/modules/unpack.js`
-**Function:** `init()` waitForLibraries
-**Status:** 🔧 Pending
+**Changes:**
+- Uses correct embed URL format: `https://neftyblocks.com/c/{collection}/drops/{drop_id}/embed`
+- Added URL logging for debugging
+- Should fix X-Frame-Options error
 
-### Fix #3: Blend Array WalletManager integration
-**File:** `/public/modules/blend-array.js`
-**Function:** `init()` waitForLibraries
-**Status:** 🔧 Pending
+### Fix #3: Old Module Library Checks
+**File:** `/public/modules/unpack.js`, `/public/modules/blend-array.js`, `/public/modules/transfer-mode.js`, `/public/modules/factory-craft.js`
+**Commit:** 62ab64f
+**Status:** ✅ APPLIED
+
+**Changes:**
+- Removed waitForLibraries() checks for wax/anchor
+- Now just logs "ℹ️ Using WalletManager for on-demand library loading"
+- WalletManager auto-loads libraries when needed
+- Eliminates console errors about missing libraries
 
 ## Next Steps
 
