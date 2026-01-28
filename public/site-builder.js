@@ -708,10 +708,17 @@ function setupUnifiedModuleFieldFiltering(module) {
       const rewardsContainer = document.getElementById('rewards-builder-container');
       const addBtn = document.getElementById('add-reward-btn');
 
-      // Only initialize if container exists and hasn't been initialized yet
-      if (rewardsContainer && addBtn && !addBtn.dataset.initialized) {
+      // Initialize/re-initialize rewards builder when gated-paid-claim is selected
+      if (rewardsContainer && addBtn) {
+        // Clear previous initialization flag to allow re-initialization
+        delete addBtn.dataset.initialized;
+
+        // Remove old event listeners by cloning and replacing the button
+        const newAddBtn = addBtn.cloneNode(true);
+        addBtn.parentNode.replaceChild(newAddBtn, addBtn);
+
+        // Re-initialize the rewards builder
         setupRewardsBuilder(module);
-        addBtn.dataset.initialized = 'true';
       }
     }
   }
@@ -1056,9 +1063,14 @@ async function applyConfig() {
   });
 
   // Special handling for gated-paid-claim rewards
-  if (module.moduleType === 'gated-paid-claim' && module._getRewards) {
+  // Check both standalone gated-paid-claim modules AND unified modules with gated-paid-claim selected
+  const isGatedPaidClaim = module.moduleType === 'gated-paid-claim' ||
+                          (module.moduleType === 'unified-module' && module.config.module_type === 'gated-paid-claim');
+
+  if (isGatedPaidClaim && module._getRewards) {
     const rewards = module._getRewards();
     module.config.rewards = JSON.stringify(rewards);
+    console.log('✅ Saving rewards for gated-paid-claim:', rewards);
   }
 
   // Update database instance if this module has one
