@@ -815,6 +815,116 @@ const card = this.createItemCard({
 
 ---
 
+## 🛠️ ADMIN TOOLS & UTILITIES
+
+This section documents important admin tools that are always available but easy to forget about. **Don't recreate these - they already exist!**
+
+### Site Builder
+**URL:** `/site-builder.html`
+
+Visual page builder for creating custom pages with drag-and-drop modules. Features:
+- Module gallery with all available modules
+- Live preview canvas
+- Configuration panel with unified module support
+- CSS editor for custom styling
+- Page save/load functionality
+- Story index management
+- **NEW:** Direct link to Factory Admin in the header
+
+### Factory Admin Panel
+**URL:** `/admin-factory.html`
+**Quick Access:** Click "🏭 Factory Admin" button in Site Builder header
+
+Comprehensive factory crafting system management. Features:
+- **Recipe Management:** Create, edit, delete craft recipes
+- **Craft History:** View all completed crafts
+- **⚠️ Failed Craft Recovery:** Critical tool for handling failed crafts
+  - Load all failed/pending crafts
+  - View stuck assets and error messages
+  - **Fulfill Craft:** Retry failed swap from pool.fr
+  - **Refund to User:** Return stuck assets to user's wallet
+  - Auto-reload after successful recovery
+
+**How Failed Craft Recovery Works:**
+1. Click "Load Failed Crafts" button
+2. View failed crafts with transaction IDs and asset IDs
+3. Choose action:
+   - **Fulfill Craft** - Best for swap mode failures when pool now has inventory
+   - **Refund to User** - Use when minting failed or pool is still empty
+4. System updates craft status and removes from failed list
+
+**API Endpoints Used:**
+- `GET /api/admin/factory/failed` - Load failed crafts
+- `POST /api/admin/factory/fulfill-failed` - Retry craft with pool swap
+- (Refunds require manual AtomicHub transfer + status update)
+
+### Other Admin Panels
+**Main Admin:** `/admin.html` - General admin dashboard
+**Blend Recipes:** `/admin-blend-recipes.html` - NeftyBlocks blend management
+**Workflow Admin:** `/admin-workflow.html` - Story workflow management
+**API Wiki:** `/admin-wiki.html` - Interactive API documentation viewer
+
+### Important Admin Functions in Code
+
+**Location:** `/public/admin-factory.js`
+
+```javascript
+// Load failed crafts from database
+function displayFailed(failed) { ... }  // Lines 809-854
+
+// Fulfill a failed craft (retry pool swap)
+async function fulfillFailedCraft(craftId) { ... }  // Lines 875-934
+
+// Refund failed craft assets to user
+async function refundFailedCraft(craftId) { ... }  // Lines 937-958
+
+// Mark craft as refunded (admin confirmation)
+async function markCraftRefunded(craftId) { ... }  // Lines 961-989
+```
+
+**Backend Endpoints:**
+- `/api/admin/factory/failed` - Returns all failed crafts (server.js)
+- `/api/admin/factory/fulfill-failed` - Executes pool swap retry (server.js)
+
+**Key Database Queries:**
+```javascript
+// Get failed crafts
+db.craftHistory.getAll().filter(c =>
+  c.status === 'pending' ||
+  (c.status === 'failed' && c.transfer_verified)
+);
+
+// Update craft after fulfillment
+db.craftHistory.update(craft_id, {
+  status: 'completed',
+  mint_transaction_id: transaction_id,
+  error_message: null
+});
+```
+
+### When to Use These Tools
+
+**Use Factory Admin** when:
+- Creating or editing craft recipes
+- Investigating craft failures
+- User reports stuck assets
+- Pool swap didn't complete
+- CPU errors caused minting failures
+
+**Use Site Builder** when:
+- Creating new story pages
+- Adding/removing modules from pages
+- Updating module configurations
+- Managing story index
+- Customizing page CSS
+
+**Use Admin Wiki** when:
+- Looking up API endpoint documentation
+- Checking function signatures
+- Understanding request/response formats
+
+---
+
 ## 🧪 TESTING GUIDE
 
 ### Local Testing (If Possible)
