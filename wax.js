@@ -890,10 +890,141 @@ async function transferNFTs(fromWallet, toWallet, assetIds, memo, privateKey, op
   const isCpuError = errorMessage.includes('cpu') || errorMessage.includes('CPU');
 
   if (isCpuError) {
+    // Special handling for pool.fr - attempt automatic PowerUp
+    if (fromWallet === 'pool.fr' && options.autoPowerUp !== false) {
+      console.log('🔋 Attempting automatic PowerUp for pool.fr...');
+
+      const mintingWallet = process.env.WAX_ACCOUNT || 'futuresrelic';
+      const mintingPrivateKey = process.env.WAX_PRIVATE_KEY;
+
+      if (!mintingPrivateKey) {
+        console.warn('⚠️ WAX_PRIVATE_KEY not configured - cannot perform automatic PowerUp');
+        throw new Error(`CPU resources exhausted for account ${fromWallet}. The account needs more CPU staked or must wait for CPU to regenerate. Original error: ${errorMessage}`);
+      }
+
+      try {
+        // Perform PowerUp - provide extra CPU to pool.fr
+        await powerUpAccount(mintingWallet, fromWallet, mintingPrivateKey, {
+          cpuFrac: 20000000000, // ~20ms CPU (double the default)
+          netFrac: 10000000,    // ~10KB NET
+          maxPayment: '2.00000000 WAX' // Allow up to 2 WAX
+        });
+
+        console.log('✅ PowerUp successful! Retrying transfer...');
+
+        // Wait a moment for resources to be available
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Retry the transfer ONE MORE TIME with autoPowerUp disabled to prevent infinite loop
+        return await transferNFTs(fromWallet, toWallet, assetIds, memo, privateKey, {
+          ...options,
+          autoPowerUp: false,
+          maxRetries: 2 // Limit retries after PowerUp
+        });
+
+      } catch (powerUpError) {
+        console.error('❌ Automatic PowerUp failed:', powerUpError.message);
+        throw new Error(`CPU resources exhausted for account ${fromWallet}. Attempted automatic PowerUp but it failed: ${powerUpError.message}. Original error: ${errorMessage}`);
+      }
+    }
+
     throw new Error(`CPU resources exhausted for account ${fromWallet}. The account needs more CPU staked or must wait for CPU to regenerate. Original error: ${errorMessage}`);
   }
 
   throw new Error(`All RPC endpoints failed after ${maxRetries} retry attempts. Last error: ${errorMessage}`);
+}
+
+/**
+ * PowerUp CPU/NET for a WAX account
+ * @param {string} payer - Account paying for the PowerUp (e.g., 'futuresrelic')
+ * @param {string} receiver - Account receiving the PowerUp (e.g., 'pool.fr')
+ * @param {string} payerPrivateKey - Private key of the payer account
+ * @param {Object} options - PowerUp options
+ * @param {number} options.cpuFrac - CPU fraction (default: 10000000000 = ~10ms CPU)
+ * @param {number} options.netFrac - NET fraction (default: 10000000 = ~10KB NET)
+ * @param {number} options.maxPayment - Max WAX to spend (default: '1.00000000 WAX')
+ * @returns {Promise<Object>} Transaction result
+ */
+async function powerUpAccount(payer, receiver, payerPrivateKey, options = {}) {
+  const { Api, JsonRpc } = require('eosjs');
+  const { JsSignatureProvider } = require('eosjs/dist/eosjs-jssig');
+  const fetch = require('node-fetch');
+  const { TextEncoder, TextDecoder } = require('util');
+
+  const rpcEndpoints = [
+    'https://api.waxsweden.org',
+    'https://wax.greymass.com',
+    'https://api.wax.alohaeos.com'
+  ];
+
+  // PowerUp parameters
+  const cpuFrac = options.cpuFrac || 10000000000; // ~10ms CPU
+  const netFrac = options.netFrac || 10000000; // ~10KB NET
+  const maxPayment = options.maxPayment || '1.00000000 WAX';
+
+  console.log(`⚡ PowerUp Request:`);
+  console.log(`   Payer: ${payer}`);
+  console.log(`   Receiver: ${receiver}`);
+  console.log(`   CPU Fraction: ${cpuFrac}`);
+  console.log(`   NET Fraction: ${netFrac}`);
+  console.log(`   Max Payment: ${maxPayment}`);
+
+  let lastError;
+
+  for (const endpoint of rpcEndpoints) {
+    try {
+      console.log(`🔗 Attempting PowerUp via ${endpoint}...`);
+      const rpc = new JsonRpc(endpoint, { fetch });
+      const signatureProvider = new JsSignatureProvider([payerPrivateKey]);
+      const api = new Api({
+        rpc,
+        signatureProvider,
+        textDecoder: new TextDecoder(),
+        textEncoder: new TextEncoder()
+      });
+
+      const result = await api.transact({
+        actions: [{
+          account: 'eosio',
+          name: 'powerup',
+          authorization: [{
+            actor: payer,
+            permission: 'active'
+          }],
+          data: {
+            payer: payer,
+            receiver: receiver,
+            days: 1,
+            net_frac: netFrac,
+            cpu_frac: cpuFrac,
+            max_payment: maxPayment
+          }
+        }]
+      }, {
+        blocksBehind: 3,
+        expireSeconds: 30
+      });
+
+      console.log(`✅ PowerUp successful! TX: ${result.transaction_id}`);
+      console.log(`   Provided ~${(cpuFrac / 1000000000).toFixed(1)}ms CPU to ${receiver}`);
+
+      return {
+        success: true,
+        transaction_id: result.transaction_id,
+        payer,
+        receiver,
+        cpuFrac,
+        netFrac
+      };
+
+    } catch (error) {
+      console.warn(`❌ PowerUp via ${endpoint} failed:`, error.message);
+      lastError = error;
+      continue;
+    }
+  }
+
+  throw new Error(`PowerUp failed on all endpoints. Last error: ${lastError?.message}`);
 }
 
 module.exports = {
@@ -903,6 +1034,7 @@ module.exports = {
   checkEligibility,
   mintNFT,
   transferNFTs,
+  powerUpAccount,
   getCollection,
   verifyTransaction,
   verifyTokenPayment,
