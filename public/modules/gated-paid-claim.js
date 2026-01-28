@@ -32,7 +32,9 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
     // If rewards is a JSON string, parse it
     if (typeof this.config.rewards === 'string') {
       try {
-        return JSON.parse(this.config.rewards);
+        const parsed = JSON.parse(this.config.rewards);
+        console.log(`✅ Parsed ${parsed.length} reward(s) from JSON string`);
+        return parsed;
       } catch (e) {
         console.error('Failed to parse rewards config:', e);
         return [];
@@ -41,9 +43,11 @@ class GatedPaidClaimModule extends UnifiedModuleBase {
 
     // If it's already an array, use it
     if (Array.isArray(this.config.rewards)) {
+      console.log(`✅ Using ${this.config.rewards.length} reward(s) from array`);
       return this.config.rewards;
     }
 
+    console.warn('⚠️ No rewards configured - rewards field is empty or missing');
     return [];
   }
 
