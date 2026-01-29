@@ -5,12 +5,19 @@ const { TextEncoder, TextDecoder } = require('util');
 require('dotenv').config();
 
 // Configuration - Multiple AtomicAssets API endpoints for fallback
-// Only verified working endpoints (tested Dec 2025)
+// Expanded endpoint list from https://validate.eosnation.io/wax/reports/endpoints.html (Jan 2026)
 let ATOMIC_APIS = [
-  'https://aa.wax.blacklusion.io',      // ⚡ Fastest - 86ms
-  'https://atomic.wax.eosrio.io',       // Reliable - 594ms
-  'https://wax.api.atomicassets.io',    // Official (can be slow)
-  'https://aa.dapplica.io'              // Backup
+  'https://aa.wax.blacklusion.io',              // Primary - Previously fastest (86ms), NL Hetzner
+  'https://wax-aa.eosdac.io',                   // US Cloudflare - High reliability
+  'https://atomic-wax-mainnet.wecan.dev',       // US Cloudflare - Reliable
+  'https://atomic.hivebp.io',                   // US Cloudflare - Good uptime
+  'https://wax-atomic.alcor.exchange',          // US Cloudflare - Exchange backed
+  'https://wax-aa.eu.eosamsterdam.net',         // NL Hetzner - European backup
+  'https://atomic-api.wax.cryptolions.io',      // US DigitalOcean - Alternative network
+  'https://wax-atomic-api.eosphere.io',         // AU OVH - Pacific/Asia coverage
+  'https://wax.eosusa.io',                      // US Charter - Diverse network
+  'https://wax.api.atomicassets.io',            // Official endpoint - Can be slow
+  'https://aa.dapplica.io'                      // NL Hetzner - Final backup
 ];
 
 // Allow runtime configuration - default to fastest tested endpoint
@@ -509,11 +516,16 @@ async function verifyTransaction(transactionId) {
  */
 async function verifyTokenPayment(transactionId, expectedAmount, expectedRecipient, fromAccount) {
   // RPC endpoints for transaction verification
+  // Expanded from eosnation report (Jan 2026)
   const rpcEndpoints = [
-    'https://api.wax.alohaeos.com',
-    'https://wax.greymass.com',
-    'https://api.waxsweden.org',
-    'https://wax.eosphere.io'
+    'https://api.wax.alohaeos.com',           // PRIMARY - worldwide
+    'https://wax.greymass.com',               // Reliable
+    'https://api.waxsweden.org',              // NL Hetzner
+    'https://wax.eosphere.io',                // CA OVH
+    'https://api.wax.bountyblok.io',          // US Cloudflare
+    'https://wax.eosdac.io',                  // US Cloudflare
+    'https://wax.api.eosnation.io',           // CA FlexNetworks
+    'https://api.hivebp.io'                   // US Cloudflare
   ];
 
   let lastError = null;
@@ -610,13 +622,23 @@ async function verifyTokenPayment(transactionId, expectedAmount, expectedRecipie
 async function getUserAssetsLive(account, collection = null, templateFilter = null) {
   // Live RPC endpoints - prioritize alohaeos per user request
   // These query blockchain DIRECTLY for real-time wallet ownership
+  // Expanded from https://validate.eosnation.io/wax/reports/endpoints.html (Jan 2026)
   const rpcEndpoints = [
-    'https://api.wax.alohaeos.com',      // 🔴 PRIMARY - User requested
-    'https://wax.greymass.com',
-    'https://api.waxsweden.org',
-    'https://wax.eosphere.io',
-    'https://wax.eu.eosamsterdam.net',
-    'https://wax.cryptolions.io'
+    'https://api.wax.alohaeos.com',           // 🔴 PRIMARY - User requested, worldwide
+    'https://wax.greymass.com',               // Reliable established endpoint
+    'https://api.waxsweden.org',              // NL Hetzner - Fast EU
+    'https://wax.eosphere.io',                // CA OVH - North America
+    'https://api.wax.bountyblok.io',          // US Cloudflare - High reliability
+    'https://wax.eosdac.io',                  // US Cloudflare - Established guild
+    'https://wax-public1.neftyblocks.com',    // US Cloudflare - NFT platform backed
+    'https://wax-public2.neftyblocks.com',    // US Cloudflare - Secondary NeftyBlocks
+    'https://wax.api.eosnation.io',           // CA FlexNetworks - Validator backed
+    'https://api.hivebp.io',                  // US Cloudflare - Hive BP primary
+    'https://api2.hivebp.io',                 // US Cloudflare - Hive BP secondary
+    'https://wax.eu.eosamsterdam.net',        // NL Hetzner - Amsterdam node
+    'https://wax.cryptolions.io',             // DE Hetzner - CryptoLions
+    'https://api-wax-mainnet.wecan.dev',      // US Cloudflare - WeCan guild
+    'https://wax.dapplica.io'                 // NL Hetzner - dapplica backup
   ];
 
   let lastError = null;
@@ -678,10 +700,14 @@ async function getUserAssetsLive(account, collection = null, templateFilter = nu
       // Fetch mint numbers from AtomicAssets API (blockchain doesn't have them)
       if (allAssets.length > 0) {
         const atomicEndpoints = [
-          'https://aa-wax-public1.neftyblocks.com',
-          'https://wax-aa.eosdac.io',
-          'https://atomic-wax-mainnet.wecan.dev',
-          'https://wax-atomic-api.eosphere.io'
+          'https://aa.wax.blacklusion.io',              // NL Hetzner - Primary fast
+          'https://wax-aa.eosdac.io',                   // US Cloudflare - High reliability
+          'https://atomic-wax-mainnet.wecan.dev',       // US Cloudflare - Reliable
+          'https://atomic.hivebp.io',                   // US Cloudflare - Good uptime
+          'https://wax-atomic.alcor.exchange',          // US Cloudflare - Exchange backed
+          'https://wax-aa.eu.eosamsterdam.net',         // NL Hetzner - European backup
+          'https://atomic-api.wax.cryptolions.io',      // US DigitalOcean - Alternative network
+          'https://wax-atomic-api.eosphere.io'          // AU OVH - Pacific/Asia coverage
         ];
 
         // Fetch in batches of 100 to avoid URL length limits
@@ -771,9 +797,13 @@ async function transferNFTs(fromWallet, toWallet, assetIds, memo, privateKey, op
   const { TextEncoder, TextDecoder } = require('util');
 
   const rpcEndpoints = [
-    'https://api.waxsweden.org',
-    'https://wax.greymass.com',
-    'https://api.wax.alohaeos.com'
+    'https://api.waxsweden.org',              // NL Hetzner - Fast
+    'https://wax.greymass.com',               // Reliable
+    'https://api.wax.alohaeos.com',           // Worldwide - Fast
+    'https://api.wax.bountyblok.io',          // US Cloudflare
+    'https://wax.eosphere.io',                // CA OVH
+    'https://wax.eosdac.io',                  // US Cloudflare
+    'https://api.hivebp.io'                   // US Cloudflare
   ];
 
   const maxRetries = options.maxRetries || 3;
@@ -952,9 +982,13 @@ async function powerUpAccount(payer, receiver, payerPrivateKey, options = {}) {
   const { TextEncoder, TextDecoder } = require('util');
 
   const rpcEndpoints = [
-    'https://api.waxsweden.org',
-    'https://wax.greymass.com',
-    'https://api.wax.alohaeos.com'
+    'https://api.waxsweden.org',              // NL Hetzner - Fast
+    'https://wax.greymass.com',               // Reliable
+    'https://api.wax.alohaeos.com',           // Worldwide - Fast
+    'https://api.wax.bountyblok.io',          // US Cloudflare
+    'https://wax.eosphere.io',                // CA OVH
+    'https://wax.eosdac.io',                  // US Cloudflare
+    'https://api.hivebp.io'                   // US Cloudflare
   ];
 
   // PowerUp parameters
