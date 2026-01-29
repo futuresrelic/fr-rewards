@@ -750,6 +750,36 @@ function initializeTables() {
     console.warn('⚠️ Migration warning:', error.message);
   }
 
+  // Migration: Add PWA and theme customization columns
+  try {
+    const configRow = db.prepare('SELECT * FROM config WHERE id = 1').get();
+
+    // PWA settings
+    if (configRow && !configRow.hasOwnProperty('pwa_app_name')) {
+      console.log('🔄 Adding PWA customization columns...');
+      db.exec(`ALTER TABLE config ADD COLUMN pwa_app_name TEXT`);
+      db.exec(`ALTER TABLE config ADD COLUMN pwa_short_name TEXT`);
+      db.exec(`ALTER TABLE config ADD COLUMN pwa_description TEXT`);
+      db.exec(`ALTER TABLE config ADD COLUMN pwa_start_url TEXT DEFAULT '/'`);
+      db.exec(`ALTER TABLE config ADD COLUMN pwa_theme_color TEXT DEFAULT '#10b981'`);
+      db.exec(`ALTER TABLE config ADD COLUMN pwa_background_color TEXT DEFAULT '#1a1a2e'`);
+      console.log('✅ PWA columns added');
+    }
+
+    // Theme color settings
+    if (configRow && !configRow.hasOwnProperty('theme_primary')) {
+      console.log('🔄 Adding theme customization columns...');
+      db.exec(`ALTER TABLE config ADD COLUMN theme_primary TEXT DEFAULT '#8b5cf6'`);
+      db.exec(`ALTER TABLE config ADD COLUMN theme_secondary TEXT DEFAULT '#6366f1'`);
+      db.exec(`ALTER TABLE config ADD COLUMN theme_success TEXT DEFAULT '#10b981'`);
+      db.exec(`ALTER TABLE config ADD COLUMN theme_bg_dark TEXT DEFAULT '#0f172a'`);
+      db.exec(`ALTER TABLE config ADD COLUMN theme_bg_card TEXT DEFAULT '#1e293b'`);
+      console.log('✅ Theme columns added');
+    }
+  } catch (error) {
+    console.warn('⚠️ PWA/Theme migration warning:', error.message);
+  }
+
   // Seed default templates if they don't exist (runs every time)
   console.log('🌱 Checking default templates...');
 
@@ -849,6 +879,88 @@ const config = {
       WHERE id = 1
     `);
     return stmt.run(JSON.stringify(navConfig));
+  },
+
+  updatePWA: (data) => {
+    const fields = [];
+    const values = [];
+
+    if (data.name !== undefined) {
+      fields.push('pwa_app_name = ?');
+      values.push(data.name);
+    }
+    if (data.short_name !== undefined) {
+      fields.push('pwa_short_name = ?');
+      values.push(data.short_name);
+    }
+    if (data.description !== undefined) {
+      fields.push('pwa_description = ?');
+      values.push(data.description);
+    }
+    if (data.start_url !== undefined) {
+      fields.push('pwa_start_url = ?');
+      values.push(data.start_url);
+    }
+    if (data.theme_color !== undefined) {
+      fields.push('pwa_theme_color = ?');
+      values.push(data.theme_color);
+    }
+    if (data.background_color !== undefined) {
+      fields.push('pwa_background_color = ?');
+      values.push(data.background_color);
+    }
+
+    if (fields.length === 0) return;
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    const sql = `UPDATE config SET ${fields.join(', ')} WHERE id = 1`;
+    return db.prepare(sql).run(...values);
+  },
+
+  updateTheme: (data) => {
+    const fields = [];
+    const values = [];
+
+    if (data.primary !== undefined) {
+      fields.push('theme_primary = ?');
+      values.push(data.primary);
+    }
+    if (data.secondary !== undefined) {
+      fields.push('theme_secondary = ?');
+      values.push(data.secondary);
+    }
+    if (data.success !== undefined) {
+      fields.push('theme_success = ?');
+      values.push(data.success);
+    }
+    if (data.bgDark !== undefined) {
+      fields.push('theme_bg_dark = ?');
+      values.push(data.bgDark);
+    }
+    if (data.bgCard !== undefined) {
+      fields.push('theme_bg_card = ?');
+      values.push(data.bgCard);
+    }
+
+    if (fields.length === 0) return;
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    const sql = `UPDATE config SET ${fields.join(', ')} WHERE id = 1`;
+    return db.prepare(sql).run(...values);
+  },
+
+  resetTheme: () => {
+    const stmt = db.prepare(`
+      UPDATE config
+      SET theme_primary = '#8b5cf6',
+          theme_secondary = '#6366f1',
+          theme_success = '#10b981',
+          theme_bg_dark = '#0f172a',
+          theme_bg_card = '#1e293b',
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1
+    `);
+    return stmt.run();
   }
 };
 

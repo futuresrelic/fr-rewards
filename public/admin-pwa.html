@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA Admin - Future's Relic</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .pwa-admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+
+        .login-box {
+            background: var(--bg-card);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .login-box h2 {
+            margin-bottom: 30px;
+            color: var(--primary);
+        }
+
+        .login-box input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 2px solid var(--border);
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 16px;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .tab.active {
+            background: var(--primary);
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .section-card {
+            background: var(--bg-card);
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .section-card h2 {
+            margin-top: 0;
+            color: var(--primary);
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--border);
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .form-group input[type="color"] {
+            height: 50px;
+            cursor: pointer;
+        }
+
+        .color-input-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .color-input-group input[type="color"] {
+            width: 80px;
+            flex-shrink: 0;
+        }
+
+        .color-input-group input[type="text"] {
+            flex: 1;
+        }
+
+        .theme-presets {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .theme-preset {
+            padding: 20px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 3px solid transparent;
+            text-align: center;
+        }
+
+        .theme-preset:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .theme-preset.active {
+            border-color: white;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+        }
+
+        .theme-preset h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.1rem;
+        }
+
+        .theme-colors {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .theme-color-swatch {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .preview-section {
+            background: var(--bg-dark);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .preview-section h3 {
+            margin-top: 0;
+            color: var(--text-secondary);
+        }
+
+        .preview-app {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .preview-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e5e5e5;
+        }
+
+        .preview-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            background: var(--bg-dark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+        }
+
+        .preview-info h4 {
+            margin: 0;
+            color: #333;
+            font-size: 1.1rem;
+        }
+
+        .preview-info p {
+            margin: 5px 0 0 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .preview-content {
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .file-upload-area {
+            border: 3px dashed var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: var(--bg-dark);
+        }
+
+        .file-upload-area:hover {
+            border-color: var(--primary);
+            background: rgba(139, 92, 246, 0.1);
+        }
+
+        .file-upload-area.dragover {
+            border-color: var(--primary);
+            background: rgba(139, 92, 246, 0.2);
+        }
+
+        .icon-preview {
+            max-width: 200px;
+            margin: 20px auto;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .success-message,
+        .error-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .success-message {
+            background: rgba(16, 185, 129, 0.2);
+            border: 2px solid var(--success);
+            color: var(--success);
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.2);
+            border: 2px solid var(--error);
+            color: var(--error);
+        }
+
+        .current-values {
+            background: var(--bg-dark);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .current-values h4 {
+            margin-top: 0;
+            color: var(--text-secondary);
+        }
+
+        .current-values p {
+            margin: 5px 0;
+            color: var(--text-primary);
+            font-family: monospace;
+        }
+
+        .info-box {
+            background: rgba(139, 92, 246, 0.1);
+            border-left: 4px solid var(--primary);
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info-box p {
+            margin: 0;
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 768px) {
+            .theme-presets {
+                grid-template-columns: 1fr;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+
+            .btn-group .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-box">
+            <h2>🔒 PWA Admin Login</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 20px;">
+                Enter your admin password to access PWA customization
+            </p>
+            <input type="password" id="loginPassword" placeholder="Admin Password" />
+            <button onclick="adminLogin()" class="btn btn-primary" style="width: 100%;">Login</button>
+            <p id="loginError" style="color: var(--error); margin-top: 15px; display: none;"></p>
+        </div>
+    </div>
+
+    <div class="pwa-admin-container" style="display: none;" id="mainContent">
+        <div class="header">
+            <h1>⚙️ PWA Admin Control</h1>
+            <p>Customize your Progressive Web App appearance and settings</p>
+            <button onclick="logout()" class="btn btn-sm" style="margin-top: 10px;">Logout</button>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('manifest')">📱 App Settings</button>
+            <button class="tab" onclick="switchTab('themes')">🎨 Color Themes</button>
+            <button class="tab" onclick="switchTab('icons')">🖼️ Icons</button>
+            <button class="tab" onclick="switchTab('preview')">👁️ Preview</button>
+        </div>
+
+        <!-- App Settings Tab -->
+        <div id="manifest-tab" class="tab-content active">
+            <div class="section-card">
+                <h2>App Information</h2>
+                <div class="info-box">
+                    <p>These settings control how your PWA appears when installed on users' devices.</p>
+                </div>
+
+                <div id="manifestSuccess" class="success-message"></div>
+                <div id="manifestError" class="error-message"></div>
+
+                <div class="form-group">
+                    <label>App Name (Full)</label>
+                    <input type="text" id="appName" placeholder="Future's Relic Rewards" />
+                </div>
+
+                <div class="form-group">
+                    <label>Short Name (Shown under icon)</label>
+                    <input type="text" id="appShortName" placeholder="FR Rewards" maxlength="12" />
+                </div>
+
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="appDescription" placeholder="Claim your NFT rewards and participate in exclusive drops"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Start URL (Homepage)</label>
+                    <input type="text" id="appStartUrl" placeholder="/" />
+                </div>
+
+                <div class="form-group">
+                    <label>Theme Color (Browser UI color)</label>
+                    <div class="color-input-group">
+                        <input type="color" id="appThemeColor" />
+                        <input type="text" id="appThemeColorHex" placeholder="#10b981" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Background Color (Splash screen)</label>
+                    <div class="color-input-group">
+                        <input type="color" id="appBgColor" />
+                        <input type="text" id="appBgColorHex" placeholder="#1a1a2e" />
+                    </div>
+                </div>
+
+                <button onclick="saveManifest()" class="btn btn-primary">💾 Save App Settings</button>
+            </div>
+        </div>
+
+        <!-- Color Themes Tab -->
+        <div id="themes-tab" class="tab-content">
+            <div class="section-card">
+                <h2>Color Theme Presets</h2>
+                <div class="info-box">
+                    <p>Choose a pre-designed theme or customize your own colors below. Changes apply to the entire site.</p>
+                </div>
+
+                <div id="themeSuccess" class="success-message"></div>
+                <div id="themeError" class="error-message"></div>
+
+                <div class="theme-presets" id="themePresets"></div>
+
+                <h3 style="margin-top: 30px;">Custom Colors</h3>
+
+                <div class="form-group">
+                    <label>Primary Color (Buttons, links, accents)</label>
+                    <div class="color-input-group">
+                        <input type="color" id="themePrimary" />
+                        <input type="text" id="themePrimaryHex" placeholder="#8b5cf6" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Secondary Color (Alternative accents)</label>
+                    <div class="color-input-group">
+                        <input type="color" id="themeSecondary" />
+                        <input type="text" id="themeSecondaryHex" placeholder="#6366f1" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Success Color (Positive actions)</label>
+                    <div class="color-input-group">
+                        <input type="color" id="themeSuccess" />
+                        <input type="text" id="themeSuccessHex" placeholder="#10b981" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Background Color (Main background)</label>
+                    <div class="color-input-group">
+                        <input type="color" id="themeBgDark" />
+                        <input type="text" id="themeBgDarkHex" placeholder="#0f172a" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Card Background (Panels and cards)</label>
+                    <div class="color-input-group">
+                        <input type="color" id="themeBgCard" />
+                        <input type="text" id="themeBgCardHex" placeholder="#1e293b" />
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button onclick="saveTheme()" class="btn btn-primary">💾 Save Custom Theme</button>
+                    <button onclick="resetTheme()" class="btn btn-secondary">🔄 Reset to Default</button>
+                    <button onclick="loadCurrentTheme()" class="btn">📥 Load Current Theme</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Icons Tab -->
+        <div id="icons-tab" class="tab-content">
+            <div class="section-card">
+                <h2>PWA Icon Upload</h2>
+                <div class="info-box">
+                    <p>Upload a square image (512x512 or larger recommended). All required PWA icon sizes will be generated automatically.</p>
+                </div>
+
+                <div id="iconSuccess" class="success-message"></div>
+                <div id="iconError" class="error-message"></div>
+
+                <div class="file-upload-area" id="iconUploadArea">
+                    <div style="font-size: 48px; margin-bottom: 15px;">🖼️</div>
+                    <h3>Drop your icon here or click to browse</h3>
+                    <p style="color: var(--text-secondary); margin-top: 10px;">
+                        PNG, JPG, or WebP • Square format recommended • Min 512x512px
+                    </p>
+                    <input type="file" id="iconFileInput" accept="image/*" style="display: none;" />
+                </div>
+
+                <div id="iconPreviewSection" style="display: none; margin-top: 20px;">
+                    <h3>Icon Preview</h3>
+                    <img id="iconPreview" class="icon-preview" />
+                    <div class="btn-group">
+                        <button onclick="uploadIcon()" class="btn btn-primary">📤 Upload & Generate All Sizes</button>
+                        <button onclick="cancelIconUpload()" class="btn btn-secondary">✖️ Cancel</button>
+                    </div>
+                </div>
+
+                <div class="current-values" style="margin-top: 30px;">
+                    <h4>Current Icon</h4>
+                    <img src="/icons/icon-192x192.png" style="width: 100px; border-radius: 12px; margin-top: 10px;" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview Tab -->
+        <div id="preview-tab" class="tab-content">
+            <div class="section-card">
+                <h2>Live Preview</h2>
+                <div class="info-box">
+                    <p>This is how your PWA will appear when installed on a user's device.</p>
+                </div>
+
+                <div class="preview-section">
+                    <h3>App Appearance Preview</h3>
+                    <div class="preview-app" id="previewApp">
+                        <div class="preview-header">
+                            <div class="preview-icon" id="previewIcon">
+                                <img src="/icons/icon-192x192.png" style="width: 100%; height: 100%; border-radius: 12px;" />
+                            </div>
+                            <div class="preview-info">
+                                <h4 id="previewName">Future's Relic Rewards</h4>
+                                <p id="previewShortName">FR Rewards</p>
+                            </div>
+                        </div>
+                        <div class="preview-content" id="previewContent">
+                            <h3 style="margin-top: 0;">Welcome!</h3>
+                            <p>Your PWA is ready to install</p>
+                            <div style="margin-top: 20px; padding: 15px; border-radius: 8px;" id="previewColorDemo">
+                                <button style="padding: 10px 20px; border-radius: 8px; border: none; color: white; cursor: pointer;" id="previewButton">
+                                    Action Button
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="updatePreview()" class="btn btn-primary">🔄 Refresh Preview</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/admin-pwa.js"></script>
+</body>
+</html>

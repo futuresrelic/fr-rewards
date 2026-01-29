@@ -2972,6 +2972,270 @@ app.post('/api/admin/generate-pwa-icons', authenticateAdmin, async (req, res) =>
 });
 
 /**
+ * GET /api/pwa/manifest
+ * Get current PWA manifest settings
+ */
+app.get('/api/pwa/manifest', async (req, res) => {
+  try {
+    const config = db.config.get();
+
+    const manifest = {
+      name: config.pwa_app_name || config.page_title || "Future's Relic Rewards",
+      short_name: config.pwa_short_name || (config.page_title || "FR Rewards").substring(0, 12),
+      description: config.pwa_description || config.page_subtitle || "Claim your NFT holder rewards",
+      start_url: config.pwa_start_url || "/",
+      theme_color: config.pwa_theme_color || "#10b981",
+      background_color: config.pwa_background_color || "#1a1a2e"
+    };
+
+    res.json(manifest);
+  } catch (error) {
+    console.error('Error getting PWA manifest:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/pwa/manifest
+ * Update PWA manifest settings
+ */
+app.put('/api/pwa/manifest', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, short_name, description, start_url, theme_color, background_color } = req.body;
+
+    db.config.updatePWA({
+      name,
+      short_name,
+      description,
+      start_url,
+      theme_color,
+      background_color
+    });
+
+    res.json({
+      success: true,
+      message: 'PWA manifest updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating PWA manifest:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/pwa/theme
+ * Get current theme settings
+ */
+app.get('/api/pwa/theme', authenticateAdmin, async (req, res) => {
+  try {
+    const config = db.config.get();
+
+    const theme = {
+      colors: {
+        primary: config.theme_primary || '#8b5cf6',
+        secondary: config.theme_secondary || '#6366f1',
+        success: config.theme_success || '#10b981',
+        bgDark: config.theme_bg_dark || '#0f172a',
+        bgCard: config.theme_bg_card || '#1e293b'
+      }
+    };
+
+    res.json(theme);
+  } catch (error) {
+    console.error('Error getting theme:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/pwa/theme
+ * Update theme settings and generate dynamic CSS
+ */
+app.put('/api/pwa/theme', authenticateAdmin, async (req, res) => {
+  try {
+    const { primary, secondary, success, bgDark, bgCard } = req.body;
+
+    db.config.updateTheme({
+      primary,
+      secondary,
+      success,
+      bgDark,
+      bgCard
+    });
+
+    // Generate dynamic CSS file
+    const config = db.config.get();
+    const cssContent = `/* Auto-generated theme CSS */
+:root {
+  --primary: ${config.theme_primary || primary};
+  --primary-dark: ${adjustColor(config.theme_primary || primary, -10)};
+  --secondary: ${config.theme_secondary || secondary};
+  --success: ${config.theme_success || success};
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --bg-dark: ${config.theme_bg_dark || bgDark};
+  --bg-card: ${config.theme_bg_card || bgCard};
+  --bg-secondary: ${config.theme_bg_card || bgCard};
+  --bg-card-hover: ${adjustColor(config.theme_bg_card || bgCard, 10)};
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --border: #334155;
+}
+`;
+
+    // Write to theme-override.css
+    const fs = require('fs');
+    const path = require('path');
+    const themePath = path.join(__dirname, 'public', 'theme-override.css');
+    fs.writeFileSync(themePath, cssContent);
+
+    res.json({
+      success: true,
+      message: 'Theme updated successfully. Refresh the page to see changes.'
+    });
+  } catch (error) {
+    console.error('Error updating theme:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/pwa/theme/reset
+ * Reset theme to default colors
+ */
+app.post('/api/pwa/theme/reset', authenticateAdmin, async (req, res) => {
+  try {
+    db.config.resetTheme();
+
+    // Remove theme override file
+    const fs = require('fs');
+    const path = require('path');
+    const themePath = path.join(__dirname, 'public', 'theme-override.css');
+    if (fs.existsSync(themePath)) {
+      fs.unlinkSync(themePath);
+    }
+
+    res.json({
+      success: true,
+      message: 'Theme reset to default'
+    });
+  } catch (error) {
+    console.error('Error resetting theme:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/pwa/upload-icon
+ * Upload PWA icon and generate all sizes
+ */
+app.post('/api/pwa/upload-icon', authenticateAdmin, upload.single('icon'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No icon file uploaded' });
+    }
+
+    const sharp = require('sharp');
+    const fs = require('fs');
+    const path = require('path');
+
+    const iconsDir = path.join(__dirname, 'public', 'icons');
+
+    // Ensure icons directory exists
+    if (!fs.existsSync(iconsDir)) {
+      fs.mkdirSync(iconsDir, { recursive: true });
+    }
+
+    // PWA icon sizes to generate
+    const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+    const generatedIcons = [];
+
+    // Generate each size from uploaded file
+    for (const size of sizes) {
+      const filename = `icon-${size}x${size}.png`;
+      const outputPath = path.join(iconsDir, filename);
+
+      await sharp(req.file.buffer)
+        .resize(size, size, {
+          fit: 'contain',
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        })
+        .png()
+        .toFile(outputPath);
+
+      generatedIcons.push(`/icons/${filename}`);
+    }
+
+    // Also save as favicon
+    const faviconPath = path.join(__dirname, 'public', 'favicon.png');
+    await sharp(req.file.buffer)
+      .resize(32, 32, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      })
+      .png()
+      .toFile(faviconPath);
+
+    res.json({
+      success: true,
+      message: `Generated ${generatedIcons.length} PWA icons and favicon`,
+      icons: generatedIcons
+    });
+  } catch (error) {
+    console.error('Error uploading PWA icon:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper function to adjust color brightness
+function adjustColor(hex, percent) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = Math.max(0, Math.min(255, (num >> 16) + amt));
+  const G = Math.max(0, Math.min(255, (num >> 8 & 0x00FF) + amt));
+  const B = Math.max(0, Math.min(255, (num & 0x0000FF) + amt));
+  return `#${(0x1000000 + (R * 0x10000) + (G * 0x100) + B).toString(16).slice(1)}`;
+}
+
+/**
+ * GET /api/theme.css
+ * Serve dynamic theme CSS based on database settings
+ */
+app.get('/api/theme.css', async (req, res) => {
+  try {
+    const config = db.config.get();
+
+    // Use custom theme colors if set, otherwise use defaults
+    const primary = config.theme_primary || '#8b5cf6';
+    const secondary = config.theme_secondary || '#6366f1';
+    const success = config.theme_success || '#10b981';
+    const bgDark = config.theme_bg_dark || '#0f172a';
+    const bgCard = config.theme_bg_card || '#1e293b';
+
+    const cssContent = `/* Dynamic theme CSS - Auto-generated from PWA Admin */
+:root {
+  --primary: ${primary};
+  --primary-dark: ${adjustColor(primary, -10)};
+  --secondary: ${secondary};
+  --success: ${success};
+  --bg-dark: ${bgDark};
+  --bg-card: ${bgCard};
+  --bg-secondary: ${bgCard};
+  --bg-card-hover: ${adjustColor(bgCard, 10)};
+}
+`;
+
+    res.setHeader('Content-Type', 'text/css');
+    res.send(cssContent);
+  } catch (error) {
+    console.error('Error generating theme CSS:', error);
+    // Return empty CSS on error
+    res.setHeader('Content-Type', 'text/css');
+    res.send('/* Error loading theme */');
+  }
+});
+
+/**
  * GET /manifest.json
  * Serve dynamic PWA manifest with custom branding
  */
@@ -2980,13 +3244,13 @@ app.get('/manifest.json', async (req, res) => {
     const config = db.config.get();
 
     const manifest = {
-      name: config.page_title || "Future's Relic Rewards",
-      short_name: (config.page_title || "FR Rewards").substring(0, 12),
-      description: config.page_subtitle || "Claim your NFT holder rewards",
-      start_url: "/",
+      name: config.pwa_app_name || config.page_title || "Future's Relic Rewards",
+      short_name: config.pwa_short_name || (config.page_title || "FR Rewards").substring(0, 12),
+      description: config.pwa_description || config.page_subtitle || "Claim your NFT holder rewards",
+      start_url: config.pwa_start_url || "/",
       display: "standalone",
-      background_color: "#1a1a2e",
-      theme_color: "#10b981",
+      background_color: config.pwa_background_color || "#1a1a2e",
+      theme_color: config.pwa_theme_color || "#10b981",
       orientation: "portrait-primary",
       scope: "/",
       icons: [
