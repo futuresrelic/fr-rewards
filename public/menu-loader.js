@@ -2,6 +2,16 @@
 (function() {
   'use strict';
 
+  // Store the deferred install prompt
+  let deferredPrompt = null;
+
+  // Capture the beforeinstallprompt event
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    console.log('PWA install prompt captured');
+  });
+
   // Load menu items from API and render them
   async function loadMenu() {
     try {
@@ -17,18 +27,50 @@
         .sort((a, b) => a.order - b.order);
 
       // Render menu items
-      menuContainer.innerHTML = enabledItems.map(item => `
-        <a href="${item.url}" class="menu-item">
-          <span class="icon">${item.icon || '📄'}</span>
-          <span class="label">${item.label}</span>
-        </a>
-      `).join('');
+      menuContainer.innerHTML = enabledItems.map(item => {
+        const isPWAInstall = item.url === '/manifest.json' || item.label === 'Download App';
+        return `
+          <a href="${item.url}" class="menu-item" ${isPWAInstall ? 'data-pwa-install="true"' : ''}>
+            <span class="icon">${item.icon || '📄'}</span>
+            <span class="label">${item.label}</span>
+          </a>
+        `;
+      }).join('');
+
+      // Setup PWA install handler after rendering
+      setupPWAInstallHandler();
 
     } catch (error) {
       console.error('Failed to load menu:', error);
       // Fallback to default menu if API fails
       renderDefaultMenu();
     }
+  }
+
+  // Handle PWA install button clicks
+  function setupPWAInstallHandler() {
+    const pwaInstallButtons = document.querySelectorAll('[data-pwa-install="true"]');
+
+    pwaInstallButtons.forEach(button => {
+      button.addEventListener('click', async (e) => {
+        e.preventDefault();
+
+        if (!deferredPrompt) {
+          alert('App is already installed or not available for installation on this device.');
+          return;
+        }
+
+        // Show the install prompt
+        deferredPrompt.prompt();
+
+        // Wait for the user's response
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`User response to install prompt: ${outcome}`);
+
+        // Clear the prompt as it can only be used once
+        deferredPrompt = null;
+      });
+    });
   }
 
   // Render default menu items if API fails
@@ -44,12 +86,18 @@
       { label: 'About', url: '/about.html', icon: 'ℹ️' }
     ];
 
-    menuContainer.innerHTML = defaultItems.map(item => `
-      <a href="${item.url}" class="menu-item">
-        <span class="icon">${item.icon}</span>
-        <span class="label">${item.label}</span>
-      </a>
-    `).join('');
+    menuContainer.innerHTML = defaultItems.map(item => {
+      const isPWAInstall = item.url === '/manifest.json' || item.label === 'Download App';
+      return `
+        <a href="${item.url}" class="menu-item" ${isPWAInstall ? 'data-pwa-install="true"' : ''}>
+          <span class="icon">${item.icon}</span>
+          <span class="label">${item.label}</span>
+        </a>
+      `;
+    }).join('');
+
+    // Setup PWA install handler after rendering
+    setupPWAInstallHandler();
   }
 
   // Setup menu toggle functionality
