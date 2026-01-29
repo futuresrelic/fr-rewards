@@ -1,6 +1,8 @@
 // PWA Admin JavaScript
 let selectedFile = null;
 let currentTheme = null;
+let originalIconImage = null;
+let isTransparent = false;
 
 // Theme Presets
 const themePresets = [
@@ -98,6 +100,102 @@ const themePresets = [
             bgDark: '#1a1008',
             bgCard: '#2d2018',
             themeColor: '#fb923c'
+        }
+    },
+    {
+        name: '📜 Sepia',
+        id: 'sepia',
+        colors: {
+            primary: '#a0826d',
+            secondary: '#8b6f47',
+            success: '#7a9d54',
+            bgDark: '#1a1612',
+            bgCard: '#2d2520',
+            themeColor: '#a0826d'
+        }
+    },
+    {
+        name: '🏜️ Desert',
+        id: 'desert',
+        colors: {
+            primary: '#d4a574',
+            secondary: '#c96d4a',
+            success: '#8b9556',
+            bgDark: '#1c1510',
+            bgCard: '#2e2318',
+            themeColor: '#d4a574'
+        }
+    },
+    {
+        name: '📷 Vintage',
+        id: 'vintage',
+        colors: {
+            primary: '#b8957a',
+            secondary: '#9c6b5f',
+            success: '#7a9c7a',
+            bgDark: '#15120f',
+            bgCard: '#26221d',
+            themeColor: '#b8957a'
+        }
+    },
+    {
+        name: '🪻 Lavender Fields',
+        id: 'lavender',
+        colors: {
+            primary: '#9d84b7',
+            secondary: '#b695c0',
+            success: '#88b577',
+            bgDark: '#12101a',
+            bgCard: '#1f1a2d',
+            themeColor: '#9d84b7'
+        }
+    },
+    {
+        name: '🪸 Coral Reef',
+        id: 'coral-reef',
+        colors: {
+            primary: '#ff7f6a',
+            secondary: '#ffb088',
+            success: '#5fc9b8',
+            bgDark: '#1a0f0d',
+            bgCard: '#2d1e1a',
+            themeColor: '#ff7f6a'
+        }
+    },
+    {
+        name: '🍂 Autumn Leaves',
+        id: 'autumn',
+        colors: {
+            primary: '#d97532',
+            secondary: '#c1554d',
+            success: '#7fa650',
+            bgDark: '#1a0f08',
+            bgCard: '#2d1f14',
+            themeColor: '#d97532'
+        }
+    },
+    {
+        name: '☕ Coffee & Cream',
+        id: 'coffee',
+        colors: {
+            primary: '#8b6f47',
+            secondary: '#a68a64',
+            success: '#7fa650',
+            bgDark: '#14100a',
+            bgCard: '#241f16',
+            themeColor: '#8b6f47'
+        }
+    },
+    {
+        name: '🌅 Warm Sunset',
+        id: 'warm-sunset',
+        colors: {
+            primary: '#e88d67',
+            secondary: '#f4a261',
+            success: '#90be6d',
+            bgDark: '#1a0e08',
+            bgCard: '#2d1d14',
+            themeColor: '#e88d67'
         }
     }
 ];
@@ -437,11 +535,16 @@ function handleIconFile(file) {
 
     selectedFile = file;
 
-    // Show preview
+    // Load image for canvas editing
     const reader = new FileReader();
     reader.onload = (e) => {
-        document.getElementById('iconPreview').src = e.target.result;
-        document.getElementById('iconPreviewSection').style.display = 'block';
+        const img = new Image();
+        img.onload = () => {
+            originalIconImage = img;
+            initializeIconEditor();
+            document.getElementById('iconPreviewSection').style.display = 'block';
+        };
+        img.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
@@ -453,12 +556,21 @@ async function uploadIcon() {
     const successEl = document.getElementById('iconSuccess');
     const errorEl = document.getElementById('iconError');
 
-    const formData = new FormData();
-    formData.append('icon', selectedFile);
-
     try {
-        successEl.textContent = '⏳ Uploading and generating all icon sizes...';
+        successEl.textContent = '⏳ Preparing icon and generating all sizes...';
         successEl.style.display = 'block';
+
+        // Get the edited icon from canvas
+        const canvas = document.getElementById('iconEditorCanvas');
+
+        // Convert canvas to blob
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+        // Create FormData with the edited icon
+        const formData = new FormData();
+        formData.append('icon', blob, 'icon.png');
+
+        successEl.textContent = '⏳ Uploading and generating all icon sizes...';
 
         const response = await fetch('/api/pwa/upload-icon', {
             method: 'POST',
@@ -491,8 +603,109 @@ async function uploadIcon() {
 
 function cancelIconUpload() {
     selectedFile = null;
+    originalIconImage = null;
     document.getElementById('iconFileInput').value = '';
     document.getElementById('iconPreviewSection').style.display = 'none';
+}
+
+// Icon Editor Functions
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+}
+
+function initializeIconEditor() {
+    // Reset controls to defaults
+    document.getElementById('iconScale').value = 100;
+    document.getElementById('iconPadding').value = 0;
+    document.getElementById('iconRadius').value = 0;
+    document.getElementById('iconBgColor').value = '#8b5cf6';
+    document.getElementById('iconBgColorHex').value = '#8b5cf6';
+    isTransparent = false;
+
+    // Draw initial icon
+    updateIconEditor();
+}
+
+function updateIconEditor() {
+    if (!originalIconImage) return;
+
+    const canvas = document.getElementById('iconEditorCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Get control values
+    const scale = parseInt(document.getElementById('iconScale').value) / 100;
+    const padding = parseInt(document.getElementById('iconPadding').value);
+    const radius = parseInt(document.getElementById('iconRadius').value);
+    const bgColor = document.getElementById('iconBgColor').value;
+
+    // Update value displays
+    document.getElementById('scaleValue').textContent = Math.round(scale * 100) + '%';
+    document.getElementById('paddingValue').textContent = padding + 'px';
+    document.getElementById('radiusValue').textContent = radius + '%';
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw background
+    if (!isTransparent) {
+        ctx.fillStyle = bgColor;
+        if (radius > 0) {
+            // Draw rounded rectangle background
+            const cornerRadius = (canvas.width * radius) / 100;
+            drawRoundedRect(ctx, 0, 0, canvas.width, canvas.height, cornerRadius);
+            ctx.fill();
+        } else {
+            // Draw square background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+
+    // Calculate icon dimensions with scale and padding
+    const availableSize = canvas.width - (padding * 2);
+    const iconSize = availableSize * scale;
+    const x = (canvas.width - iconSize) / 2;
+    const y = (canvas.height - iconSize) / 2;
+
+    // Draw icon with optional rounded corners
+    ctx.save();
+    if (radius > 0) {
+        // Clip to rounded rectangle for icon
+        const cornerRadius = (iconSize * radius) / 100;
+        drawRoundedRect(ctx, x, y, iconSize, iconSize, cornerRadius);
+        ctx.clip();
+    }
+
+    ctx.drawImage(originalIconImage, x, y, iconSize, iconSize);
+    ctx.restore();
+}
+
+function resetIconEditor() {
+    initializeIconEditor();
+}
+
+function syncIconBgColor(value) {
+    const color = value.trim();
+    if (/^#[0-9A-F]{6}$/i.test(color)) {
+        document.getElementById('iconBgColor').value = color;
+        document.getElementById('iconBgColorHex').value = color;
+        isTransparent = false;
+        updateIconEditor();
+    }
+}
+
+function setTransparentBg() {
+    isTransparent = true;
+    updateIconEditor();
 }
 
 // Preview functions

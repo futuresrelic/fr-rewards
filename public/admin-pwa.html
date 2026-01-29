@@ -536,9 +536,85 @@
                 </div>
 
                 <div id="iconPreviewSection" style="display: none; margin-top: 20px;">
-                    <h3>Icon Preview</h3>
-                    <img id="iconPreview" class="icon-preview" />
-                    <div class="btn-group">
+                    <h3>Icon Preview & Editing</h3>
+
+                    <!-- Icon Editor Canvas -->
+                    <div style="display: flex; gap: 30px; margin-top: 20px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 300px;">
+                            <div style="background: #1e293b; padding: 20px; border-radius: 12px; text-align: center;">
+                                <canvas id="iconEditorCanvas" width="400" height="400" style="max-width: 100%; border-radius: 8px; background: #0f172a;"></canvas>
+                            </div>
+                        </div>
+
+                        <div style="flex: 1; min-width: 300px;">
+                            <h4 style="margin-bottom: 15px;">Icon Adjustments</h4>
+
+                            <!-- Scale Control -->
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Scale</span>
+                                    <span id="scaleValue">100%</span>
+                                </label>
+                                <input type="range" id="iconScale" min="50" max="150" value="100"
+                                       style="width: 100%;" oninput="updateIconEditor()">
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    Resize the icon (smaller icons leave more space for padding)
+                                </p>
+                            </div>
+
+                            <!-- Padding Control -->
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Padding / Border</span>
+                                    <span id="paddingValue">0px</span>
+                                </label>
+                                <input type="range" id="iconPadding" min="0" max="100" value="0"
+                                       style="width: 100%;" oninput="updateIconEditor()">
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    Add padding around the icon for a cleaner look
+                                </p>
+                            </div>
+
+                            <!-- Background Color -->
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: block; margin-bottom: 8px;">Background Color</label>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <input type="color" id="iconBgColor" value="#8b5cf6"
+                                           style="height: 40px; width: 60px; border-radius: 6px; border: 2px solid var(--border-color); background: transparent; cursor: pointer;"
+                                           oninput="updateIconEditor()">
+                                    <input type="text" id="iconBgColorHex" value="#8b5cf6"
+                                           style="flex: 1; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);"
+                                           oninput="syncIconBgColor(this.value)">
+                                    <button onclick="setTransparentBg()" class="btn btn-secondary" style="padding: 8px 12px;">
+                                        Transparent
+                                    </button>
+                                </div>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    Set background color or use transparent
+                                </p>
+                            </div>
+
+                            <!-- Border Radius -->
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Corner Roundness</span>
+                                    <span id="radiusValue">0%</span>
+                                </label>
+                                <input type="range" id="iconRadius" min="0" max="50" value="0"
+                                       style="width: 100%;" oninput="updateIconEditor()">
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    Round the corners of the icon (iOS style)
+                                </p>
+                            </div>
+
+                            <!-- Reset Button -->
+                            <button onclick="resetIconEditor()" class="btn btn-secondary" style="width: 100%; margin-bottom: 10px;">
+                                🔄 Reset All Adjustments
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="btn-group" style="margin-top: 20px;">
                         <button onclick="uploadIcon()" class="btn btn-primary">📤 Upload & Generate All Sizes</button>
                         <button onclick="cancelIconUpload()" class="btn btn-secondary">✖️ Cancel</button>
                     </div>
