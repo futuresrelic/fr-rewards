@@ -2,7 +2,83 @@
 
 All notable changes to the WAX NFT Rewards System will be documented in this file.
 
-## [Unreleased] - 2025-01-26
+## [Unreleased] - 2026-01-29
+
+### Added
+
+#### PWA Admin Panel - Icon & Favicon Improvements
+- **Separate Favicon Generator**: New independent favicon editor tool in PWA Admin panel
+  - Generates 32x32 favicon.png separately from PWA app icons
+  - Includes visual editor with scale, padding, background color, and corner roundness controls
+  - Default transparent background for clean browser tab appearance
+  - Allows different styling than app icons (e.g., app icons with background, favicon transparent)
+  - New backend endpoint: `POST /api/pwa/upload-favicon`
+  - File saved to `/public/favicon.png`
+
+#### PWA Admin Panel - Icon Generator Updates
+- **App Icon Generator Changes**: No longer generates favicon automatically
+  - Generates only 8 PWA icon sizes: 72x72, 96x96, 128x128, 144x144, 152x152, 192x192, 384x384, 512x512
+  - Files saved to `/public/icons/` directory
+  - Favicon now handled by separate generator tool
+
+### Changed
+
+#### Security Improvements
+- **Removed Admin Link**: Removed admin panel link from public index.html footer
+  - Prevents unauthorized access attempts
+  - Admin panel still accessible via direct URL for authorized users only
+
+### Technical Details
+
+#### New Files & Endpoints
+- `POST /api/pwa/upload-favicon` - Generate 32x32 favicon separately
+- Frontend functions:
+  - `setupFaviconUpload()` - Initialize favicon upload area
+  - `handleFaviconFile()` - Process favicon file upload
+  - `uploadFavicon()` - Submit favicon to backend
+  - `initializeFaviconEditor()` - Setup favicon canvas editor
+  - `updateFaviconEditor()` - Render favicon preview with adjustments
+  - `resetFaviconEditor()` - Reset favicon editor to defaults
+  - `syncFaviconBgColor()` - Sync color picker values
+  - `setFaviconTransparentBg()` - Set favicon to transparent background
+
+#### Modified Files
+- `/public/admin-pwa.html` - Added separate favicon editor section (lines 657-737)
+- `/public/admin-pwa.js` - Added favicon editor functions and variables
+- `/server.js` - Added `/api/pwa/upload-favicon` endpoint, removed favicon generation from icon upload endpoint
+- `/public/index.html` - Removed admin panel link from footer
+- `/DEV_NOTES.md` - Added comprehensive PWA Admin Panel documentation
+
+#### Frontend Variables
+```javascript
+// Favicon editor specific variables
+let selectedFaviconFile = null;
+let originalFaviconImage = null;
+let isFaviconTransparent = true; // Default transparent for favicons
+```
+
+#### Why Separate Icon and Favicon Generators?
+- App icons often look better with background colors for consistent branding
+- Favicons look better with transparent backgrounds for browser tab display
+- Different aesthetic requirements for different contexts (PWA install vs browser tab)
+- Users can customize each independently for optimal appearance
+
+### Benefits
+
+#### For Users
+- ✅ Complete control over favicon appearance separate from app icons
+- ✅ Transparent favicon option for clean browser tabs
+- ✅ Background color option for app icons without affecting favicon
+- ✅ Enhanced security with hidden admin link
+
+#### For Developers
+- ✅ Clear separation of concerns between icon types
+- ✅ Documented in DEV_NOTES.md with complete API reference
+- ✅ Consistent canvas editor patterns for both tools
+
+---
+
+## [Released] - 2025-01-26
 
 ### Added
 

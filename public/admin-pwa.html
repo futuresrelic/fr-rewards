@@ -648,8 +648,124 @@
                 </div>
 
                 <div class="current-values" style="margin-top: 30px;">
-                    <h4>Current Icon</h4>
+                    <h4>Current App Icon</h4>
                     <img src="/icons/icon-192x192.png" style="width: 100px; border-radius: 12px; margin-top: 10px;" />
+                </div>
+            </div>
+
+            <!-- Favicon Generator Section -->
+            <div class="section-card" style="margin-top: 30px;">
+                <h2>Favicon Generator (Separate from App Icon)</h2>
+                <div class="info-box">
+                    <p>Generate a separate favicon (32x32) with transparent background or custom styling. This won't affect your PWA app icons above.</p>
+                </div>
+
+                <div id="faviconSuccess" class="success-message"></div>
+                <div id="faviconError" class="error-message"></div>
+
+                <div class="file-upload-area" id="faviconUploadArea">
+                    <div style="font-size: 48px; margin-bottom: 15px;">⭐</div>
+                    <h3>Drop your favicon image here or click to browse</h3>
+                    <p style="color: var(--text-secondary); margin-top: 10px;">
+                        PNG, JPG, or WebP • Square format recommended • Will be resized to 32x32px
+                    </p>
+                    <input type="file" id="faviconFileInput" accept="image/*" style="display: none;" />
+                </div>
+
+                <div id="faviconPreviewSection" style="display: none; margin-top: 20px;">
+                    <h3>Favicon Preview & Editing</h3>
+
+                    <!-- Favicon Editor Canvas -->
+                    <div style="display: flex; gap: 30px; margin-top: 20px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 300px;">
+                            <div style="background: #1e293b; padding: 20px; border-radius: 12px; text-align: center;">
+                                <canvas id="faviconEditorCanvas" width="400" height="400" style="max-width: 100%; border-radius: 8px; background: #0f172a;"></canvas>
+                            </div>
+                            <p style="text-align: center; color: var(--text-secondary); font-size: 12px; margin-top: 10px;">
+                                Preview shown at 400x400 • Will be saved as 32x32
+                            </p>
+                        </div>
+
+                        <div style="flex: 1; min-width: 300px;">
+                            <h4 style="margin-bottom: 15px;">Favicon Adjustments</h4>
+
+                            <!-- Scale Control -->
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Scale</span>
+                                    <span id="faviconScaleValue">100%</span>
+                                </label>
+                                <input type="range" id="faviconScale" min="50" max="150" value="100"
+                                       style="width: 100%;" oninput="updateFaviconEditor()">
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    Resize the favicon
+                                </p>
+                            </div>
+
+                            <!-- Padding Control -->
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Padding / Border</span>
+                                    <span id="faviconPaddingValue">0px</span>
+                                </label>
+                                <input type="range" id="faviconPadding" min="0" max="100" value="0"
+                                       style="width: 100%;" oninput="updateFaviconEditor()">
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    Add padding around the favicon
+                                </p>
+                            </div>
+
+                            <!-- Background Color -->
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: block; margin-bottom: 8px;">Background Color</label>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <input type="color" id="faviconBgColor" value="#8b5cf6"
+                                           style="height: 40px; width: 60px; border-radius: 6px; border: 2px solid var(--border-color); background: transparent; cursor: pointer;"
+                                           oninput="updateFaviconEditor()">
+                                    <input type="text" id="faviconBgColorHex" value="#8b5cf6"
+                                           style="flex: 1; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);"
+                                           oninput="syncFaviconBgColor(this.value)">
+                                    <button onclick="setFaviconTransparentBg()" class="btn btn-secondary" style="padding: 8px 12px;">
+                                        Transparent
+                                    </button>
+                                </div>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    Transparent background recommended for favicons
+                                </p>
+                            </div>
+
+                            <!-- Border Radius -->
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>Corner Roundness</span>
+                                    <span id="faviconRadiusValue">0%</span>
+                                </label>
+                                <input type="range" id="faviconRadius" min="0" max="50" value="0"
+                                       style="width: 100%;" oninput="updateFaviconEditor()">
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    Round the corners of the favicon
+                                </p>
+                            </div>
+
+                            <!-- Reset Button -->
+                            <button onclick="resetFaviconEditor()" class="btn btn-secondary" style="width: 100%; margin-bottom: 10px;">
+                                🔄 Reset All Adjustments
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="btn-group" style="margin-top: 20px;">
+                        <button onclick="uploadFavicon()" class="btn btn-primary">📤 Generate Favicon</button>
+                        <button onclick="cancelFaviconUpload()" class="btn btn-secondary">✖️ Cancel</button>
+                    </div>
+                </div>
+
+                <div class="current-values" style="margin-top: 30px;">
+                    <h4>Current Favicon</h4>
+                    <img src="/favicon.png" style="width: 64px; border: 2px solid var(--border-color); border-radius: 4px; margin-top: 10px; background: repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50% / 20px 20px;" />
+                    <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                        Shown on checkered background to display transparency
+                    </p>
                 </div>
             </div>
         </div>

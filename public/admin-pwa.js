@@ -4,6 +4,11 @@ let currentTheme = null;
 let originalIconImage = null;
 let isTransparent = false;
 
+// Favicon editor variables
+let selectedFaviconFile = null;
+let originalFaviconImage = null;
+let isFaviconTransparent = true; // Default to transparent for favicons
+
 // Theme Presets
 const themePresets = [
     {
@@ -206,6 +211,7 @@ document.addEventListener('DOMContentLoaded', function() {
     renderThemePresets();
     setupColorInputSync();
     setupIconUpload();
+    setupFaviconUpload();
 });
 
 // Authentication
@@ -722,6 +728,207 @@ function setTransparentBg() {
     isTransparent = true;
     updateIconEditor();
 }
+
+// ==================== FAVICON EDITOR FUNCTIONS ====================
+
+function setupFaviconUpload() {
+    const uploadArea = document.getElementById('faviconUploadArea');
+    const fileInput = document.getElementById('faviconFileInput');
+
+    uploadArea.onclick = () => fileInput.click();
+
+    fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) handleFaviconFile(file);
+    };
+
+    // Drag and drop
+    uploadArea.ondragover = (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    };
+
+    uploadArea.ondragleave = () => {
+        uploadArea.classList.remove('dragover');
+    };
+
+    uploadArea.ondrop = (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+            handleFaviconFile(file);
+        }
+    };
+}
+
+function handleFaviconFile(file) {
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+    }
+
+    selectedFaviconFile = file;
+
+    // Load image for canvas editing
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            originalFaviconImage = img;
+            initializeFaviconEditor();
+            document.getElementById('faviconPreviewSection').style.display = 'block';
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+async function uploadFavicon() {
+    if (!selectedFaviconFile) return;
+
+    const token = sessionStorage.getItem('admin_token');
+    const successEl = document.getElementById('faviconSuccess');
+    const errorEl = document.getElementById('faviconError');
+
+    try {
+        successEl.textContent = '⏳ Preparing favicon...';
+        successEl.style.display = 'block';
+
+        // Get the edited favicon from canvas
+        const canvas = document.getElementById('faviconEditorCanvas');
+
+        // Convert canvas to blob
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+        // Create FormData with the edited favicon
+        const formData = new FormData();
+        formData.append('favicon', blob, 'favicon.png');
+
+        successEl.textContent = '⏳ Uploading and generating favicon...';
+
+        const response = await fetch('/api/pwa/upload-favicon', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            successEl.textContent = '✅ Favicon generated successfully!';
+            errorEl.style.display = 'none';
+            cancelFaviconUpload();
+            setTimeout(() => {
+                successEl.style.display = 'none';
+                // Reload to show new favicon
+                window.location.reload();
+            }, 2000);
+        } else {
+            errorEl.textContent = '❌ ' + (data.error || 'Upload failed');
+            errorEl.style.display = 'block';
+            successEl.style.display = 'none';
+        }
+    } catch (error) {
+        errorEl.textContent = '❌ Error: ' + error.message;
+        errorEl.style.display = 'block';
+        successEl.style.display = 'none';
+    }
+}
+
+function cancelFaviconUpload() {
+    selectedFaviconFile = null;
+    originalFaviconImage = null;
+    document.getElementById('faviconFileInput').value = '';
+    document.getElementById('faviconPreviewSection').style.display = 'none';
+}
+
+function initializeFaviconEditor() {
+    // Reset controls to defaults with transparent background
+    document.getElementById('faviconScale').value = 100;
+    document.getElementById('faviconPadding').value = 0;
+    document.getElementById('faviconRadius').value = 0;
+    document.getElementById('faviconBgColor').value = '#8b5cf6';
+    document.getElementById('faviconBgColorHex').value = '#8b5cf6';
+    isFaviconTransparent = true; // Default to transparent
+
+    // Draw initial favicon
+    updateFaviconEditor();
+}
+
+function updateFaviconEditor() {
+    if (!originalFaviconImage) return;
+
+    const canvas = document.getElementById('faviconEditorCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Get control values
+    const scale = parseInt(document.getElementById('faviconScale').value) / 100;
+    const padding = parseInt(document.getElementById('faviconPadding').value);
+    const radius = parseInt(document.getElementById('faviconRadius').value);
+    const bgColor = document.getElementById('faviconBgColor').value;
+
+    // Update value displays
+    document.getElementById('faviconScaleValue').textContent = Math.round(scale * 100) + '%';
+    document.getElementById('faviconPaddingValue').textContent = padding + 'px';
+    document.getElementById('faviconRadiusValue').textContent = radius + '%';
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw background
+    if (!isFaviconTransparent) {
+        ctx.fillStyle = bgColor;
+        if (radius > 0) {
+            // Draw rounded rectangle background
+            const cornerRadius = (canvas.width * radius) / 100;
+            drawRoundedRect(ctx, 0, 0, canvas.width, canvas.height, cornerRadius);
+            ctx.fill();
+        } else {
+            // Draw square background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+
+    // Calculate favicon dimensions with scale and padding
+    const availableSize = canvas.width - (padding * 2);
+    const faviconSize = availableSize * scale;
+    const x = (canvas.width - faviconSize) / 2;
+    const y = (canvas.height - faviconSize) / 2;
+
+    // Draw favicon with optional rounded corners
+    ctx.save();
+    if (radius > 0) {
+        // Clip to rounded rectangle for favicon
+        const cornerRadius = (faviconSize * radius) / 100;
+        drawRoundedRect(ctx, x, y, faviconSize, faviconSize, cornerRadius);
+        ctx.clip();
+    }
+
+    ctx.drawImage(originalFaviconImage, x, y, faviconSize, faviconSize);
+    ctx.restore();
+}
+
+function resetFaviconEditor() {
+    initializeFaviconEditor();
+}
+
+function syncFaviconBgColor(value) {
+    const color = value.trim();
+    if (/^#[0-9A-F]{6}$/i.test(color)) {
+        document.getElementById('faviconBgColor').value = color;
+        document.getElementById('faviconBgColorHex').value = color;
+        isFaviconTransparent = false;
+        updateFaviconEditor();
+    }
+}
+
+function setFaviconTransparentBg() {
+    isFaviconTransparent = true;
+    updateFaviconEditor();
+}
+
+// ==================== END FAVICON EDITOR FUNCTIONS ====================
 
 // Preview functions
 function updatePreview() {

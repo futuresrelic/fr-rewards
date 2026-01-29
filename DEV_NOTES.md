@@ -417,6 +417,173 @@ if (typeof account !== 'string' || !account.match(/^[a-z1-5.]{1,12}$/)) {
 
 ---
 
+## PWA Admin Panel
+
+### Overview
+
+**Location:** `/public/admin-pwa.html` and `/public/admin-pwa.js`
+
+**Purpose:** Visual admin panel for managing Progressive Web App settings, icons, and theming
+
+### Key Features
+
+1. **PWA Manifest Configuration**
+   - App name, short name, description
+   - Start URL, theme color, background color
+   - Configurable via UI, stored in SQLite config table
+
+2. **Icon Generator (App Icons)**
+   - Upload and edit app icons with visual editor
+   - Supports scale, padding, background color, corner roundness
+   - Generates 8 PWA icon sizes: 72x72, 96x96, 128x128, 144x144, 152x152, 192x192, 384x384, 512x512
+   - Files saved to `/public/icons/` directory
+   - Endpoint: `POST /api/pwa/upload-icon`
+
+3. **Favicon Generator (Separate Tool)**
+   - Independent favicon editor with same controls as app icon editor
+   - Generates 32x32 favicon.png with transparent background support
+   - Allows different styling than app icons (e.g., app icons with background, favicon with transparency)
+   - File saved to `/public/favicon.png`
+   - Endpoint: `POST /api/pwa/upload-favicon`
+
+4. **Color Theme System**
+   - 8 built-in theme presets (Midnight Purple, Ocean Blue, Sakura Pink, etc.)
+   - Customizable colors: primary, secondary, success, backgrounds
+   - Gradient background controls (start color, end color, angle)
+   - Dynamic CSS generation stored in database
+   - Endpoint: `PUT /api/pwa/theme`
+
+### Icon/Favicon Generation Workflow
+
+**App Icons:**
+1. User uploads image to icon editor
+2. Adjusts scale, padding, background color, corner roundness
+3. Canvas renders preview at 400x400
+4. Click "Upload & Generate All Sizes"
+5. Canvas converts to PNG blob
+6. Backend generates 8 icon sizes using Sharp library
+7. Files saved to `/public/icons/icon-{size}x{size}.png`
+
+**Favicon (Separate):**
+1. User uploads image to favicon editor (separate section)
+2. Adjusts scale, padding, background color (default: transparent), corner roundness
+3. Canvas renders preview at 400x400
+4. Click "Generate Favicon"
+5. Canvas converts to PNG blob
+6. Backend generates 32x32 favicon.png using Sharp library
+7. File saved to `/public/favicon.png`
+
+### Implementation Details
+
+**Frontend Variables:**
+```javascript
+// Icon editor
+let selectedFile = null;
+let originalIconImage = null;
+let isTransparent = false;
+
+// Favicon editor (separate)
+let selectedFaviconFile = null;
+let originalFaviconImage = null;
+let isFaviconTransparent = true; // Default transparent for favicons
+```
+
+**Backend Endpoints:**
+```javascript
+// Generate app icons (8 sizes)
+POST /api/pwa/upload-icon
+  - Requires: 'icon' file in multipart form data
+  - Generates: 8 PWA icon sizes (72-512px)
+  - Returns: Array of generated icon paths
+
+// Generate favicon (32x32 only)
+POST /api/pwa/upload-favicon
+  - Requires: 'favicon' file in multipart form data
+  - Generates: 32x32 favicon.png
+  - Returns: Favicon path
+```
+
+**Why Separate Icon and Favicon Generators?**
+- App icons often look better with background colors
+- Favicons look better with transparent backgrounds
+- Different aesthetic requirements for different contexts
+- Users can customize each independently
+
+### Canvas Editor Functions
+
+Both icon and favicon editors share similar canvas manipulation functions:
+
+```javascript
+// Shared between both editors
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  // Draws rounded rectangle with quadratic curves
+}
+
+// Icon editor specific
+function updateIconEditor() {
+  // Reads controls: scale, padding, radius, bgColor
+  // Draws background (solid or transparent)
+  // Draws icon with transformations
+}
+
+// Favicon editor specific (identical logic, different variables)
+function updateFaviconEditor() {
+  // Same as updateIconEditor but for favicon
+}
+```
+
+### Database Schema (PWA Config)
+
+Stored in `config` table:
+- `pwa_app_name`, `pwa_short_name`, `pwa_description`
+- `pwa_theme_color`, `pwa_background_color`
+- `theme_primary`, `theme_secondary`, `theme_success`
+- `theme_bg_dark`, `theme_bg_card`
+- `theme_gradient_start`, `theme_gradient_end`, `theme_gradient_angle`
+
+### Common Pitfalls
+
+1. **Icon vs Favicon Confusion**
+   - App icons go to `/public/icons/` (8 files)
+   - Favicon goes to `/public/favicon.png` (1 file)
+   - Don't mix them up!
+
+2. **Transparent Background Issues**
+   - App icons: Background color often desired for consistent branding
+   - Favicon: Transparent background recommended for browser tab display
+   - Use separate tools to set different backgrounds
+
+3. **Canvas to Blob Conversion**
+   - Always use `canvas.toBlob()` with callback or Promise
+   - PNG format required for transparent backgrounds
+   - Example:
+   ```javascript
+   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+   ```
+
+4. **File Upload Authentication**
+   - All icon/favicon endpoints require admin JWT token
+   - Include in Authorization header: `Bearer ${token}`
+
+### Best Practices
+
+1. **Icon Upload**
+   - Use square images (512x512 or larger)
+   - PNG format recommended for best quality
+   - Test generated icons at different sizes
+
+2. **Favicon Upload**
+   - Keep design simple (displays at 32x32, very small)
+   - Use transparent background for clean browser tab appearance
+   - Avoid fine details that won't show at small size
+
+3. **Theme Customization**
+   - Test theme colors in live preview tab
+   - Ensure good contrast between text and backgrounds
+   - Gradient backgrounds optional (can set angle to 0 for solid color)
+
+---
+
 ## Questions?
 
 For issues or questions:

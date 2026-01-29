@@ -3190,7 +3190,34 @@ app.post('/api/pwa/upload-icon', authenticateAdmin, upload.single('icon'), async
       generatedIcons.push(`/icons/${filename}`);
     }
 
-    // Also save as favicon
+    // Clean up temporary uploaded file
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    res.json({
+      success: true,
+      message: `Generated ${generatedIcons.length} PWA icons (favicon separate)`,
+      icons: generatedIcons
+    });
+  } catch (error) {
+    console.error('Error uploading PWA icon:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload and generate favicon separately (32x32 only)
+app.post('/api/pwa/upload-favicon', authenticateAdmin, upload.single('favicon'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No favicon file uploaded' });
+    }
+
+    const sharp = require('sharp');
+    const fs = require('fs');
+    const path = require('path');
+
+    // Generate 32x32 favicon
     const faviconPath = path.join(__dirname, 'public', 'favicon.png');
     await sharp(req.file.path)
       .resize(32, 32, {
@@ -3207,11 +3234,11 @@ app.post('/api/pwa/upload-icon', authenticateAdmin, upload.single('icon'), async
 
     res.json({
       success: true,
-      message: `Generated ${generatedIcons.length} PWA icons and favicon`,
-      icons: generatedIcons
+      message: 'Favicon generated successfully',
+      path: '/favicon.png'
     });
   } catch (error) {
-    console.error('Error uploading PWA icon:', error);
+    console.error('Error uploading favicon:', error);
     res.status(500).json({ error: error.message });
   }
 });
