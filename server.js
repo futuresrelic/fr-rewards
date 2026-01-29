@@ -3155,7 +3155,7 @@ app.post('/api/pwa/upload-icon', authenticateAdmin, upload.single('icon'), async
       const filename = `icon-${size}x${size}.png`;
       const outputPath = path.join(iconsDir, filename);
 
-      await sharp(req.file.buffer)
+      await sharp(req.file.path)
         .resize(size, size, {
           fit: 'contain',
           background: { r: 0, g: 0, b: 0, alpha: 0 }
@@ -3168,13 +3168,18 @@ app.post('/api/pwa/upload-icon', authenticateAdmin, upload.single('icon'), async
 
     // Also save as favicon
     const faviconPath = path.join(__dirname, 'public', 'favicon.png');
-    await sharp(req.file.buffer)
+    await sharp(req.file.path)
       .resize(32, 32, {
         fit: 'contain',
         background: { r: 0, g: 0, b: 0, alpha: 0 }
       })
       .png()
       .toFile(faviconPath);
+
+    // Clean up temporary uploaded file
+    if (fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
 
     res.json({
       success: true,
