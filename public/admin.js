@@ -595,6 +595,9 @@ async function handleLogoUpload(e) {
     logoPreview.style.display = 'block';
 
     showBrandingMessage('Logo uploaded successfully!', 'success');
+
+    // Regenerate PWA icons in background
+    regeneratePWAIcons();
   } catch (error) {
     showBrandingMessage('Logo upload failed: ' + error.message, 'error');
   }
@@ -635,6 +638,9 @@ async function handleFaviconUpload(e) {
     faviconPreview.style.display = 'block';
 
     showBrandingMessage('Favicon uploaded successfully!', 'success');
+
+    // Regenerate PWA icons in background
+    regeneratePWAIcons();
   } catch (error) {
     showBrandingMessage('Favicon upload failed: ' + error.message, 'error');
   }
@@ -690,6 +696,29 @@ function showBrandingMessage(message, type) {
   setTimeout(() => {
     brandingMessage.style.display = 'none';
   }, 5000);
+}
+
+// Regenerate PWA icons from uploaded logo/favicon
+async function regeneratePWAIcons() {
+  try {
+    console.log('🎨 Regenerating PWA icons...');
+    const response = await fetch(`${API_URL}/api/admin/generate-pwa-icons`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      console.log('✅ PWA icons regenerated successfully:', data.icons);
+    } else {
+      console.warn('⚠️ PWA icon regeneration failed:', data.error);
+    }
+  } catch (error) {
+    console.error('❌ Error regenerating PWA icons:', error);
+  }
 }
 
 // Load branding into form

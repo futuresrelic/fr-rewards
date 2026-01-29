@@ -2893,6 +2893,180 @@ app.put('/api/admin/branding', authenticateAdmin, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/generate-pwa-icons
+ * Generate PWA icons from logo or favicon
+ */
+app.post('/api/admin/generate-pwa-icons', authenticateAdmin, async (req, res) => {
+  try {
+    const sharp = require('sharp');
+    const fs = require('fs');
+    const path = require('path');
+
+    const config = db.config.get();
+    const iconsDir = path.join(__dirname, 'public', 'icons');
+
+    // Ensure icons directory exists
+    if (!fs.existsSync(iconsDir)) {
+      fs.mkdirSync(iconsDir, { recursive: true });
+    }
+
+    // Determine source image
+    let sourceBuffer;
+
+    // Try to use logo first, fallback to favicon, then default
+    if (config.logo_url && !config.logo_url.startsWith('data:')) {
+      // Logo is a file path
+      const logoPath = path.join(__dirname, 'public', config.logo_url);
+      if (fs.existsSync(logoPath)) {
+        sourceBuffer = fs.readFileSync(logoPath);
+      }
+    }
+
+    // If no logo, try favicon (base64)
+    if (!sourceBuffer && config.favicon_url && config.favicon_url.startsWith('data:')) {
+      const base64Data = config.favicon_url.replace(/^data:image\/\w+;base64,/, '');
+      sourceBuffer = Buffer.from(base64Data, 'base64');
+    }
+
+    // If still no source, use default favicon
+    if (!sourceBuffer) {
+      const defaultFavicon = path.join(__dirname, 'favicon.ico');
+      if (fs.existsSync(defaultFavicon)) {
+        sourceBuffer = fs.readFileSync(defaultFavicon);
+      } else {
+        return res.status(400).json({
+          error: 'No logo, favicon, or default icon found. Please upload a logo or favicon first.'
+        });
+      }
+    }
+
+    // PWA icon sizes to generate
+    const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+    const generatedIcons = [];
+
+    // Generate each size
+    for (const size of sizes) {
+      const filename = `icon-${size}x${size}.png`;
+      const outputPath = path.join(iconsDir, filename);
+
+      await sharp(sourceBuffer)
+        .resize(size, size, {
+          fit: 'contain',
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        })
+        .png()
+        .toFile(outputPath);
+
+      generatedIcons.push(`/icons/${filename}`);
+    }
+
+    res.json({
+      success: true,
+      message: `Generated ${generatedIcons.length} PWA icons`,
+      icons: generatedIcons
+    });
+  } catch (error) {
+    console.error('Error generating PWA icons:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /manifest.json
+ * Serve dynamic PWA manifest with custom branding
+ */
+app.get('/manifest.json', async (req, res) => {
+  try {
+    const config = db.config.get();
+
+    const manifest = {
+      name: config.page_title || "Future's Relic Rewards",
+      short_name: (config.page_title || "FR Rewards").substring(0, 12),
+      description: config.page_subtitle || "Claim your NFT holder rewards",
+      start_url: "/",
+      display: "standalone",
+      background_color: "#1a1a2e",
+      theme_color: "#10b981",
+      orientation: "portrait-primary",
+      scope: "/",
+      icons: [
+        {
+          src: "/icons/icon-72x72.png",
+          sizes: "72x72",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: "/icons/icon-96x96.png",
+          sizes: "96x96",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: "/icons/icon-128x128.png",
+          sizes: "128x128",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: "/icons/icon-144x144.png",
+          sizes: "144x144",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: "/icons/icon-152x152.png",
+          sizes: "152x152",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: "/icons/icon-192x192.png",
+          sizes: "192x192",
+          type: "image/png",
+          purpose: "any maskable"
+        },
+        {
+          src: "/icons/icon-384x384.png",
+          sizes: "384x384",
+          type: "image/png",
+          purpose: "any"
+        },
+        {
+          src: "/icons/icon-512x512.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any maskable"
+        }
+      ],
+      categories: ["finance", "utilities"],
+      shortcuts: [
+        {
+          name: "Claim Rewards",
+          short_name: "Claim",
+          description: "Quick access to claim your rewards",
+          url: "/",
+          icons: [
+            {
+              src: "/icons/icon-192x192.png",
+              sizes: "192x192",
+              type: "image/png"
+            }
+          ]
+        }
+      ]
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.json(manifest);
+  } catch (error) {
+    console.error('Error generating manifest:', error);
+    // Fallback to static manifest
+    res.sendFile(path.join(__dirname, 'public', 'manifest-static.json'));
+  }
+});
+
+/**
  * GET /api/config/public
  * Get public configuration (no auth required)
  */

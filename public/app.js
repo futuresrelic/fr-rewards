@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await waitForLibraries();
   setupEventListeners();
   checkExistingSession();
+  registerServiceWorker();
 });
 
 // Wait for wallet libraries to load
@@ -86,6 +87,9 @@ async function loadPublicConfig() {
         }
         favicon.href = config.favicon_url;
       }
+
+      // Update PWA manifest with dynamic branding
+      updatePWAManifest();
     }
   } catch (error) {
     console.error('Error loading config:', error);
@@ -571,4 +575,50 @@ function formatDate(dateString) {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+// Register Service Worker for PWA
+async function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.register('/service-worker.js');
+      console.log('✅ Service Worker registered successfully:', registration.scope);
+
+      // Check for updates periodically
+      setInterval(() => {
+        registration.update();
+      }, 60000); // Check every minute
+
+      // Listen for updates
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            // New service worker available, show update notification
+            console.log('🔄 New version available! Refresh to update.');
+          }
+        });
+      });
+    } catch (error) {
+      console.error('❌ Service Worker registration failed:', error);
+    }
+  }
+}
+
+// Update PWA manifest dynamically based on config
+function updatePWAManifest() {
+  if (!config) return;
+
+  // Update theme color from config if available
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  if (themeColorMeta) {
+    // Keep the default green theme color for now
+    // Could be made configurable in the future
+  }
+
+  // Update apple-mobile-web-app-title
+  const appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (appleTitle && config.page_title) {
+    appleTitle.setAttribute('content', config.page_title.substring(0, 20));
+  }
 }
