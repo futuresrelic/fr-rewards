@@ -611,9 +611,8 @@ function updatePWAManifest() {
 
   // Update theme color from config if available
   const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-  if (themeColorMeta) {
-    // Keep the default green theme color for now
-    // Could be made configurable in the future
+  if (themeColorMeta && config.pwa_theme_color) {
+    themeColorMeta.setAttribute('content', config.pwa_theme_color);
   }
 
   // Update apple-mobile-web-app-title

@@ -3352,7 +3352,8 @@ app.get('/api/config/public', async (req, res) => {
         page_title: config.page_title || 'NFT Holder Rewards',
         page_subtitle: config.page_subtitle || 'Connect your wallet to claim rewards!',
         logo_url: config.logo_url || null,
-        favicon_url: config.favicon_url || null  // Now returns base64 data URI
+        favicon_url: config.favicon_url || null,  // Now returns base64 data URI
+        pwa_theme_color: config.pwa_theme_color || '#10b981'
       }
     });
   } catch (error) {
