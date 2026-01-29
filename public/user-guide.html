@@ -366,6 +366,21 @@
   </style>
 </head>
 <body>
+  <!-- Hamburger Menu Button -->
+  <button class="menu-toggle" id="menuToggle" aria-label="Menu" style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+
+  <!-- Slide-out Menu -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <nav class="app-menu" id="appMenu">
+    <div class="menu-items" id="menuItems">
+      <!-- Menu items will be loaded dynamically -->
+    </div>
+  </nav>
+
   <div class="guide-container">
     <div class="guide-header">
       <h1>🎁 FR Rewards User Guide</h1>
@@ -569,5 +584,7 @@
     // Load guide on page load
     loadGuide();
   </script>
+
+  <script src="menu-loader.js"></script>
 </body>
 </html>

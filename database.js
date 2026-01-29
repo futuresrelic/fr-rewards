@@ -785,6 +785,28 @@ function initializeTables() {
       db.exec(`ALTER TABLE config ADD COLUMN theme_gradient_angle TEXT DEFAULT '135'`);
       console.log('✅ Gradient theme columns added');
     }
+
+    // Migration: Add nav_config column for navigation visibility
+    if (configRow && !configRow.hasOwnProperty('nav_config')) {
+      console.log('🔄 Adding nav_config column...');
+      const defaultNavConfig = JSON.stringify({ show_claims: true, show_unpack: true, show_story: true });
+      db.exec(`ALTER TABLE config ADD COLUMN nav_config TEXT DEFAULT '${defaultNavConfig}'`);
+      console.log('✅ nav_config column added');
+    }
+
+    // Migration: Add menu_items column for hamburger menu
+    if (configRow && !configRow.hasOwnProperty('menu_items')) {
+      console.log('🔄 Adding menu_items column...');
+      const defaultMenuItems = JSON.stringify([
+        { label: 'Claims', url: '/index.html', icon: '🎁', enabled: true, order: 1 },
+        { label: 'Story', url: '/story.html', icon: '📖', enabled: true, order: 2 },
+        { label: 'User Guide', url: '/user-guide.html', icon: '📚', enabled: true, order: 3 },
+        { label: 'Download App', url: '/manifest.json', icon: '📱', enabled: true, order: 4 },
+        { label: 'About', url: '/about.html', icon: 'ℹ️', enabled: true, order: 5 }
+      ]);
+      db.exec(`ALTER TABLE config ADD COLUMN menu_items TEXT DEFAULT '${defaultMenuItems}'`);
+      console.log('✅ menu_items column added');
+    }
   } catch (error) {
     console.warn('⚠️ PWA/Theme migration warning:', error.message);
   }
@@ -888,6 +910,40 @@ const config = {
       WHERE id = 1
     `);
     return stmt.run(JSON.stringify(navConfig));
+  },
+
+  getMenuItems: () => {
+    const cfg = db.prepare('SELECT menu_items FROM config WHERE id = 1').get();
+    if (!cfg || !cfg.menu_items) {
+      return [
+        { label: 'Claims', url: '/index.html', icon: '🎁', enabled: true, order: 1 },
+        { label: 'Story', url: '/story.html', icon: '📖', enabled: true, order: 2 },
+        { label: 'User Guide', url: '/user-guide.html', icon: '📚', enabled: true, order: 3 },
+        { label: 'Download App', url: '/manifest.json', icon: '📱', enabled: true, order: 4 },
+        { label: 'About', url: '/about.html', icon: 'ℹ️', enabled: true, order: 5 }
+      ];
+    }
+    try {
+      return JSON.parse(cfg.menu_items);
+    } catch {
+      return [
+        { label: 'Claims', url: '/index.html', icon: '🎁', enabled: true, order: 1 },
+        { label: 'Story', url: '/story.html', icon: '📖', enabled: true, order: 2 },
+        { label: 'User Guide', url: '/user-guide.html', icon: '📚', enabled: true, order: 3 },
+        { label: 'Download App', url: '/manifest.json', icon: '📱', enabled: true, order: 4 },
+        { label: 'About', url: '/about.html', icon: 'ℹ️', enabled: true, order: 5 }
+      ];
+    }
+  },
+
+  updateMenuItems: (menuItems) => {
+    const stmt = db.prepare(`
+      UPDATE config
+      SET menu_items = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1
+    `);
+    return stmt.run(JSON.stringify(menuItems));
   },
 
   updatePWA: (data) => {

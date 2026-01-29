@@ -3838,6 +3838,61 @@ app.get('/api/config/navigation', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/config/menu
+ * Get hamburger menu items (public endpoint)
+ */
+app.get('/api/config/menu', async (req, res) => {
+  try {
+    const menuItems = db.config.getMenuItems();
+    res.json(menuItems);
+  } catch (error) {
+    console.error('Error fetching menu items:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/config/menu
+ * Get hamburger menu items for admin (requires auth)
+ */
+app.get('/api/admin/config/menu', verifyAdminPassword, async (req, res) => {
+  try {
+    const menuItems = db.config.getMenuItems();
+    res.json({ success: true, menuItems });
+  } catch (error) {
+    console.error('Error fetching menu items:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/config/menu
+ * Update hamburger menu items (requires auth)
+ */
+app.put('/api/admin/config/menu', verifyAdminPassword, async (req, res) => {
+  try {
+    const { menuItems } = req.body;
+
+    if (!Array.isArray(menuItems)) {
+      return res.status(400).json({ error: 'menuItems must be an array' });
+    }
+
+    // Validate menu items structure
+    for (const item of menuItems) {
+      if (!item.label || !item.url) {
+        return res.status(400).json({ error: 'Each menu item must have label and url' });
+      }
+    }
+
+    db.config.updateMenuItems(menuItems);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating menu items:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== MODULE INSTANCE ENDPOINTS ====================
 
 /**

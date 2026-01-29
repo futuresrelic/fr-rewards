@@ -298,6 +298,11 @@ function switchTab(tabName) {
     if (tabName === 'preview') {
         updatePreview();
     }
+
+    // Load menu items if switching to menu tab
+    if (tabName === 'menu') {
+        loadMenuItems();
+    }
 }
 
 // Load current settings
@@ -1004,6 +1009,192 @@ function hexToRgba(hex, alpha) {
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// ==================== MENU CONFIGURATION ====================
+
+let menuItems = [];
+
+/**
+ * Load menu items from API
+ */
+async function loadMenuItems() {
+    try {
+        const token = sessionStorage.getItem('admin_token');
+        const response = await fetch('/api/admin/config/menu', {
+            headers: {
+                'x-admin-password': token
+            }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            menuItems = data.menuItems;
+            renderMenuItems();
+        }
+    } catch (error) {
+        console.error('Error loading menu items:', error);
+        showMenuError('Failed to load menu items');
+    }
+}
+
+/**
+ * Render menu items in the editor
+ */
+function renderMenuItems() {
+    const container = document.getElementById('menuItemsList');
+    if (!container) return;
+
+    container.innerHTML = menuItems.map((item, index) => `
+        <div class="menu-item-editor ${item.enabled ? '' : 'disabled'}" data-index="${index}">
+            <div class="menu-item-header">
+                <div class="menu-item-handle" title="Drag to reorder">☰ Menu Item ${index + 1}</div>
+                <div class="menu-item-actions">
+                    <button onclick="toggleMenuItem(${index})" class="btn btn-sm ${item.enabled ? 'btn-warning' : 'btn-success'}" title="${item.enabled ? 'Disable' : 'Enable'}">
+                        ${item.enabled ? '🚫 Disable' : '✅ Enable'}
+                    </button>
+                    <button onclick="moveMenuItem(${index}, -1)" class="btn btn-sm" ${index === 0 ? 'disabled' : ''} title="Move up">
+                        ⬆️
+                    </button>
+                    <button onclick="moveMenuItem(${index}, 1)" class="btn btn-sm" ${index === menuItems.length - 1 ? 'disabled' : ''} title="Move down">
+                        ⬇️
+                    </button>
+                    <button onclick="deleteMenuItem(${index})" class="btn btn-sm btn-danger" title="Delete">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+            <div class="menu-item-grid">
+                <div class="form-group">
+                    <label>Icon (emoji or text)</label>
+                    <input type="text" id="menuIcon${index}" value="${item.icon || ''}" maxlength="5" placeholder="🎁">
+                </div>
+                <div class="form-group">
+                    <label>Label</label>
+                    <input type="text" id="menuLabel${index}" value="${item.label}" placeholder="Menu Label">
+                </div>
+                <div class="form-group" style="grid-column: 1 / -1;">
+                    <label>URL</label>
+                    <input type="text" id="menuUrl${index}" value="${item.url}" placeholder="/page.html or https://...">
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+/**
+ * Add a new menu item
+ */
+function addMenuItem() {
+    menuItems.push({
+        label: 'New Menu Item',
+        url: '/',
+        icon: '📄',
+        enabled: true,
+        order: menuItems.length + 1
+    });
+    renderMenuItems();
+}
+
+/**
+ * Delete a menu item
+ */
+function deleteMenuItem(index) {
+    if (confirm('Are you sure you want to delete this menu item?')) {
+        menuItems.splice(index, 1);
+        renderMenuItems();
+    }
+}
+
+/**
+ * Toggle menu item enabled/disabled
+ */
+function toggleMenuItem(index) {
+    menuItems[index].enabled = !menuItems[index].enabled;
+    renderMenuItems();
+}
+
+/**
+ * Move menu item up or down
+ */
+function moveMenuItem(index, direction) {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= menuItems.length) return;
+
+    [menuItems[index], menuItems[newIndex]] = [menuItems[newIndex], menuItems[index]];
+    renderMenuItems();
+}
+
+/**
+ * Save menu items to API
+ */
+async function saveMenuItems() {
+    try {
+        // Collect values from inputs
+        const updatedItems = menuItems.map((item, index) => {
+            const iconInput = document.getElementById(`menuIcon${index}`);
+            const labelInput = document.getElementById(`menuLabel${index}`);
+            const urlInput = document.getElementById(`menuUrl${index}`);
+
+            return {
+                label: labelInput ? labelInput.value : item.label,
+                url: urlInput ? urlInput.value : item.url,
+                icon: iconInput ? iconInput.value : item.icon,
+                enabled: item.enabled,
+                order: index + 1
+            };
+        });
+
+        const token = sessionStorage.getItem('admin_token');
+        const response = await fetch('/api/admin/config/menu', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-password': token
+            },
+            body: JSON.stringify({ menuItems: updatedItems })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showMenuSuccess('Menu configuration saved successfully!');
+            menuItems = updatedItems;
+        } else {
+            showMenuError(data.error || 'Failed to save menu items');
+        }
+    } catch (error) {
+        console.error('Error saving menu items:', error);
+        showMenuError('Failed to save menu items');
+    }
+}
+
+/**
+ * Show menu success message
+ */
+function showMenuSuccess(message) {
+    const successEl = document.getElementById('menuSuccess');
+    if (successEl) {
+        successEl.textContent = message;
+        successEl.style.display = 'block';
+        setTimeout(() => {
+            successEl.style.display = 'none';
+        }, 5000);
+    }
+}
+
+/**
+ * Show menu error message
+ */
+function showMenuError(message) {
+    const errorEl = document.getElementById('menuError');
+    if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+        setTimeout(() => {
+            errorEl.style.display = 'none';
+        }, 5000);
+    }
 }
 
 // Handle enter key on login

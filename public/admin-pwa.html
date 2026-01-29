@@ -373,6 +373,65 @@
                 width: 100%;
             }
         }
+
+        /* Menu Items Editor */
+        .menu-items-editor {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .menu-item-editor {
+            background: var(--bg-dark);
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid var(--border);
+            position: relative;
+        }
+
+        .menu-item-editor.disabled {
+            opacity: 0.6;
+            background: rgba(15, 23, 42, 0.5);
+        }
+
+        .menu-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .menu-item-handle {
+            cursor: move;
+            font-size: 1.2rem;
+            padding: 5px 10px;
+            color: var(--text-secondary);
+        }
+
+        .menu-item-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .menu-item-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 15px;
+            align-items: start;
+        }
+
+        .menu-item-grid .form-group {
+            margin-bottom: 0;
+        }
+
+        @media (max-width: 768px) {
+            .menu-item-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -399,6 +458,7 @@
             <button class="tab active" onclick="switchTab('manifest')">📱 App Settings</button>
             <button class="tab" onclick="switchTab('themes')">🎨 Color Themes</button>
             <button class="tab" onclick="switchTab('icons')">🖼️ Icons</button>
+            <button class="tab" onclick="switchTab('menu')">🍔 Menu</button>
             <button class="tab" onclick="switchTab('preview')">👁️ Preview</button>
         </div>
 
@@ -766,6 +826,36 @@
                     <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
                         Shown on checkered background to display transparency
                     </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menu Tab -->
+        <div id="menu-tab" class="tab-content">
+            <div class="section-card">
+                <h2>Hamburger Menu Configuration</h2>
+                <div class="info-box">
+                    <p>Configure the hamburger menu items that appear in your app. You can add, edit, reorder, and enable/disable menu items.</p>
+                </div>
+
+                <div id="menuSuccess" class="success-message"></div>
+                <div id="menuError" class="error-message"></div>
+
+                <div id="menuItemsList" class="menu-items-editor">
+                    <!-- Menu items will be loaded here -->
+                </div>
+
+                <button onclick="addMenuItem()" class="btn btn-primary" style="margin: 20px 0;">
+                    ➕ Add Menu Item
+                </button>
+
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button onclick="saveMenuItems()" class="btn btn-success" style="flex: 1;">
+                        💾 Save Menu Configuration
+                    </button>
+                    <button onclick="loadMenuItems()" class="btn btn-secondary">
+                        🔄 Reset
+                    </button>
                 </div>
             </div>
         </div>

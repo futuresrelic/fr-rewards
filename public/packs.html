@@ -16,14 +16,29 @@
 <body>
   <div class="container">
     <header>
+      <!-- Hamburger Menu Button -->
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
       <div class="header-content">
-        <img id="page-logo" src="" alt="" style="display: none; height: 3em; width: auto; margin-right: 1em; object-fit: contain;">
+        <img id="page-logo" src="" alt="" style="display: none; height: 3em; width: auto; object-fit: contain;">
         <div class="header-text">
           <h1 id="page-title">📦 Pack Unpacking</h1>
           <p class="subtitle" id="page-subtitle">Unpack your packs to reveal rewards!</p>
         </div>
       </div>
     </header>
+
+    <!-- Slide-out Menu -->
+    <div class="menu-overlay" id="menuOverlay"></div>
+    <nav class="app-menu" id="appMenu">
+      <div class="menu-items" id="menuItems">
+        <!-- Menu items will be loaded dynamically -->
+      </div>
+    </nav>
 
     <!-- Navigation -->
     <nav class="nav-tabs">
@@ -107,6 +122,7 @@
     </footer>
   </div>
 
+  <script src="menu-loader.js"></script>
   <script src="nav-loader.js"></script>
   <script src="packs.js"></script>
 </body>
