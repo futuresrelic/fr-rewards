@@ -3036,7 +3036,10 @@ app.get('/api/pwa/theme', authenticateAdmin, async (req, res) => {
         secondary: config.theme_secondary || '#6366f1',
         success: config.theme_success || '#10b981',
         bgDark: config.theme_bg_dark || '#0f172a',
-        bgCard: config.theme_bg_card || '#1e293b'
+        bgCard: config.theme_bg_card || '#1e293b',
+        gradientStart: config.theme_gradient_start || '#667eea',
+        gradientEnd: config.theme_gradient_end || '#764ba2',
+        gradientAngle: config.theme_gradient_angle || '135'
       }
     };
 
@@ -3053,18 +3056,34 @@ app.get('/api/pwa/theme', authenticateAdmin, async (req, res) => {
  */
 app.put('/api/pwa/theme', authenticateAdmin, async (req, res) => {
   try {
-    const { primary, secondary, success, bgDark, bgCard } = req.body;
+    const { primary, secondary, success, bgDark, bgCard, gradientStart, gradientEnd, gradientAngle } = req.body;
 
     db.config.updateTheme({
       primary,
       secondary,
       success,
       bgDark,
-      bgCard
+      bgCard,
+      gradientStart,
+      gradientEnd,
+      gradientAngle
     });
 
     // Generate dynamic CSS file
     const config = db.config.get();
+
+    // Build body background - use gradient if both colors are set, otherwise use solid color
+    const gradStart = config.theme_gradient_start || gradientStart || '';
+    const gradEnd = config.theme_gradient_end || gradientEnd || '';
+    const gradAngle = config.theme_gradient_angle || gradientAngle || '135';
+
+    let bodyBackground;
+    if (gradStart && gradEnd) {
+      bodyBackground = `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)`;
+    } else {
+      bodyBackground = config.theme_bg_dark || bgDark;
+    }
+
     const cssContent = `/* Auto-generated theme CSS */
 :root {
   --primary: ${config.theme_primary || primary};
@@ -3080,6 +3099,11 @@ app.put('/api/pwa/theme', authenticateAdmin, async (req, res) => {
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
   --border: #334155;
+}
+
+/* Override body background with gradient or solid color */
+body {
+  background: ${bodyBackground} !important;
 }
 `;
 
@@ -3217,6 +3241,18 @@ app.get('/api/theme.css', async (req, res) => {
     const bgDark = config.theme_bg_dark || '#0f172a';
     const bgCard = config.theme_bg_card || '#1e293b';
 
+    // Build body background - use gradient if both colors are set, otherwise use solid color
+    const gradStart = config.theme_gradient_start || '#667eea';
+    const gradEnd = config.theme_gradient_end || '#764ba2';
+    const gradAngle = config.theme_gradient_angle || '135';
+
+    let bodyBackground;
+    if (gradStart && gradEnd) {
+      bodyBackground = `linear-gradient(${gradAngle}deg, ${gradStart} 0%, ${gradEnd} 100%)`;
+    } else {
+      bodyBackground = bgDark;
+    }
+
     const cssContent = `/* Dynamic theme CSS - Auto-generated from PWA Admin */
 :root {
   --primary: ${primary};
@@ -3227,6 +3263,11 @@ app.get('/api/theme.css', async (req, res) => {
   --bg-card: ${bgCard};
   --bg-secondary: ${bgCard};
   --bg-card-hover: ${adjustColor(bgCard, 10)};
+}
+
+/* Override body background with gradient or solid color */
+body {
+  background: ${bodyBackground} !important;
 }
 `;
 

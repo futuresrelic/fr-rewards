@@ -420,6 +420,18 @@ function applyThemeToInputs(colors) {
     setColorValue('themeSuccess', colors.success);
     setColorValue('themeBgDark', colors.bgDark);
     setColorValue('themeBgCard', colors.bgCard);
+
+    // Apply gradient values if they exist
+    if (colors.gradientStart) {
+        setColorValue('themeGradientStart', colors.gradientStart);
+    }
+    if (colors.gradientEnd) {
+        setColorValue('themeGradientEnd', colors.gradientEnd);
+    }
+    if (colors.gradientAngle) {
+        const angleInput = document.getElementById('themeGradientAngle');
+        if (angleInput) angleInput.value = colors.gradientAngle;
+    }
 }
 
 async function saveTheme() {
@@ -432,7 +444,10 @@ async function saveTheme() {
         secondary: document.getElementById('themeSecondaryHex').value,
         success: document.getElementById('themeSuccessHex').value,
         bgDark: document.getElementById('themeBgDarkHex').value,
-        bgCard: document.getElementById('themeBgCardHex').value
+        bgCard: document.getElementById('themeBgCardHex').value,
+        gradientStart: document.getElementById('themeGradientStartHex').value || '',
+        gradientEnd: document.getElementById('themeGradientEndHex').value || '',
+        gradientAngle: document.getElementById('themeGradientAngle').value || '135'
     };
 
     try {
@@ -742,7 +757,9 @@ function setupColorInputSync() {
         ['themeSecondary', 'themeSecondaryHex'],
         ['themeSuccess', 'themeSuccessHex'],
         ['themeBgDark', 'themeBgDarkHex'],
-        ['themeBgCard', 'themeBgCardHex']
+        ['themeBgCard', 'themeBgCardHex'],
+        ['themeGradientStart', 'themeGradientStartHex'],
+        ['themeGradientEnd', 'themeGradientEndHex']
     ];
 
     colorPairs.forEach(([colorId, hexId]) => {

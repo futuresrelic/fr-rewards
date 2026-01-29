@@ -776,6 +776,15 @@ function initializeTables() {
       db.exec(`ALTER TABLE config ADD COLUMN theme_bg_card TEXT DEFAULT '#1e293b'`);
       console.log('✅ Theme columns added');
     }
+
+    // Migration: Add gradient columns if they don't exist
+    if (configRow && !configRow.hasOwnProperty('theme_gradient_start')) {
+      console.log('🔄 Adding gradient theme columns...');
+      db.exec(`ALTER TABLE config ADD COLUMN theme_gradient_start TEXT DEFAULT '#667eea'`);
+      db.exec(`ALTER TABLE config ADD COLUMN theme_gradient_end TEXT DEFAULT '#764ba2'`);
+      db.exec(`ALTER TABLE config ADD COLUMN theme_gradient_angle TEXT DEFAULT '135'`);
+      console.log('✅ Gradient theme columns added');
+    }
   } catch (error) {
     console.warn('⚠️ PWA/Theme migration warning:', error.message);
   }
@@ -941,6 +950,18 @@ const config = {
       fields.push('theme_bg_card = ?');
       values.push(data.bgCard);
     }
+    if (data.gradientStart !== undefined) {
+      fields.push('theme_gradient_start = ?');
+      values.push(data.gradientStart);
+    }
+    if (data.gradientEnd !== undefined) {
+      fields.push('theme_gradient_end = ?');
+      values.push(data.gradientEnd);
+    }
+    if (data.gradientAngle !== undefined) {
+      fields.push('theme_gradient_angle = ?');
+      values.push(data.gradientAngle);
+    }
 
     if (fields.length === 0) return;
 
@@ -957,6 +978,9 @@ const config = {
           theme_success = '#10b981',
           theme_bg_dark = '#0f172a',
           theme_bg_card = '#1e293b',
+          theme_gradient_start = '#667eea',
+          theme_gradient_end = '#764ba2',
+          theme_gradient_angle = '135',
           updated_at = CURRENT_TIMESTAMP
       WHERE id = 1
     `);
