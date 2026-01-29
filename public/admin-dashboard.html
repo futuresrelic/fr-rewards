@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Control Center - FR Rewards</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body {
+      background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .dashboard-container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .dashboard-header {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .dashboard-header h1 {
+      margin: 0;
+      font-size: 2.5rem;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .dashboard-header p {
+      margin: 10px 0 0 0;
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 25px;
+      margin-bottom: 30px;
+    }
+
+    .dashboard-section {
+      background: white;
+      border-radius: 12px;
+      padding: 25px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .dashboard-section:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .section-icon {
+      font-size: 2rem;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+
+    .section-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0;
+    }
+
+    .section-links {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .dash-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      color: #1e293b;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .dash-link:hover {
+      background: #eff6ff;
+      border-color: #2563eb;
+      transform: translateX(4px);
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+    }
+
+    .dash-link-icon {
+      font-size: 1.2rem;
+    }
+
+    .dash-link-desc {
+      font-size: 0.85rem;
+      color: #64748b;
+      font-weight: 400;
+      margin-top: 4px;
+    }
+
+    .security-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #fef3c7;
+      border: 1px solid #fbbf24;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      color: #92400e;
+      margin-left: auto;
+      font-weight: 600;
+    }
+
+    .security-badge.protected {
+      background: #dcfce7;
+      border-color: #22c55e;
+      color: #166534;
+    }
+
+    .security-badge.public {
+      background: #dbeafe;
+      border-color: #3b82f6;
+      color: #1e40af;
+    }
+
+    .quick-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .stat-label {
+      font-size: 0.9rem;
+      opacity: 0.9;
+      margin-top: 5px;
+    }
+
+    .logout-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      background: rgba(220, 38, 38, 0.9);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      transition: all 0.2s;
+    }
+
+    .logout-btn:hover {
+      background: rgba(185, 28, 28, 1);
+      transform: translateY(-2px);
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .dashboard-header h1 {
+        font-size: 2rem;
+      }
+
+      .logout-btn {
+        top: 10px;
+        right: 10px;
+        padding: 8px 16px;
+        font-size: 0.9rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button class="logout-btn" onclick="logout()">🚪 Logout</button>
+
+  <div class="dashboard-container">
+    <div class="dashboard-header">
+      <h1>🎛️ Admin Control Center</h1>
+      <p>Complete access to all FR Rewards tools, panels, and pages</p>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="dashboard-section">
+      <div class="section-header">
+        <span class="section-icon">📊</span>
+        <h2 class="section-title">System Overview</h2>
+      </div>
+      <div class="quick-stats">
+        <div class="stat-card">
+          <div class="stat-value">12</div>
+          <div class="stat-label">Admin Panels</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">20+</div>
+          <div class="stat-label">Public Pages</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">11</div>
+          <div class="stat-label">Modules</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">8</div>
+          <div class="stat-label">Story Phases</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <!-- Admin Panels -->
+      <div class="dashboard-section">
+        <div class="section-header">
+          <span class="section-icon">🔧</span>
+          <h2 class="section-title">Admin Panels</h2>
+        </div>
+        <div class="section-links">
+          <a href="/admin.html" class="dash-link">
+            <span class="dash-link-icon">⚙️</span>
+            <div>
+              <div>Main Admin Panel</div>
+              <div class="dash-link-desc">Configuration, templates, branding</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+          <a href="/admin-factory.html" class="dash-link">
+            <span class="dash-link-icon">🏭</span>
+            <div>
+              <div>Factory Admin</div>
+              <div class="dash-link-desc">Craft recipes & inventory</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+          <a href="/admin-workflow.html" class="dash-link">
+            <span class="dash-link-icon">🔄</span>
+            <div>
+              <div>Workflow Manager</div>
+              <div class="dash-link-desc">Story steps & actions</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+          <a href="/admin-scheduler.html" class="dash-link">
+            <span class="dash-link-icon">⏰</span>
+            <div>
+              <div>Scheduler</div>
+              <div class="dash-link-desc">Scheduled actions & tasks</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+          <a href="/admin-claims.html" class="dash-link">
+            <span class="dash-link-icon">📋</span>
+            <div>
+              <div>Claims History</div>
+              <div class="dash-link-desc">Track all user claims</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+          <a href="/admin-purchases.html" class="dash-link">
+            <span class="dash-link-icon">💳</span>
+            <div>
+              <div>Purchase Management</div>
+              <div class="dash-link-desc">Failed purchases & refunds</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+          <a href="/admin-blend-recipes.html" class="dash-link">
+            <span class="dash-link-icon">🔀</span>
+            <div>
+              <div>Blend Recipes</div>
+              <div class="dash-link-desc">NeftyBlocks blends cache</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+          <a href="/admin-story-tabs.html" class="dash-link">
+            <span class="dash-link-icon">📑</span>
+            <div>
+              <div>Story Tabs</div>
+              <div class="dash-link-desc">Manage phase navigation</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+          <a href="/admin-wiki.html" class="dash-link">
+            <span class="dash-link-icon">📚</span>
+            <div>
+              <div>API Wiki</div>
+              <div class="dash-link-desc">Complete API reference</div>
+            </div>
+            <span class="security-badge protected">🔒 Protected</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Builder & Creator Tools -->
+      <div class="dashboard-section">
+        <div class="section-header">
+          <span class="section-icon">🛠️</span>
+          <h2 class="section-title">Builder & Creator Tools</h2>
+        </div>
+        <div class="section-links">
+          <a href="/site-builder.html" class="dash-link">
+            <span class="dash-link-icon">🎨</span>
+            <div>
+              <div>Site Builder</div>
+              <div class="dash-link-desc">Visual page creator (drag & drop)</div>
+            </div>
+            <span class="security-badge protected">🔒 NEW: Protected!</span>
+          </a>
+          <a href="/css-editor.html" class="dash-link">
+            <span class="dash-link-icon">💅</span>
+            <div>
+              <div>CSS Editor</div>
+              <div class="dash-link-desc">Global styling management</div>
+            </div>
+            <span class="security-badge public">Public</span>
+          </a>
+          <a href="/templates/index.html" class="dash-link">
+            <span class="dash-link-icon">📦</span>
+            <div>
+              <div>Templates Viewer</div>
+              <div class="dash-link-desc">Pre-built configurations</div>
+            </div>
+            <span class="security-badge public">Public</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Developer Tools -->
+      <div class="dashboard-section">
+        <div class="section-header">
+          <span class="section-icon">🔬</span>
+          <h2 class="section-title">Developer Tools</h2>
+        </div>
+        <div class="section-links">
+          <a href="/admin-api-tester.html" class="dash-link">
+            <span class="dash-link-icon">🧪</span>
+            <div>
+              <div>API Tester</div>
+              <div class="dash-link-desc">Test endpoints directly</div>
+            </div>
+            <span class="security-badge public">Public</span>
+          </a>
+          <a href="/admin-api-monitor.html" class="dash-link">
+            <span class="dash-link-icon">📡</span>
+            <div>
+              <div>API Monitor</div>
+              <div class="dash-link-desc">Performance monitoring</div>
+            </div>
+            <span class="security-badge public">Public</span>
+          </a>
+          <a href="/admin-endpoints.html" class="dash-link">
+            <span class="dash-link-icon">📖</span>
+            <div>
+              <div>API Endpoints Reference</div>
+              <div class="dash-link-desc">Endpoint documentation</div>
+            </div>
+            <span class="security-badge public">Public</span>
+          </a>
+          <a href="/asset-inspector.html" class="dash-link">
+            <span class="dash-link-icon">🔍</span>
+            <div>
+              <div>Asset Inspector</div>
+              <div class="dash-link-desc">Debug NFT assets</div>
+            </div>
+            <span class="security-badge public">Public</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Public Pages -->
+      <div class="dashboard-section">
+        <div class="section-header">
+          <span class="section-icon">🌍</span>
+          <h2 class="section-title">Main Public Pages</h2>
+        </div>
+        <div class="section-links">
+          <a href="/index.html" class="dash-link">
+            <span class="dash-link-icon">🏠</span>
+            <div>
+              <div>Home / Claims</div>
+              <div class="dash-link-desc">Main rewards interface</div>
+            </div>
+          </a>
+          <a href="/rewards-hub.html" class="dash-link">
+            <span class="dash-link-icon">🎁</span>
+            <div>
+              <div>Rewards Hub</div>
+              <div class="dash-link-desc">Central module hub</div>
+            </div>
+          </a>
+          <a href="/factory.html" class="dash-link">
+            <span class="dash-link-icon">🏭</span>
+            <div>
+              <div>Factory</div>
+              <div class="dash-link-desc">NFT crafting interface</div>
+            </div>
+          </a>
+          <a href="/packs.html" class="dash-link">
+            <span class="dash-link-icon">📦</span>
+            <div>
+              <div>Pack Unpacking</div>
+              <div class="dash-link-desc">Mystery pack system</div>
+            </div>
+          </a>
+          <a href="/story.html" class="dash-link">
+            <span class="dash-link-icon">📖</span>
+            <div>
+              <div>Story Mode</div>
+              <div class="dash-link-desc">Story progression</div>
+            </div>
+          </a>
+          <a href="/story/index.html" class="dash-link">
+            <span class="dash-link-icon">🗺️</span>
+            <div>
+              <div>Story Index</div>
+              <div class="dash-link-desc">Phase navigation cards</div>
+            </div>
+          </a>
+        </div>
+      </div>
+
+      <!-- Story Phases -->
+      <div class="dashboard-section">
+        <div class="section-header">
+          <span class="section-icon">📚</span>
+          <h2 class="section-title">Story Phases</h2>
+        </div>
+        <div class="section-links">
+          <a href="/story/phase1.html" class="dash-link">
+            <span class="dash-link-icon">1️⃣</span>
+            <div>Phase 1</div>
+          </a>
+          <a href="/story/phase2.html" class="dash-link">
+            <span class="dash-link-icon">2️⃣</span>
+            <div>Phase 2</div>
+          </a>
+          <a href="/story/phase3.html" class="dash-link">
+            <span class="dash-link-icon">3️⃣</span>
+            <div>Phase 3</div>
+          </a>
+          <a href="/story/phase4.html" class="dash-link">
+            <span class="dash-link-icon">4️⃣</span>
+            <div>Phase 4</div>
+          </a>
+          <a href="/story/phase5.html" class="dash-link">
+            <span class="dash-link-icon">5️⃣</span>
+            <div>Phase 5</div>
+          </a>
+          <a href="/story/phase6.html" class="dash-link">
+            <span class="dash-link-icon">6️⃣</span>
+            <div>Phase 6</div>
+          </a>
+          <a href="/story/phase7.html" class="dash-link">
+            <span class="dash-link-icon">7️⃣</span>
+            <div>Phase 7</div>
+          </a>
+        </div>
+      </div>
+
+      <!-- Documentation -->
+      <div class="dashboard-section">
+        <div class="section-header">
+          <span class="section-icon">📖</span>
+          <h2 class="section-title">Documentation</h2>
+        </div>
+        <div class="section-links">
+          <a href="/user-guide.html" class="dash-link">
+            <span class="dash-link-icon">👤</span>
+            <div>
+              <div>User Guide</div>
+              <div class="dash-link-desc">System documentation</div>
+            </div>
+          </a>
+          <a href="/phase-map.html" class="dash-link">
+            <span class="dash-link-icon">🗺️</span>
+            <div>
+              <div>Phase Map</div>
+              <div class="dash-link-desc">Site structure visualizer</div>
+            </div>
+          </a>
+          <a href="/paid-claim-example.html" class="dash-link">
+            <span class="dash-link-icon">💡</span>
+            <div>
+              <div>Paid Claim Example</div>
+              <div class="dash-link-desc">Example documentation</div>
+            </div>
+          </a>
+          <a href="/story-demo.html" class="dash-link">
+            <span class="dash-link-icon">🎬</span>
+            <div>
+              <div>Story Demo</div>
+              <div class="dash-link-desc">Story system demo</div>
+            </div>
+          </a>
+          <a href="/test-modules.html" class="dash-link">
+            <span class="dash-link-icon">🧪</span>
+            <div>
+              <div>Test Modules</div>
+              <div class="dash-link-desc">Module testing page</div>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Authentication check
+    (function() {
+      const token = sessionStorage.getItem('admin_token');
+
+      if (!token) {
+        // Redirect to admin login if not authenticated
+        window.location.href = '/admin.html';
+        return;
+      }
+
+      // Verify token is still valid
+      fetch('/api/admin/config', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => {
+        if (!res.ok) {
+          sessionStorage.removeItem('admin_token');
+          window.location.href = '/admin.html';
+        }
+      })
+      .catch(() => {
+        sessionStorage.removeItem('admin_token');
+        window.location.href = '/admin.html';
+      });
+    })();
+
+    function logout() {
+      sessionStorage.removeItem('admin_token');
+      window.location.href = '/admin.html';
+    }
+  </script>
+</body>
+</html>

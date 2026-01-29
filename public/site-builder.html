@@ -343,9 +343,133 @@
     ::-webkit-scrollbar-thumb:hover {
       background: var(--primary);
     }
+    /* Login Screen */
+    .login-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+
+    .login-overlay.hidden {
+      display: none;
+    }
+
+    .login-box {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 40px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      max-width: 400px;
+      width: 90%;
+    }
+
+    .login-box h2 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #1e293b;
+      font-size: 1.8rem;
+    }
+
+    .login-box .subtitle {
+      color: #64748b;
+      margin-bottom: 30px;
+      font-size: 0.95rem;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .login-input {
+      padding: 12px 16px;
+      border: 2px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+
+    .login-input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .login-btn {
+      padding: 12px 24px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .login-btn:hover {
+      background: #1e40af;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    }
+
+    .login-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .login-error {
+      color: #dc2626;
+      font-size: 0.9rem;
+      margin-top: 10px;
+      display: none;
+    }
+
+    .login-error.visible {
+      display: block;
+    }
+
+    .builder-content {
+      display: none;
+    }
+
+    .builder-content.visible {
+      display: block;
+    }
   </style>
 </head>
 <body>
+  <!-- Login Screen -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-box">
+      <h2>🛠️ Site Builder</h2>
+      <p class="subtitle">Admin access required to use the site builder</p>
+      <form id="loginForm" class="login-form">
+        <input
+          type="password"
+          id="adminPassword"
+          class="login-input"
+          placeholder="Enter admin password"
+          required
+        />
+        <button type="submit" class="login-btn" id="loginBtn">
+          Login
+        </button>
+        <div id="loginError" class="login-error"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Builder Content (Hidden until authenticated) -->
+  <div id="builderContent" class="builder-content">
   <!-- Header -->
   <div class="builder-header">
     <h1>🛠️ Site Builder</h1>
@@ -491,8 +615,96 @@
     </div>
   </div>
 
+  </div> <!-- End builder content -->
+
   <!-- Module Loader -->
   <script src="/modules/module-loader.js"></script>
+  <script>
+    // Site Builder Authentication
+    (function() {
+      const loginOverlay = document.getElementById('loginOverlay');
+      const builderContent = document.getElementById('builderContent');
+      const loginForm = document.getElementById('loginForm');
+      const adminPassword = document.getElementById('adminPassword');
+      const loginBtn = document.getElementById('loginBtn');
+      const loginError = document.getElementById('loginError');
+
+      // Check if already authenticated
+      const token = sessionStorage.getItem('admin_token');
+      if (token) {
+        // Verify token is still valid by making a test request
+        fetch('/api/admin/config', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        .then(res => {
+          if (res.ok) {
+            showBuilder();
+          } else {
+            sessionStorage.removeItem('admin_token');
+            showLogin();
+          }
+        })
+        .catch(() => {
+          sessionStorage.removeItem('admin_token');
+          showLogin();
+        });
+      } else {
+        showLogin();
+      }
+
+      // Login form handler
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Logging in...';
+        loginError.classList.remove('visible');
+
+        try {
+          const response = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: adminPassword.value })
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.token) {
+            sessionStorage.setItem('admin_token', data.token);
+            showBuilder();
+          } else {
+            loginError.textContent = data.error || 'Invalid password';
+            loginError.classList.add('visible');
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Login';
+            adminPassword.value = '';
+            adminPassword.focus();
+          }
+        } catch (error) {
+          loginError.textContent = 'Connection error. Please try again.';
+          loginError.classList.add('visible');
+          loginBtn.disabled = false;
+          loginBtn.textContent = 'Login';
+        }
+      });
+
+      function showLogin() {
+        loginOverlay.classList.remove('hidden');
+        builderContent.classList.remove('visible');
+        adminPassword.focus();
+      }
+
+      function showBuilder() {
+        loginOverlay.classList.add('hidden');
+        builderContent.classList.add('visible');
+      }
+
+      // Logout function (accessible globally)
+      window.logoutBuilder = function() {
+        sessionStorage.removeItem('admin_token');
+        showLogin();
+      };
+    })();
+  </script>
   <script src="/site-builder.js"></script>
 </body>
 </html>

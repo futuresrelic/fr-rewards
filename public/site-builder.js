@@ -3,6 +3,15 @@
  * Phase 7: No-code tool for building custom pages with modules
  */
 
+// Helper function to get auth headers
+function getAuthHeaders() {
+  const token = sessionStorage.getItem('admin_token');
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': token ? `Bearer ${token}` : ''
+  };
+}
+
 // Available modules configuration
 const AVAILABLE_MODULES = [
   {
@@ -1190,7 +1199,7 @@ async function autoSave() {
   try {
     const response = await fetch('/api/page/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         filepath: currentEditingFilepath,
         modules: pageModules,
@@ -1337,7 +1346,7 @@ async function saveToCurrentPage() {
     try {
       const response = await fetch('/api/page/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           filepath: currentEditingFilepath,
           modules: pageModules,
@@ -1524,7 +1533,7 @@ async function createNewPhase() {
   try {
     const response = await fetch('/api/page/create', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         phaseNumber: phaseNumber,
         phaseTitle: phaseTitle,
@@ -1674,7 +1683,7 @@ async function saveStoryIndex() {
   try {
     const response = await fetch('/api/story-index/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ phases: storyPhases })
     });
 

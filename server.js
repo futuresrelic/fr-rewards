@@ -4390,8 +4390,9 @@ app.get('/api/page/load/:filepath(*)', async (req, res) => {
  * POST /api/page/save
  * Save edited page back to file
  * Body: { filepath: 'story/phase2.html', modules: [...] }
+ * Requires: Admin authentication
  */
-app.post('/api/page/save', async (req, res) => {
+app.post('/api/page/save', authenticateAdmin, async (req, res) => {
   try {
     const { filepath, modules, customCSS } = req.body;
 
@@ -4610,8 +4611,9 @@ app.post('/api/page/save', async (req, res) => {
  * POST /api/page/create
  * Create a new phase page
  * Body: { phaseNumber, phaseTitle, phaseSubtitle }
+ * Requires: Admin authentication
  */
-app.post('/api/page/create', async (req, res) => {
+app.post('/api/page/create', authenticateAdmin, async (req, res) => {
   try {
     const { phaseNumber, phaseTitle, phaseSubtitle } = req.body;
 
@@ -4748,8 +4750,9 @@ app.get('/api/story-index/load', async (req, res) => {
  * POST /api/story-index/save
  * Save updated phase cards to story index
  * Body: { phases: [...] }
+ * Requires: Admin authentication
  */
-app.post('/api/story-index/save', async (req, res) => {
+app.post('/api/story-index/save', authenticateAdmin, async (req, res) => {
   try {
     const { phases } = req.body;
 
@@ -4979,8 +4982,9 @@ app.get('/api/css/load', async (req, res) => {
  * POST /api/css/save
  * Save updated CSS content
  * Body: { css: "..." }
+ * Requires: Admin authentication
  */
-app.post('/api/css/save', async (req, res) => {
+app.post('/api/css/save', authenticateAdmin, async (req, res) => {
   try {
     const { css } = req.body;
 
