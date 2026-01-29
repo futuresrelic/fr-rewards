@@ -1023,7 +1023,7 @@ async function loadMenuItems() {
         const token = sessionStorage.getItem('admin_token');
         const response = await fetch('/api/admin/config/menu', {
             headers: {
-                'x-admin-password': token
+                'Authorization': `Bearer ${token}`
             }
         });
         const data = await response.json();
@@ -1150,7 +1150,7 @@ async function saveMenuItems() {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'x-admin-password': token
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({ menuItems: updatedItems })
         });

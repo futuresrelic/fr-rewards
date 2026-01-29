@@ -3856,7 +3856,7 @@ app.get('/api/config/menu', async (req, res) => {
  * GET /api/admin/config/menu
  * Get hamburger menu items for admin (requires auth)
  */
-app.get('/api/admin/config/menu', verifyAdminPassword, async (req, res) => {
+app.get('/api/admin/config/menu', authenticateAdmin, async (req, res) => {
   try {
     const menuItems = db.config.getMenuItems();
     res.json({ success: true, menuItems });
@@ -3870,7 +3870,7 @@ app.get('/api/admin/config/menu', verifyAdminPassword, async (req, res) => {
  * PUT /api/admin/config/menu
  * Update hamburger menu items (requires auth)
  */
-app.put('/api/admin/config/menu', verifyAdminPassword, async (req, res) => {
+app.put('/api/admin/config/menu', authenticateAdmin, async (req, res) => {
   try {
     const { menuItems } = req.body;
 
