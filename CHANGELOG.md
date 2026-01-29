@@ -6,6 +6,26 @@ All notable changes to the WAX NFT Rewards System will be documented in this fil
 
 ### Added
 
+#### Documentation Update - User Guide Refresh
+- **Comprehensive Claim Page Documentation**: Updated USER_GUIDE.md with detailed claim system documentation
+  - Added step-by-step claiming process with visual indicators
+  - Documented eligibility checking and reward card displays
+  - Explained live countdown timers and status indicators
+  - Added claim history and bulk claiming features
+  - Clarified quantity-matched vs standard reward types
+- **Complete Story Mode Documentation**: Rewrote Story Mode section with accurate technical details
+  - Documented all 6 action types (Claim, Unpack, Blend, Blend Array, Drop, Market Scout)
+  - Added step-by-step quest completion flow
+  - Explained progress tracking with visual indicators
+  - Documented story tabs and filtering system
+  - Added comparison table (Story Mode vs Regular Claims)
+  - Included comprehensive troubleshooting section
+- **Enhanced FAQ Section**: Updated FAQ with Story Mode questions and improved claim explanations
+  - Added 10+ new Story Mode FAQs
+  - Improved existing claim page FAQs with current details
+  - Better organization by feature category
+- **Updated Last Modified Date**: Changed from January 19 to January 29, 2026
+
 #### PWA Admin Panel - Icon & Favicon Improvements
 - **Separate Favicon Generator**: New independent favicon editor tool in PWA Admin panel
   - Generates 32x32 favicon.png separately from PWA app icons

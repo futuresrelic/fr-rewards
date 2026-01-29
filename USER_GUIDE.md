@@ -52,31 +52,81 @@ The Future's Relic Rewards System lets you:
 
 ### How It Works
 
-If you own specific Future's Relic NFTs (like Editor Cards), you can claim **free reward NFTs** regularly!
+If you own specific Future's Relic NFTs (like Editor Cards), you can claim **free reward NFTs** regularly! The claim system checks your wallet for eligible NFTs and shows you available rewards with cooldown timers.
 
-### Step-by-Step
+### Step-by-Step Guide
 
-1. **Connect your wallet** (see above)
-2. **Check your eligibility** - The page automatically shows which NFTs you own
-3. **Look for green "Claim" buttons** - Ready to claim!
-4. **Click "Claim Reward"** - Your wallet will ask you to approve
-5. **Approve the transaction** - It's free (just tiny WAX network fees)
-6. **Success!** - Your reward NFT is minted to your wallet
+1. **Connect Your Wallet**
+   - Use WAX Cloud Wallet or Anchor (see wallet connection section above)
+   - Your connection is remembered for next time
 
-### Example
+2. **Check Your Eligibility**
+   - The page automatically scans your wallet for eligible NFTs
+   - Shows which NFTs you own that qualify for rewards
+   - Displays quantity badges if you own multiple copies
 
-If you own **4x Intern Editor Cards**, you might see:
+3. **View Available Rewards**
+   - Each eligible NFT shows its reward options
+   - Rewards display with images, names, and details
+   - Status shows either "Ready to claim!" or a countdown timer
+
+4. **Claim Your Reward**
+   - Click the **"Claim"** button on any ready reward
+   - Your wallet asks you to approve (transaction is free!)
+   - Reward NFT is minted directly to your wallet
+   - Cooldown timer starts automatically
+
+5. **Check Your Claim History**
+   - View your 5 most recent claims at the bottom
+   - Shows reward names and claim dates
+   - Updates after each successful claim
+
+### Understanding the Claim Page
+
+**Eligibility Section:**
+- Shows all NFT templates you own that qualify
+- Quantity badge (e.g., "×3") if you own multiple
+- If not eligible, shows which NFTs you need to acquire
+
+**Reward Cards:**
+Each reward displays:
+- 🖼️ **Reward icon** (40x40px preview image)
+- 📝 **Reward name** and quantity info
+- ⏰ **Cooldown duration** (e.g., "24h cooldown")
+- ✅ **Status** - Ready to claim or time remaining
+
+**Live Countdown Timers:**
+- Shows remaining time in real-time (e.g., "23h 45m 12s")
+- Automatically refreshes when countdown reaches zero
+- Claim button is disabled during cooldown
+
+### Example Scenario
+
+**You own 4x Intern Editor Cards:**
 - ✅ **Eligible for**: Wax Seal reward
-- 🎁 **You'll receive**: 1x Wax Seal NFT (standard reward)
-  - *Note: Some rewards may give 4x instead - check the claim page!*
+- 🎁 **You'll receive**: Amount depends on reward configuration
+  - **Standard rewards**: 1 NFT per claim (regardless of how many cards you own)
+  - **Quantity-matched rewards**: 4 NFTs per claim (matching your card count)
 - ⏰ **Cooldown**: 24 hours between claims
-- 🟢 **Status**: Ready to claim!
+- 🟢 **Status**: "Ready to claim!" or countdown timer
 
-**Remember**: Owning 4 cards doesn't automatically mean 4 rewards. The number you receive depends on how the reward is configured. The claim page shows exactly what you'll get when you click "Claim"!
+**Important**: The claim page shows exactly what you'll receive before you claim. Check the reward card details!
 
-### Claim All Button
+### Claim All Feature
 
-Have multiple rewards ready? Click **"🎁 Claim All Available Rewards"** to get them all at once!
+When you have multiple rewards ready:
+- **"🎁 Claim All Available Rewards"** button appears
+- Claims all ready rewards in a single operation
+- Shows count of rewards claimed
+- More efficient than claiming one by one
+
+### Tips for Claiming
+
+- ✅ **Check regularly** - Some rewards have short cooldowns
+- ✅ **Use Claim All** - Saves time when multiple rewards are ready
+- ✅ **Watch the timers** - Set reminders for when cooldowns expire
+- ✅ **Keep your NFTs** - You don't lose your original NFTs when claiming
+- ✅ **Transaction history** - Each claim is recorded on the blockchain
 
 ---
 
@@ -188,104 +238,192 @@ Crafts rarely fail, but if they do:
 
 ---
 
-## 📚 Story Workflow (Interactive Narratives)
+## 📚 Story Mode (Interactive Quest System)
 
-### What is the Story System?
+### What is Story Mode?
 
-The **Story Workflow** is an interactive narrative experience where you:
-- Follow branching story paths
-- Make choices that affect the outcome
-- Unlock new chapters and content
-- Use your NFTs to access special paths
-- Earn rewards for completing stories
+**Story Mode** is an interactive quest system where you complete sequential actions to progress through a narrative adventure. Each story consists of **Steps** (chapters) containing one or more **Actions** (tasks) that you complete to advance.
 
-### Getting Started with Stories
+**What You Can Do:**
+- Complete quest-style story progression
+- Execute blockchain actions (claim, unpack, blend, etc.)
+- Track your progress through visual completion bars
+- Organize tasks by category tabs
+- Earn rewards for completing story milestones
 
-1. **Visit the Story page** - Look for "Story" or "Narrative" link
-2. **Connect your wallet** - Same as claiming rewards
-3. **View available stories** - See which paths you can access
-4. **Start reading!** - Click on a story to begin
+### Getting Started
 
-### How Stories Work
+1. **Visit the Story Page** - Access from the main navigation
+2. **Connect Your Wallet** - Required to track progress and execute actions
+3. **View Your Progress** - System automatically loads where you left off
+4. **Complete Actions** - Work through tasks at your own pace
 
-**📑 Tabs** = Different chapters or story sections
-- Like chapters in a book
-- Some tabs are locked until you complete previous ones
-- Unlock by finishing requirements
+### Understanding Story Structure
 
-**📖 Steps** = Individual story moments
-- Each step has text, images, or videos
-- Read the narrative
-- Make choices when prompted
+**📑 Steps (Chapters)**
+- Main organizational units of the story
+- Each step contains related actions
+- Progress bar shows completion percentage
+- Steps are numbered (Step 1, Step 2, etc.)
+- Description supports rich text formatting (Markdown)
 
-**⚡ Actions** = Things you can do
-- **Read**: Just enjoy the narrative
-- **Choose**: Pick between options (affects story outcome)
-- **Collect**: Claim rewards for completing sections
-- **Craft**: Some paths require crafting specific NFTs
+**⚡ Actions (Tasks)**
+- Specific tasks you complete within each step
+- Each action has a type (Claim, Unpack, Blend, etc.)
+- Visual indicators show completion status
+- Can be filtered by category tabs
 
-### Example Story Flow
+**🏷️ Tabs (Categories)**
+- Organize actions by type or theme
+- "All Actions" tab shows everything (default)
+- Custom tabs like "Combat", "Crafting", "Exploration"
+- Filter view by clicking tab buttons
+
+### Available Action Types
+
+Story Mode supports 6 types of interactive actions:
+
+**1. 🎁 CLAIM Actions**
+- Claim reward NFTs you're eligible for
+- Uses same system as main claim page
+- Marks complete automatically after successful claim
+
+**2. 📦 UNPACK Actions**
+- Unpack NFT packs to reveal contents
+- Select which pack to unpack if you own multiple
+- View unpacked NFTs in success modal
+- Manual completion button after unpacking
+
+**3. 🔮 BLEND Actions**
+- Combine NFTs using specific blend recipe
+- Select required ingredient NFTs from your wallet
+- Executes NeftyBlocks blend contract
+- Shows blend requirements and validation
+
+**4. 🔀 BLEND ARRAY Actions**
+- Choose from multiple blend recipe options
+- Flexible quest paths with different outcomes
+- Select recipe first, then choose ingredients
+- Good for story branches with choices
+
+**5. 💧 DROP Actions**
+- Participate in NeftyBlocks drop campaigns
+- Embedded drop interface opens in modal
+- Claim limited edition NFTs
+- Manual completion after claiming
+
+**6. 🔍 MARKET SCOUT Actions**
+- Explore marketplace for specific NFTs
+- Discovery and education tasks
+- Shows marketplace information
+- Manual completion button
+
+### How to Complete Actions
+
+**Step-by-Step Process:**
+
+1. **View Action Details**
+   - Action type icon (🎁 🔮 📦 etc.)
+   - Action name and description
+   - Completion status (checkmark if done)
+
+2. **Click Action Button**
+   - Button shows action type (e.g., "Claim Reward", "Execute Blend")
+   - Disabled if already completed
+   - Shows "⏳ Processing..." during execution
+
+3. **Execute the Task**
+   - Follow prompts specific to action type
+   - Approve blockchain transactions in your wallet
+   - Wait for confirmation
+
+4. **Automatic Completion**
+   - Most actions mark complete automatically
+   - Some require manual "Mark Complete" button
+   - Checkmark appears on completed actions
+   - Progress bar updates
+
+### Progress Tracking
+
+**Visual Indicators:**
+- **Step Progress Bars** - Show % complete for each step
+- **Checkmarks** - Completed actions get ✓ icon
+- **Action Counts** - "3/5 actions complete" under step name
+- **Color Coding** - Visual feedback for completion status
+
+**Your Progress is Saved:**
+- ✅ Automatically saved after each action
+- ✅ Persists across browser sessions
+- ✅ Linked to your WAX account
+- ✅ Transaction IDs recorded for blockchain actions
+
+### Example Quest Flow
 
 ```
-📖 Chapter 1: The Beginning
+📖 Step 1: The Beginning (0% complete)
    ↓
-   Step 1: "You wake up in a mysterious place..."
+   Action 1: 🎁 Claim your starter NFT
+   [Execute] → Approve in wallet → ✓ Complete (33%)
    ↓
-   💬 Choice: [Go Left] or [Go Right]
+   Action 2: 📦 Unpack the mystery box
+   [Execute] → Select pack → Unpack → View contents → ✓ Complete (66%)
    ↓
-   Step 2: "You chose left and found a hidden door..."
+   Action 3: 🔮 Blend 3 items to craft the key
+   [Execute] → Select ingredients → Approve blend → ✓ Complete (100%)
    ↓
-   Step 3: "Behind the door was..."
-   ↓
-   ✅ Chapter 1 Complete!
-   ↓
-   🔓 Chapter 2 Unlocked!
+✅ Step 1 Complete! - Step 2 now available
 ```
 
-### Requirements & Conditions
+### Using Story Tabs
 
-Some story sections require:
-- **Specific NFTs**: "Own at least 1 Apprentice Editor Card"
-- **Completed chapters**: "Finish Chapter 1 first"
-- **Crafted items**: "Craft the Ancient Key to proceed"
-- **Time gates**: "Available after 24 hours"
+**All Actions Tab (Default):**
+- Shows every action across all steps
+- Useful for seeing the full story at once
 
-The system shows you:
-- ✅ **Green checkmark** = Requirement met
-- ❌ **Red X** = Requirement not met (shows what you need)
-- 🔒 **Locked** = Complete previous steps first
+**Custom Category Tabs:**
+- Filter actions by category
+- Example tabs: "Rewards", "Crafting", "Packs"
+- Click tab to filter view
+- Makes it easier to focus on specific task types
 
-### Story Progress
+### Tips for Story Mode
 
-Your progress is **saved automatically**:
-- ✅ Completed steps show checkmarks
-- ⏸️ In-progress sections resume where you left off
-- 📊 Progress bar shows how far you are
-- 🔄 You can revisit completed sections
+- ✅ **Complete in order** - Actions often build on each other
+- ✅ **Read descriptions** - Understand what each action requires
+- ✅ **Check your wallet** - Make sure you have required NFTs
+- ✅ **Take your time** - No rush, progress is saved
+- ✅ **Use tabs** - Filter by category for easier navigation
+- ⚠️ **Blockchain actions are permanent** - Double-check before confirming
 
-### Making Choices
+### Troubleshooting Story Actions
 
-Some steps offer **choices**:
-- Read both options carefully
-- **Your choice may be permanent** and affect later outcomes
-- Some choices lead to different endings
-- No "wrong" choice - just different paths!
+**Action button is disabled:**
+- Already completed (checkmark visible)
+- Missing required NFTs in wallet
+- Previous actions must be completed first
 
-### Example
-```
-💬 "Do you trust the mysterious stranger?"
+**Action fails to execute:**
+- Check wallet connection is active
+- Verify you have required NFTs
+- Ensure sufficient CPU/NET resources
+- Try refreshing the page
 
-A) Yes, follow them → Leads to Alliance Path
-B) No, walk away → Leads to Solo Path
-```
+**Progress not saving:**
+- Confirm wallet is connected
+- Check browser console for errors
+- Try disconnecting and reconnecting wallet
+- Contact admin with your account name
 
-### Tips for Stories
+### Story Mode vs. Regular Claims
 
-- ✅ **Read carefully** - Choices matter!
-- ✅ **Check requirements** - Make sure you have needed NFTs
-- ✅ **Take your time** - Stories don't expire
-- ✅ **Explore all paths** - Some stories have multiple endings
-- ⚠️ **Some choices are permanent** - Choose wisely!
+| Feature | Story Mode | Claim Page |
+|---------|------------|------------|
+| **Purpose** | Narrative quest progression | Recurring reward collection |
+| **Structure** | Sequential steps and actions | Independent claim cards |
+| **Completion** | One-time quest milestones | Repeatable with cooldowns |
+| **Variety** | Multiple action types | Claim actions only |
+| **Progress** | Visual step completion | Cooldown timers |
+| **Use Case** | Onboarding, events, campaigns | Regular community rewards |
 
 ---
 
@@ -399,38 +537,68 @@ B) No, walk away → Leads to Solo Path
 - This is normal and expected!
 - You get your new NFT in return
 
-### Story System
+### Story Mode
 
-**Q: How do I unlock new story chapters?**
-- Complete previous chapters first (in order)
-- Meet any NFT requirements (own specific cards)
-- Complete required crafting tasks if needed
-- Some chapters may be time-gated
+**Q: What's the difference between Story Mode and regular claims?**
+- **Story Mode**: Sequential quest with multiple action types (claim, unpack, blend, etc.)
+- **Regular Claims**: Repeatable reward collection with cooldowns
+- Story Mode is for narrative progression; Claims are for ongoing rewards
 
-**Q: Can I go back and change my choices?**
-- Usually **no** - story choices are permanent
-- This makes your journey unique!
-- Choose carefully and enjoy your path
-- Some stories may allow replays in the future
+**Q: How do I complete a story action?**
+- Click the action button (e.g., "Claim Reward", "Execute Blend")
+- Follow the prompts for that action type
+- Approve any blockchain transactions in your wallet
+- Most actions auto-complete; some need manual "Mark Complete" button
 
-**Q: I'm stuck - how do I proceed?**
-- Check the requirements panel (shows what's needed)
-- Make sure you have required NFTs in your wallet
-- Complete any needed crafts first
-- Some sections may be time-gated (come back later)
-- Refresh the page if it seems stuck
+**Q: My story progress isn't showing. Why?**
+- Make sure your wallet is connected
+- Refresh the page to reload progress
+- Progress is linked to your WAX account
+- Check browser console for error messages
 
-**Q: Do I lose NFTs by participating in stories?**
-- **No!** Stories just **check** if you own NFTs
-- Your NFTs stay safely in your wallet
-- Unless a story specifically includes a craft (which is optional)
-- You're always in control of your NFTs
+**Q: Can I complete actions out of order?**
+- Actions within a step can usually be done in any order
+- Some actions may have dependencies (check descriptions)
+- Steps generally should be completed sequentially
+- Your choice - the system tracks what you've done
 
-**Q: Can I do stories on mobile?**
-- Yes! The story system works on mobile browsers
+**Q: What happens if I refresh the page mid-action?**
+- **Completed actions** - Already saved, won't be lost
+- **Blockchain transactions** - If confirmed, they're permanent
+- **In-progress actions** - May need to restart that action
+- Always wait for confirmation before closing!
+
+**Q: Do I lose NFTs when completing story actions?**
+- **Claim actions**: No, you receive NFTs (no loss)
+- **Unpack actions**: Pack is consumed, contents revealed
+- **Blend actions**: Ingredients consumed, result received
+- **Scout/Drop actions**: No NFT loss (viewing/claiming)
+- Each action type behaves differently - read descriptions!
+
+**Q: Can I redo completed actions?**
+- **No** - Story actions are one-time completions
+- Progress is permanently saved
+- This makes your journey unique
+- Future stories may offer replay options
+
+**Q: How do story tabs work?**
+- Tabs organize actions by category
+- "All Actions" shows everything (default)
+- Click custom tabs to filter (e.g., "Crafting", "Rewards")
+- Helps focus on specific task types
+
+**Q: What if an action fails?**
+- Check you have required NFTs in wallet
+- Verify sufficient CPU/NET resources
+- Try disconnecting and reconnecting wallet
+- Refresh the page and try again
+- Contact admin if problem persists (include transaction ID)
+
+**Q: Can I do Story Mode on mobile?**
+- Yes! Works on mobile browsers
 - Use mobile wallet apps (Anchor mobile, WAX Cloud Wallet)
-- Best viewed in landscape mode for better reading
-- Touch-friendly interface
+- Best experience in landscape mode
+- All action types support touch input
 
 ### Technical Issues
 
@@ -561,6 +729,6 @@ The Future's Relic Rewards System is designed to be:
 
 ---
 
-**Last Updated**: January 19, 2026
+**Last Updated**: January 29, 2026
 **Questions?** Check the FAQ or contact the admin
 **Happy Collecting!** 🎊
