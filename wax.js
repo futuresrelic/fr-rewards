@@ -180,7 +180,33 @@ async function getTemplateFromAssetSample(collection, templateId) {
   return null;
 }
 
+// In-memory template cache to prevent redundant blockchain fetches
+// Cache structure: Map<cacheKey, {data, timestamp}>
+const templateCache = new Map();
+const TEMPLATE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+/**
+ * Get template with caching to reduce redundant blockchain API calls
+ * @param {string} collection - Collection name
+ * @param {number|string} templateId - Template ID
+ * @returns {Promise<Object>} Template data
+ */
 async function getTemplate(collection, templateId) {
+  const cacheKey = `${collection}:${templateId}`;
+
+  // Check cache first
+  const cached = templateCache.get(cacheKey);
+  if (cached) {
+    const age = Date.now() - cached.timestamp;
+    if (age < TEMPLATE_CACHE_TTL) {
+      console.log(`📦 Using cached template ${templateId} (age: ${Math.round(age/1000)}s)`);
+      return cached.data;
+    } else {
+      // Cache expired, remove it
+      templateCache.delete(cacheKey);
+    }
+  }
+
   let lastError = null;
 
   // Try multiple API endpoints with fallback
@@ -195,6 +221,13 @@ async function getTemplate(collection, templateId) {
 
       const data = await response.json();
       console.log(`✅ Fetched template ${templateId} from ${ATOMIC_API}`);
+
+      // Cache the result
+      templateCache.set(cacheKey, {
+        data: data.data,
+        timestamp: Date.now()
+      });
+
       return data.data;
     } catch (error) {
       console.warn(`❌ Failed to fetch template from ${ATOMIC_API}:`, error.message);
@@ -207,16 +240,29 @@ async function getTemplate(collection, templateId) {
   console.warn(`⚠️ All AtomicAssets template endpoints failed for template ${templateId}, trying asset sample fallback...`);
   const assetSampleTemplate = await getTemplateFromAssetSample(collection, templateId);
   if (assetSampleTemplate) {
+    // Cache the fallback result too
+    templateCache.set(cacheKey, {
+      data: assetSampleTemplate,
+      timestamp: Date.now()
+    });
     return assetSampleTemplate;
   }
 
   // Last resort: return minimal template data so asset can still be used
   console.error(`❌ All template fetch methods failed for ${templateId}, returning minimal data`);
-  return {
+  const minimalData = {
     template_id: templateId,
     immutable_data: {},
     collection_name: collection
   };
+
+  // Cache even minimal data to avoid repeated failures
+  templateCache.set(cacheKey, {
+    data: minimalData,
+    timestamp: Date.now()
+  });
+
+  return minimalData;
 }
 
 /**
@@ -1061,6 +1107,35 @@ async function powerUpAccount(payer, receiver, payerPrivateKey, options = {}) {
   throw new Error(`PowerUp failed on all endpoints. Last error: ${lastError?.message}`);
 }
 
+/**
+ * Clear template cache - useful for admin operations or testing
+ * @returns {number} Number of cached entries cleared
+ */
+function clearTemplateCache() {
+  const size = templateCache.size;
+  templateCache.clear();
+  console.log(`🗑️ Cleared ${size} template cache entries`);
+  return size;
+}
+
+/**
+ * Get template cache statistics
+ * @returns {Object} Cache stats (size, entries)
+ */
+function getTemplateCacheStats() {
+  const entries = Array.from(templateCache.entries()).map(([key, value]) => ({
+    key,
+    age: Math.round((Date.now() - value.timestamp) / 1000),
+    template_id: value.data.template_id
+  }));
+
+  return {
+    size: templateCache.size,
+    ttl_seconds: TEMPLATE_CACHE_TTL / 1000,
+    entries
+  };
+}
+
 module.exports = {
   getUserAssets,
   getUserAssetsLive,
@@ -1077,6 +1152,8 @@ module.exports = {
   getAtomicAPIs,
   setPreferredAtomicAPI,
   addCustomAtomicAPI,
+  clearTemplateCache,
+  getTemplateCacheStats,
   ATOMIC_APIS,
   WAX_ACCOUNT
 };

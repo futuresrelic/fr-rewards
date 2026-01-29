@@ -1948,6 +1948,37 @@ app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
 });
 
 /**
+ * GET /api/admin/cache/stats
+ * Get template cache statistics
+ */
+app.get('/api/admin/cache/stats', authenticateAdmin, async (req, res) => {
+  try {
+    const cacheStats = wax.getTemplateCacheStats();
+    res.json({ success: true, cache: cacheStats });
+  } catch (error) {
+    console.error('Error fetching cache stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/cache
+ * Clear template cache
+ */
+app.delete('/api/admin/cache', authenticateAdmin, async (req, res) => {
+  try {
+    const cleared = wax.clearTemplateCache();
+    res.json({
+      success: true,
+      message: `Cleared ${cleared} cached template entries`
+    });
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/admin/claims
  * Get all claims
  */
