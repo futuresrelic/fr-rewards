@@ -750,6 +750,115 @@ function initializeTables() {
     console.warn('⚠️ Migration warning:', error.message);
   }
 
+  // Migration: Create custom indexes system tables
+  try {
+    const customIndexesExists = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='custom_indexes'
+    `).get();
+
+    if (!customIndexesExists) {
+      console.log('🔄 Creating custom indexes system tables...');
+
+      // Table: custom_indexes - Top-level indexes (Story, Quests, Events, etc.)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS custom_indexes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          slug TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          description TEXT,
+          icon TEXT DEFAULT '📖',
+          display_order INTEGER NOT NULL DEFAULT 0,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          is_system INTEGER NOT NULL DEFAULT 0,
+          nav_visible INTEGER NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      // Table: custom_phases - Phase pages within each index
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS custom_phases (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          index_id INTEGER NOT NULL,
+          phase_order INTEGER NOT NULL,
+          slug TEXT NOT NULL,
+          title TEXT NOT NULL,
+          subtitle TEXT,
+          preview_text TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (index_id) REFERENCES custom_indexes(id) ON DELETE CASCADE,
+          UNIQUE(index_id, slug),
+          UNIQUE(index_id, phase_order)
+        );
+      `);
+
+      // Table: custom_phase_content - Content blocks (modules) within each phase
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS custom_phase_content (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          phase_id INTEGER NOT NULL,
+          content_order INTEGER NOT NULL,
+          module_type TEXT NOT NULL,
+          module_config TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (phase_id) REFERENCES custom_phases(id) ON DELETE CASCADE,
+          UNIQUE(phase_id, content_order)
+        );
+      `);
+
+      // Create indexes for better query performance
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_custom_indexes_enabled
+          ON custom_indexes(enabled, display_order);
+      `);
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_custom_indexes_slug
+          ON custom_indexes(slug);
+      `);
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_custom_phases_index
+          ON custom_phases(index_id, phase_order);
+      `);
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_custom_phases_slug
+          ON custom_phases(index_id, slug);
+      `);
+
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_custom_phase_content_phase
+          ON custom_phase_content(phase_id, content_order);
+      `);
+
+      // Insert default "Story" index
+      db.prepare(`
+        INSERT INTO custom_indexes (name, slug, title, description, icon, display_order, enabled, is_system, nav_visible)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        'story',
+        'story',
+        'Story Progression',
+        'Follow the narrative and complete story phases',
+        '📖',
+        1,
+        1,
+        1, // is_system = true (cannot be deleted)
+        1  // visible in navigation
+      );
+
+      console.log('✅ Custom indexes system tables created');
+    }
+  } catch (error) {
+    console.warn('⚠️ Custom indexes migration warning:', error.message);
+  }
+
   // Migration: Add PWA and theme customization columns
   try {
     const configRow = db.prepare('SELECT * FROM config WHERE id = 1').get();
@@ -1775,6 +1884,285 @@ const storyTabs = {
   }
 };
 
+// Custom Indexes methods - Manage multiple custom indexes (Story, Quests, Events, etc.)
+const customIndexes = {
+  // Get all indexes
+  getAll: () => {
+    return db.prepare('SELECT * FROM custom_indexes ORDER BY display_order ASC').all();
+  },
+
+  // Get all enabled indexes
+  getEnabled: () => {
+    return db.prepare('SELECT * FROM custom_indexes WHERE enabled = 1 ORDER BY display_order ASC').all();
+  },
+
+  // Get indexes visible in navigation
+  getNavVisible: () => {
+    return db.prepare('SELECT * FROM custom_indexes WHERE enabled = 1 AND nav_visible = 1 ORDER BY display_order ASC').all();
+  },
+
+  // Get index by ID
+  getById: (id) => {
+    return db.prepare('SELECT * FROM custom_indexes WHERE id = ?').get(id);
+  },
+
+  // Get index by slug
+  getBySlug: (slug) => {
+    return db.prepare('SELECT * FROM custom_indexes WHERE slug = ?').get(slug);
+  },
+
+  // Create new index
+  create: (data) => {
+    const stmt = db.prepare(`
+      INSERT INTO custom_indexes (name, slug, title, description, icon, display_order, enabled, is_system, nav_visible)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      data.name,
+      data.slug,
+      data.title,
+      data.description || null,
+      data.icon || '📖',
+      data.display_order || 0,
+      data.enabled !== undefined ? data.enabled : 1,
+      data.is_system || 0,
+      data.nav_visible !== undefined ? data.nav_visible : 1
+    );
+  },
+
+  // Update index
+  update: (id, data) => {
+    const stmt = db.prepare(`
+      UPDATE custom_indexes
+      SET name = ?,
+          slug = ?,
+          title = ?,
+          description = ?,
+          icon = ?,
+          display_order = ?,
+          enabled = ?,
+          nav_visible = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(
+      data.name,
+      data.slug,
+      data.title,
+      data.description,
+      data.icon,
+      data.display_order,
+      data.enabled,
+      data.nav_visible,
+      id
+    );
+  },
+
+  // Delete index (only if not system)
+  delete: (id) => {
+    const index = db.prepare('SELECT is_system FROM custom_indexes WHERE id = ?').get(id);
+    if (index && index.is_system) {
+      throw new Error('Cannot delete system index');
+    }
+    return db.prepare('DELETE FROM custom_indexes WHERE id = ?').run(id);
+  },
+
+  // Enable/disable index
+  setEnabled: (id, enabled) => {
+    return db.prepare('UPDATE custom_indexes SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(enabled, id);
+  }
+};
+
+// Custom Phases methods - Manage phase pages within each index
+const customPhases = {
+  // Get all phases for an index
+  getByIndex: (index_id) => {
+    return db.prepare('SELECT * FROM custom_phases WHERE index_id = ? ORDER BY phase_order ASC').all(index_id);
+  },
+
+  // Get enabled phases for an index
+  getEnabledByIndex: (index_id) => {
+    return db.prepare('SELECT * FROM custom_phases WHERE index_id = ? AND enabled = 1 ORDER BY phase_order ASC').all(index_id);
+  },
+
+  // Get phase by ID
+  getById: (id) => {
+    return db.prepare('SELECT * FROM custom_phases WHERE id = ?').get(id);
+  },
+
+  // Get phase by index slug and phase slug
+  getBySlug: (index_id, slug) => {
+    return db.prepare('SELECT * FROM custom_phases WHERE index_id = ? AND slug = ?').get(index_id, slug);
+  },
+
+  // Create new phase
+  create: (data) => {
+    const stmt = db.prepare(`
+      INSERT INTO custom_phases (index_id, phase_order, slug, title, subtitle, preview_text, enabled)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      data.index_id,
+      data.phase_order,
+      data.slug,
+      data.title,
+      data.subtitle || null,
+      data.preview_text || null,
+      data.enabled !== undefined ? data.enabled : 1
+    );
+  },
+
+  // Update phase
+  update: (id, data) => {
+    const stmt = db.prepare(`
+      UPDATE custom_phases
+      SET phase_order = ?,
+          slug = ?,
+          title = ?,
+          subtitle = ?,
+          preview_text = ?,
+          enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(
+      data.phase_order,
+      data.slug,
+      data.title,
+      data.subtitle,
+      data.preview_text,
+      data.enabled,
+      id
+    );
+  },
+
+  // Delete phase
+  delete: (id) => {
+    return db.prepare('DELETE FROM custom_phases WHERE id = ?').run(id);
+  },
+
+  // Reorder phases (update multiple phase orders)
+  reorder: (updates) => {
+    const stmt = db.prepare('UPDATE custom_phases SET phase_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    const transaction = db.transaction((items) => {
+      for (const item of items) {
+        stmt.run(item.phase_order, item.id);
+      }
+    });
+    return transaction(updates);
+  }
+};
+
+// Custom Phase Content methods - Manage content blocks within phases
+const customPhaseContent = {
+  // Get all content for a phase
+  getByPhase: (phase_id) => {
+    const rows = db.prepare('SELECT * FROM custom_phase_content WHERE phase_id = ? ORDER BY content_order ASC').all(phase_id);
+    return rows.map(row => ({
+      id: row.id,
+      phase_id: row.phase_id,
+      content_order: row.content_order,
+      module_type: row.module_type,
+      module_config: JSON.parse(row.module_config),
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    }));
+  },
+
+  // Get content block by ID
+  getById: (id) => {
+    const row = db.prepare('SELECT * FROM custom_phase_content WHERE id = ?').get(id);
+    if (row) {
+      return {
+        id: row.id,
+        phase_id: row.phase_id,
+        content_order: row.content_order,
+        module_type: row.module_type,
+        module_config: JSON.parse(row.module_config),
+        created_at: row.created_at,
+        updated_at: row.updated_at
+      };
+    }
+    return null;
+  },
+
+  // Create new content block
+  create: (data) => {
+    const stmt = db.prepare(`
+      INSERT INTO custom_phase_content (phase_id, content_order, module_type, module_config)
+      VALUES (?, ?, ?, ?)
+    `);
+    return stmt.run(
+      data.phase_id,
+      data.content_order,
+      data.module_type,
+      JSON.stringify(data.module_config)
+    );
+  },
+
+  // Update content block
+  update: (id, data) => {
+    const stmt = db.prepare(`
+      UPDATE custom_phase_content
+      SET content_order = ?,
+          module_type = ?,
+          module_config = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(
+      data.content_order,
+      data.module_type,
+      JSON.stringify(data.module_config),
+      id
+    );
+  },
+
+  // Delete content block
+  delete: (id) => {
+    return db.prepare('DELETE FROM custom_phase_content WHERE id = ?').run(id);
+  },
+
+  // Delete all content for a phase
+  deleteByPhase: (phase_id) => {
+    return db.prepare('DELETE FROM custom_phase_content WHERE phase_id = ?').run(phase_id);
+  },
+
+  // Reorder content blocks
+  reorder: (updates) => {
+    const stmt = db.prepare('UPDATE custom_phase_content SET content_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    const transaction = db.transaction((items) => {
+      for (const item of items) {
+        stmt.run(item.content_order, item.id);
+      }
+    });
+    return transaction(updates);
+  },
+
+  // Replace all content for a phase (atomic operation)
+  replaceAll: (phase_id, contentBlocks) => {
+    const deleteStmt = db.prepare('DELETE FROM custom_phase_content WHERE phase_id = ?');
+    const insertStmt = db.prepare(`
+      INSERT INTO custom_phase_content (phase_id, content_order, module_type, module_config)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    const transaction = db.transaction(() => {
+      deleteStmt.run(phase_id);
+      contentBlocks.forEach((block, index) => {
+        insertStmt.run(
+          phase_id,
+          index + 1,
+          block.module_type,
+          JSON.stringify(block.module_config)
+        );
+      });
+    });
+
+    return transaction();
+  }
+};
+
 // Blend recipes management (cached blend configurations)
 const blendRecipes = {
   // Get a single blend recipe by ID
@@ -2499,5 +2887,8 @@ module.exports = {
   craftHistory,
   scheduledActions,
   actionExecutions,
-  moduleInstances
+  moduleInstances,
+  customIndexes,
+  customPhases,
+  customPhaseContent
 };

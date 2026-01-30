@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="pageTitle">Loading...</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .phase-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    .phase-header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+    }
+
+    .phase-title {
+      font-size: 2.5rem;
+      font-weight: bold;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .phase-subtitle {
+      font-size: 1.25rem;
+      color: var(--primary);
+      font-weight: 500;
+      margin-bottom: 1rem;
+    }
+
+    .phase-content {
+      margin: 2rem 0;
+    }
+
+    .content-module {
+      margin-bottom: 2rem;
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(139, 92, 246, 0.2);
+    }
+
+    .back-button {
+      margin-bottom: 2rem;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .empty-state-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="phase-container">
+    <div class="back-button">
+      <button onclick="goBackToIndex()" class="btn btn-secondary">← Back to Index</button>
+    </div>
+
+    <div id="loadingState" class="empty-state">
+      <div class="empty-state-icon">⏳</div>
+      <p>Loading phase...</p>
+    </div>
+
+    <div id="contentContainer" style="display: none;">
+      <div class="phase-header">
+        <h1 class="phase-title" id="phaseTitle"></h1>
+        <div class="phase-subtitle" id="phaseSubtitle"></div>
+      </div>
+
+      <div id="phaseContent" class="phase-content">
+        <!-- Content modules loaded dynamically -->
+      </div>
+
+      <div class="nav-buttons">
+        <button onclick="goBackToIndex()" class="btn btn-secondary">← Back to Index</button>
+      </div>
+    </div>
+
+    <div id="errorState" class="empty-state" style="display: none;">
+      <div class="empty-state-icon">❌</div>
+      <p id="errorMessage">Error loading phase</p>
+    </div>
+  </div>
+
+  <!-- Module loader for rendering content modules -->
+  <script src="/modules/module-loader.js"></script>
+  <script>
+    // Get parameters from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const indexSlug = urlParams.get('index');
+    const phaseSlug = urlParams.get('phase');
+
+    if (!indexSlug || !phaseSlug) {
+      showError('Invalid URL parameters');
+    } else {
+      loadPhase(indexSlug, phaseSlug);
+    }
+
+    async function loadPhase(indexSlug, phaseSlug) {
+      try {
+        const response = await fetch(`/api/custom-indexes/${indexSlug}/${phaseSlug}`);
+        const data = await response.json();
+
+        if (data.success) {
+          renderPhase(data.index, data.phase, data.content);
+        } else {
+          showError(data.error || 'Failed to load phase');
+        }
+      } catch (error) {
+        console.error('Error loading phase:', error);
+        showError('Error loading phase: ' + error.message);
+      }
+    }
+
+    function renderPhase(index, phase, content) {
+      // Update page title
+      document.title = `${phase.title} - ${index.title}`;
+      document.getElementById('pageTitle').textContent = document.title;
+
+      // Update header
+      document.getElementById('phaseTitle').textContent = phase.title;
+      if (phase.subtitle) {
+        document.getElementById('phaseSubtitle').textContent = phase.subtitle;
+        document.getElementById('phaseSubtitle').style.display = 'block';
+      } else {
+        document.getElementById('phaseSubtitle').style.display = 'none';
+      }
+
+      // Render content modules
+      const contentContainer = document.getElementById('phaseContent');
+
+      if (content.length === 0) {
+        contentContainer.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <p>No content available for this phase yet.</p>
+          </div>
+        `;
+      } else {
+        // Sort content by order
+        content.sort((a, b) => a.content_order - b.content_order);
+
+        // Create module containers
+        contentContainer.innerHTML = content.map((block, index) => `
+          <div class="content-module"
+               data-module="${block.module_type}"
+               data-config='${JSON.stringify(block.module_config)}'>
+          </div>
+        `).join('');
+
+        // Initialize module loader (if available)
+        if (window.moduleLoader) {
+          window.moduleLoader.loadAll();
+        } else {
+          console.warn('Module loader not available');
+        }
+      }
+
+      // Show content, hide loading
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('contentContainer').style.display = 'block';
+    }
+
+    function goBackToIndex() {
+      window.location.href = `/custom-index.html?index=${indexSlug}`;
+    }
+
+    function showError(message) {
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('errorState').style.display = 'block';
+      document.getElementById('errorMessage').textContent = message;
+    }
+  </script>
+</body>
+</html>

@@ -2,9 +2,40 @@
 
 All notable changes to the WAX NFT Rewards System will be documented in this file.
 
-## [Unreleased] - 2026-01-29
+## [Unreleased] - 2026-01-30
 
 ### Added
+
+#### Custom Indexes System - Multi-Page Content Management
+- **Complete Custom Index System**: New flexible content management system for creating unlimited custom index pages
+  - **Database Schema**: Added 3 new tables (`custom_indexes`, `custom_phases`, `custom_phase_content`)
+  - **Admin Interface**: New `/admin-custom-indexes.html` page for managing indexes, phases, and content
+  - **Public Pages**: Dynamic `/custom-index.html` and `/custom-phase.html` for viewing content
+  - **API Endpoints**: 15+ new REST API endpoints for CRUD operations on indexes, phases, and content
+  - **Database Methods**: Comprehensive methods in `database.js` for managing custom indexes system
+  - **Module Support**: Phase pages support all existing module types (text, images, NFT drops, crafting, etc.)
+  - **Default Story Index**: System automatically creates "Story Progression" index with proper migration
+
+- **Features**:
+  - Create unlimited custom indexes (Story, Quests, Events, Guides, etc.)
+  - Each index can have unlimited phase pages in sequential order
+  - Add multiple content modules to each phase page
+  - Flexible ordering and organization of phases and content
+  - Enable/disable indexes and phases without deletion
+  - System-protected indexes (cannot be deleted)
+  - Navigation visibility controls
+  - Automatic cascading deletes for data integrity
+  - Rich module configuration with JSON storage
+
+- **Admin Dashboard Integration**: Added "Custom Indexes" link to admin dashboard
+- **Documentation Updates**:
+  - Added Custom Indexes section to `CLAUDE_DEV_GUIDE.md` with database schema and examples
+  - Added comprehensive Custom Indexes user guide to `USER_GUIDE.md` with use cases and tips
+
+- **URLs**:
+  - Admin: `/admin-custom-indexes.html`
+  - View Index: `/custom-index.html?index=SLUG`
+  - View Phase: `/custom-phase.html?index=SLUG&phase=SLUG`
 
 #### Documentation Update - User Guide Refresh
 - **Comprehensive Claim Page Documentation**: Updated USER_GUIDE.md with detailed claim system documentation

@@ -427,6 +427,93 @@ Story Mode supports 6 types of interactive actions:
 
 ---
 
+## 🗂️ Custom Indexes (Content Pages)
+
+### What are Custom Indexes?
+
+**Custom Indexes** are customizable content pages that organize information into phases with interactive modules. Think of them as mini-websites within your platform that can showcase stories, quests, events, or any categorized content.
+
+**Key Features:**
+- **Multiple Indexes** - Create unlimited index pages (Story, Quests, Events, Guides, etc.)
+- **Phase Pages** - Each index has multiple phase pages in sequential order
+- **Modular Content** - Add interactive modules (NFT drops, crafting, text, images, etc.) to any phase
+- **Dynamic Navigation** - Automatically generated navigation between phases
+- **Flexible Structure** - Each index can have any number of phases
+
+### How to Use Custom Indexes
+
+**Accessing Index Pages:**
+1. Navigate to the index from the main menu (if enabled in navigation)
+2. Or use direct URL: `/custom-index.html?index=INDEX_SLUG`
+3. Browse available phase cards on the index page
+4. Click any phase card to view its content
+
+**Viewing Phase Pages:**
+1. Click a phase card from the index page
+2. Or use direct URL: `/custom-phase.html?index=INDEX_SLUG&phase=PHASE_SLUG`
+3. View all content modules in sequential order
+4. Use "Back to Index" button to return to phase list
+
+### Example Use Cases
+
+**📖 Story Progression**
+- Create a narrative adventure with multiple chapters
+- Each phase is a story chapter with text, images, and actions
+- Add NFT claiming, crafting, or drops as story rewards
+
+**🎯 Daily Quests**
+- Organize daily, weekly, and special quests
+- Each phase represents a quest with requirements and rewards
+- Track quest completion through interactive modules
+
+**📅 Event Calendar**
+- Create an index for special events
+- Each phase is an event (past, current, or upcoming)
+- Include event details, NFT drops, and participation info
+
+**📚 Tutorial Guide**
+- Educational content for new users
+- Each phase is a tutorial lesson
+- Include interactive examples with actual blockchain actions
+
+### Content Module Types
+
+Phase pages can include these interactive modules:
+
+| Module Type | Description | Use Case |
+|------------|-------------|----------|
+| **Text Block** | Rich HTML content | Narrative, instructions, descriptions |
+| **Image Block** | Images with captions | Visual storytelling, artwork |
+| **NFT Drop** | NeftyBlocks drop claim | Limited edition rewards |
+| **Paid Claim** | NFT sales for WAX | Purchasable content |
+| **Claim Rewards** | Free NFT rewards | Holder rewards, quest completion |
+| **Factory Craft** | NFT crafting system | Create new NFTs from ingredients |
+| **Unpack** | Pack opening | Mystery box reveals |
+| **Blend Array** | Multiple blend options | Choice-based crafting |
+| **Unified Module** | All-in-one module | Flexible content type |
+
+### Tips for Custom Indexes
+
+**Navigation:**
+- ✅ Use descriptive index and phase names
+- ✅ Organize phases in logical sequential order
+- ✅ Include clear "Back to Index" links
+- ✅ Use preview text to summarize each phase
+
+**Content Design:**
+- ✅ Mix interactive modules with text for engagement
+- ✅ Start phases with introductory text
+- ✅ Place important actions prominently
+- ✅ Use images to break up long text sections
+
+**User Experience:**
+- ✅ Keep phase pages focused (don't overcrowd)
+- ✅ Test the flow from index → phase → action
+- ✅ Ensure modules load correctly
+- ✅ Provide clear instructions for each module
+
+---
+
 ## 🎯 Tips & Best Practices
 
 ### For Claiming Rewards

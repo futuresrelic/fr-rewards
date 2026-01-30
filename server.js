@@ -3855,6 +3855,357 @@ app.get('/api/story/tabs', async (req, res) => {
   }
 });
 
+// ==================== CUSTOM INDEXES ENDPOINTS ====================
+
+/**
+ * GET /api/admin/custom-indexes
+ * Get all custom indexes (admin)
+ */
+app.get('/api/admin/custom-indexes', authenticateAdmin, async (req, res) => {
+  try {
+    const indexes = db.customIndexes.getAll();
+    res.json({ success: true, indexes });
+  } catch (error) {
+    console.error('Error fetching custom indexes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/custom-indexes
+ * Get enabled custom indexes (public)
+ */
+app.get('/api/custom-indexes', async (req, res) => {
+  try {
+    const indexes = db.customIndexes.getEnabled();
+    res.json({ success: true, indexes });
+  } catch (error) {
+    console.error('Error fetching custom indexes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/custom-indexes/nav
+ * Get indexes visible in navigation (public)
+ */
+app.get('/api/custom-indexes/nav', async (req, res) => {
+  try {
+    const indexes = db.customIndexes.getNavVisible();
+    res.json({ success: true, indexes });
+  } catch (error) {
+    console.error('Error fetching navigation indexes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/custom-indexes/:slug
+ * Get index by slug with its phases (public)
+ */
+app.get('/api/custom-indexes/:slug', async (req, res) => {
+  try {
+    const index = db.customIndexes.getBySlug(req.params.slug);
+    if (!index) {
+      return res.status(404).json({ error: 'Index not found' });
+    }
+    const phases = db.customPhases.getEnabledByIndex(index.id);
+    res.json({ success: true, index, phases });
+  } catch (error) {
+    console.error('Error fetching custom index:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/custom-indexes
+ * Create new custom index
+ */
+app.post('/api/admin/custom-indexes', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, slug, title, description, icon, display_order, enabled, nav_visible } = req.body;
+
+    if (!name || !slug || !title) {
+      return res.status(400).json({ error: 'Name, slug, and title are required' });
+    }
+
+    const result = db.customIndexes.create({
+      name,
+      slug,
+      title,
+      description,
+      icon,
+      display_order,
+      enabled,
+      nav_visible
+    });
+
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    console.error('Error creating custom index:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/custom-indexes/:id
+ * Update custom index
+ */
+app.put('/api/admin/custom-indexes/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { name, slug, title, description, icon, display_order, enabled, nav_visible } = req.body;
+
+    const result = db.customIndexes.update(req.params.id, {
+      name,
+      slug,
+      title,
+      description,
+      icon,
+      display_order,
+      enabled,
+      nav_visible
+    });
+
+    res.json({ success: true, changes: result.changes });
+  } catch (error) {
+    console.error('Error updating custom index:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/custom-indexes/:id
+ * Delete custom index (only non-system indexes)
+ */
+app.delete('/api/admin/custom-indexes/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const result = db.customIndexes.delete(req.params.id);
+    res.json({ success: true, changes: result.changes });
+  } catch (error) {
+    console.error('Error deleting custom index:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== CUSTOM PHASES ENDPOINTS ====================
+
+/**
+ * GET /api/admin/custom-indexes/:indexId/phases
+ * Get all phases for an index (admin)
+ */
+app.get('/api/admin/custom-indexes/:indexId/phases', authenticateAdmin, async (req, res) => {
+  try {
+    const phases = db.customPhases.getByIndex(req.params.indexId);
+    res.json({ success: true, phases });
+  } catch (error) {
+    console.error('Error fetching phases:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/custom-indexes/:indexSlug/:phaseSlug
+ * Get phase by slugs with content (public)
+ */
+app.get('/api/custom-indexes/:indexSlug/:phaseSlug', async (req, res) => {
+  try {
+    const index = db.customIndexes.getBySlug(req.params.indexSlug);
+    if (!index) {
+      return res.status(404).json({ error: 'Index not found' });
+    }
+
+    const phase = db.customPhases.getBySlug(index.id, req.params.phaseSlug);
+    if (!phase) {
+      return res.status(404).json({ error: 'Phase not found' });
+    }
+
+    const content = db.customPhaseContent.getByPhase(phase.id);
+    res.json({ success: true, index, phase, content });
+  } catch (error) {
+    console.error('Error fetching phase:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/custom-indexes/:indexId/phases
+ * Create new phase
+ */
+app.post('/api/admin/custom-indexes/:indexId/phases', authenticateAdmin, async (req, res) => {
+  try {
+    const { phase_order, slug, title, subtitle, preview_text, enabled } = req.body;
+
+    if (!slug || !title) {
+      return res.status(400).json({ error: 'Slug and title are required' });
+    }
+
+    const result = db.customPhases.create({
+      index_id: req.params.indexId,
+      phase_order,
+      slug,
+      title,
+      subtitle,
+      preview_text,
+      enabled
+    });
+
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    console.error('Error creating phase:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/custom-phases/:id
+ * Update phase
+ */
+app.put('/api/admin/custom-phases/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { phase_order, slug, title, subtitle, preview_text, enabled } = req.body;
+
+    const result = db.customPhases.update(req.params.id, {
+      phase_order,
+      slug,
+      title,
+      subtitle,
+      preview_text,
+      enabled
+    });
+
+    res.json({ success: true, changes: result.changes });
+  } catch (error) {
+    console.error('Error updating phase:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/custom-phases/:id
+ * Delete phase
+ */
+app.delete('/api/admin/custom-phases/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const result = db.customPhases.delete(req.params.id);
+    res.json({ success: true, changes: result.changes });
+  } catch (error) {
+    console.error('Error deleting phase:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/custom-phases/reorder
+ * Reorder multiple phases
+ */
+app.put('/api/admin/custom-phases/reorder', authenticateAdmin, async (req, res) => {
+  try {
+    const { updates } = req.body; // Array of {id, phase_order}
+    db.customPhases.reorder(updates);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error reordering phases:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== CUSTOM PHASE CONTENT ENDPOINTS ====================
+
+/**
+ * GET /api/admin/custom-phases/:phaseId/content
+ * Get all content for a phase
+ */
+app.get('/api/admin/custom-phases/:phaseId/content', authenticateAdmin, async (req, res) => {
+  try {
+    const content = db.customPhaseContent.getByPhase(req.params.phaseId);
+    res.json({ success: true, content });
+  } catch (error) {
+    console.error('Error fetching phase content:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/custom-phases/:phaseId/content
+ * Add content block to phase
+ */
+app.post('/api/admin/custom-phases/:phaseId/content', authenticateAdmin, async (req, res) => {
+  try {
+    const { content_order, module_type, module_config } = req.body;
+
+    if (!module_type || !module_config) {
+      return res.status(400).json({ error: 'Module type and config are required' });
+    }
+
+    const result = db.customPhaseContent.create({
+      phase_id: req.params.phaseId,
+      content_order,
+      module_type,
+      module_config
+    });
+
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    console.error('Error creating phase content:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/custom-phase-content/:id
+ * Update content block
+ */
+app.put('/api/admin/custom-phase-content/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { content_order, module_type, module_config } = req.body;
+
+    const result = db.customPhaseContent.update(req.params.id, {
+      content_order,
+      module_type,
+      module_config
+    });
+
+    res.json({ success: true, changes: result.changes });
+  } catch (error) {
+    console.error('Error updating phase content:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/custom-phase-content/:id
+ * Delete content block
+ */
+app.delete('/api/admin/custom-phase-content/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const result = db.customPhaseContent.delete(req.params.id);
+    res.json({ success: true, changes: result.changes });
+  } catch (error) {
+    console.error('Error deleting phase content:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/admin/custom-phases/:phaseId/content/replace
+ * Replace all content for a phase (atomic operation)
+ */
+app.put('/api/admin/custom-phases/:phaseId/content/replace', authenticateAdmin, async (req, res) => {
+  try {
+    const { content } = req.body; // Array of content blocks
+
+    if (!Array.isArray(content)) {
+      return res.status(400).json({ error: 'Content must be an array' });
+    }
+
+    db.customPhaseContent.replaceAll(req.params.phaseId, content);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error replacing phase content:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ==================== NAVIGATION CONFIG ENDPOINTS ====================
 
 /**

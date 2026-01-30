@@ -550,6 +550,113 @@ CREATE TABLE module_instances (
 }
 ```
 
+### Custom Indexes System (NEW)
+
+**Multi-Index Content Management System** - Create unlimited custom index pages (Story, Quests, Events, etc.) with dynamic phase pages and modular content.
+
+**`custom_indexes` - Top-Level Indexes**
+```sql
+CREATE TABLE custom_indexes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,           -- Internal name (e.g., 'story', 'daily-quests')
+  slug TEXT NOT NULL UNIQUE,           -- URL slug (e.g., 'story', 'daily-quests')
+  title TEXT NOT NULL,                 -- Display title (e.g., 'Story Progression')
+  description TEXT,                    -- Brief description
+  icon TEXT DEFAULT '📖',              -- Emoji icon
+  display_order INTEGER DEFAULT 0,     -- Sort order
+  enabled INTEGER DEFAULT 1,           -- 0=hidden, 1=visible
+  is_system INTEGER DEFAULT 0,         -- 1=protected system index (cannot delete)
+  nav_visible INTEGER DEFAULT 1,       -- Show in navigation menu
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**`custom_phases` - Phase Pages Within Each Index**
+```sql
+CREATE TABLE custom_phases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  index_id INTEGER NOT NULL,           -- FK to custom_indexes
+  phase_order INTEGER NOT NULL,        -- Display order (1, 2, 3...)
+  slug TEXT NOT NULL,                  -- URL slug (e.g., 'phase-1', 'recruitment')
+  title TEXT NOT NULL,                 -- Display title
+  subtitle TEXT,                       -- Action description
+  preview_text TEXT,                   -- Preview shown on index page
+  enabled INTEGER DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (index_id) REFERENCES custom_indexes(id) ON DELETE CASCADE,
+  UNIQUE(index_id, slug),
+  UNIQUE(index_id, phase_order)
+);
+```
+
+**`custom_phase_content` - Content Blocks (Modules) Within Phases**
+```sql
+CREATE TABLE custom_phase_content (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  phase_id INTEGER NOT NULL,           -- FK to custom_phases
+  content_order INTEGER NOT NULL,      -- Display order (1, 2, 3...)
+  module_type TEXT NOT NULL,           -- 'text-block', 'nefty-drop', 'paid-claim', etc.
+  module_config TEXT NOT NULL,         -- JSON configuration for module
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (phase_id) REFERENCES custom_phases(id) ON DELETE CASCADE,
+  UNIQUE(phase_id, content_order)
+);
+```
+
+**Example Usage:**
+```javascript
+// Create a new index
+const indexId = db.customIndexes.create({
+  name: 'daily-quests',
+  slug: 'daily-quests',
+  title: 'Daily Quests',
+  description: 'Complete daily challenges for rewards',
+  icon: '🎯',
+  display_order: 2,
+  enabled: 1
+}).lastInsertRowid;
+
+// Add a phase
+const phaseId = db.customPhases.create({
+  index_id: indexId,
+  phase_order: 1,
+  slug: 'morning-quest',
+  title: 'Morning Quest',
+  subtitle: 'Action: Complete the morning challenge',
+  preview_text: 'Start your day right!',
+  enabled: 1
+}).lastInsertRowid;
+
+// Add content modules
+db.customPhaseContent.create({
+  phase_id: phaseId,
+  content_order: 1,
+  module_type: 'text-block',
+  module_config: { content: '<h2>Welcome!</h2><p>Description...</p>' }
+});
+
+db.customPhaseContent.create({
+  phase_id: phaseId,
+  content_order: 2,
+  module_type: 'nefty-drop',
+  module_config: { drop_id: 12345, title: 'Quest Reward' }
+});
+```
+
+**Admin Interface:**
+- **Admin Dashboard** → **Custom Indexes** (`/admin-custom-indexes.html`)
+- Create/edit/delete indexes
+- Manage phases for each index
+- Add content modules to phases
+- Reorder phases and content
+
+**Public Access:**
+- Index Page: `/custom-index.html?index=daily-quests`
+- Phase Page: `/custom-phase.html?index=daily-quests&phase=morning-quest`
+
 ---
 
 ## 🚧 COMMON PITFALLS & SOLUTIONS

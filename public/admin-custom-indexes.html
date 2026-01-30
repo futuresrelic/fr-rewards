@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Custom Indexes - Admin</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .indexes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+
+    .index-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 8px;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .index-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .index-card.disabled {
+      opacity: 0.6;
+      filter: grayscale(50%);
+    }
+
+    .index-card.system {
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .index-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 1rem;
+    }
+
+    .index-icon {
+      font-size: 2rem;
+      margin-right: 0.5rem;
+    }
+
+    .index-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .index-meta {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .badge.system {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .badge.enabled {
+      background: rgba(99, 102, 241, 0.2);
+      color: #6366f1;
+    }
+
+    .badge.disabled {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      overflow-y: auto;
+    }
+
+    .modal.active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .modal-content {
+      background: var(--bg-dark);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 12px;
+      padding: 2rem;
+      max-width: 800px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: var(--primary);
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 0.75rem;
+      background: var(--bg-card);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 6px;
+      color: white;
+      font-family: inherit;
+    }
+
+    .form-group textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .phases-list {
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(139, 92, 246, 0.2);
+    }
+
+    .phase-item {
+      background: var(--bg-card);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .phase-info {
+      flex: 1;
+    }
+
+    .phase-title {
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .phase-subtitle {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.875rem;
+    }
+
+    .phase-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .icon-btn {
+      background: rgba(139, 92, 246, 0.2);
+      border: none;
+      padding: 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      color: white;
+      transition: all 0.3s;
+    }
+
+    .icon-btn:hover {
+      background: rgba(139, 92, 246, 0.4);
+    }
+
+    .content-blocks {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+    }
+
+    .content-block {
+      background: var(--bg-card);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 4px;
+      padding: 0.75rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .module-type {
+      font-weight: 500;
+      color: var(--primary);
+    }
+
+    .add-btn {
+      width: 100%;
+      padding: 1rem;
+      background: rgba(139, 92, 246, 0.2);
+      border: 1px dashed var(--primary);
+      border-radius: 6px;
+      color: var(--primary);
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+
+    .add-btn:hover {
+      background: rgba(139, 92, 246, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+      <h1>🗂️ Manage Custom Indexes</h1>
+      <div>
+        <button onclick="window.location.href='/admin-dashboard.html'" class="btn btn-secondary">← Back to Admin</button>
+        <button onclick="showCreateIndexModal()" class="btn btn-primary">+ Create New Index</button>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      <strong>📚 What are Custom Indexes?</strong><br>
+      Create multiple index pages (like Story, Quests, Events, etc.) with custom phase pages. Each index can have unlimited phases with configurable content using modules (NFT drops, crafting, text, images, etc.).
+    </div>
+
+    <div id="indexesGrid" class="indexes-grid">
+      <!-- Loaded dynamically -->
+    </div>
+  </div>
+
+  <!-- Create/Edit Index Modal -->
+  <div id="indexModal" class="modal">
+    <div class="modal-content">
+      <h2 id="modalTitle">Create New Index</h2>
+      <form id="indexForm">
+        <input type="hidden" id="indexId">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="indexName">Internal Name *</label>
+            <input type="text" id="indexName" required placeholder="e.g., daily-quests">
+            <small>Used internally (lowercase, no spaces)</small>
+          </div>
+          <div class="form-group">
+            <label for="indexSlug">URL Slug *</label>
+            <input type="text" id="indexSlug" required placeholder="e.g., daily-quests">
+            <small>Used in URLs (lowercase, hyphens only)</small>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="indexTitle">Display Title *</label>
+          <input type="text" id="indexTitle" required placeholder="e.g., Daily Quests">
+        </div>
+
+        <div class="form-group">
+          <label for="indexDescription">Description</label>
+          <textarea id="indexDescription" placeholder="Brief description of this index..."></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="indexIcon">Icon (Emoji)</label>
+            <input type="text" id="indexIcon" placeholder="📖" maxlength="2">
+          </div>
+          <div class="form-group">
+            <label for="indexOrder">Display Order</label>
+            <input type="number" id="indexOrder" value="0" min="0">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="indexEnabled" checked>
+              <label for="indexEnabled">Enabled (visible to users)</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="indexNavVisible" checked>
+              <label for="indexNavVisible">Show in navigation</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button type="submit" class="btn btn-primary">Save Index</button>
+          <button type="button" onclick="closeIndexModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Manage Phases Modal -->
+  <div id="phasesModal" class="modal">
+    <div class="modal-content">
+      <h2 id="phasesModalTitle">Manage Phases</h2>
+      <div id="phasesContainer" class="phases-list">
+        <!-- Loaded dynamically -->
+      </div>
+      <button onclick="showCreatePhaseModal()" class="add-btn">+ Add New Phase</button>
+      <div class="btn-group">
+        <button onclick="closePhasesModal()" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create/Edit Phase Modal -->
+  <div id="phaseModal" class="modal">
+    <div class="modal-content">
+      <h2 id="phaseModalTitle">Create New Phase</h2>
+      <form id="phaseForm">
+        <input type="hidden" id="phaseId">
+        <input type="hidden" id="phaseIndexId">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="phaseSlug">URL Slug *</label>
+            <input type="text" id="phaseSlug" required placeholder="e.g., phase-1">
+          </div>
+          <div class="form-group">
+            <label for="phaseOrder">Phase Order *</label>
+            <input type="number" id="phaseOrder" required value="1" min="1">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="phaseTitle">Phase Title *</label>
+          <input type="text" id="phaseTitle" required placeholder="e.g., Phase 1: The Beginning">
+        </div>
+
+        <div class="form-group">
+          <label for="phaseSubtitle">Subtitle / Action</label>
+          <input type="text" id="phaseSubtitle" placeholder="e.g., Action: Complete the first quest">
+        </div>
+
+        <div class="form-group">
+          <label for="phasePreview">Preview Text</label>
+          <textarea id="phasePreview" placeholder="Short description shown on the index page..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <div class="checkbox-group">
+            <input type="checkbox" id="phaseEnabled" checked>
+            <label for="phaseEnabled">Enabled</label>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button type="submit" class="btn btn-primary">Save Phase</button>
+          <button type="button" onclick="closePhaseModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Phase Content Modal -->
+  <div id="contentModal" class="modal">
+    <div class="modal-content">
+      <h2 id="contentModalTitle">Edit Phase Content</h2>
+      <p id="contentPhaseTitle" style="color: rgba(255,255,255,0.7); margin-bottom: 1.5rem;"></p>
+
+      <div id="contentBlocksContainer" class="content-blocks">
+        <!-- Loaded dynamically -->
+      </div>
+
+      <button onclick="showAddContentModal()" class="add-btn">+ Add Content Block</button>
+
+      <div class="btn-group">
+        <button onclick="closeContentModal()" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Content Block Modal -->
+  <div id="addContentModal" class="modal">
+    <div class="modal-content">
+      <h2 id="addContentModalTitle">Add Content Block</h2>
+      <form id="contentForm">
+        <input type="hidden" id="contentId">
+        <input type="hidden" id="contentPhaseId">
+
+        <div class="form-group">
+          <label for="moduleType">Module Type *</label>
+          <select id="moduleType" required>
+            <option value="">Select a module type...</option>
+            <option value="text-block">Text Block (narrative, headings)</option>
+            <option value="image-block">Image Block</option>
+            <option value="nefty-drop">NeftyBlocks Drop</option>
+            <option value="paid-claim">Paid NFT Claim</option>
+            <option value="claim-rewards">Free NFT Rewards</option>
+            <option value="factory-craft">NFT Crafting</option>
+            <option value="unpack">Pack Opening</option>
+            <option value="blend-array">NeftyBlocks Blends</option>
+            <option value="unified-module">Unified Module (all-in-one)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="moduleConfig">Module Configuration (JSON) *</label>
+          <textarea id="moduleConfig" required rows="10" placeholder='{"key": "value"}'></textarea>
+          <small>Enter valid JSON configuration for this module type</small>
+        </div>
+
+        <div class="form-group">
+          <label for="contentOrder">Display Order</label>
+          <input type="number" id="contentOrder" value="1" min="1">
+        </div>
+
+        <div class="btn-group">
+          <button type="submit" class="btn btn-primary">Save Content Block</button>
+          <button type="button" onclick="closeAddContentModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/admin-custom-indexes.js"></script>
+</body>
+</html>

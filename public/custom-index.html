@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="pageTitle">Loading...</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .index-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+
+    .index-header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    .index-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+    }
+
+    .index-title {
+      font-size: 2.5rem;
+      font-weight: bold;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .index-description {
+      font-size: 1.25rem;
+      color: rgba(255, 255, 255, 0.7);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .phases-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 2rem;
+      margin-top: 3rem;
+    }
+
+    .phase-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 12px;
+      padding: 2rem;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .phase-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .phase-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 8px 24px rgba(139, 92, 246, 0.3);
+      transform: translateY(-4px);
+    }
+
+    .phase-card:hover::before {
+      opacity: 1;
+    }
+
+    .phase-number {
+      display: inline-block;
+      background: rgba(139, 92, 246, 0.2);
+      color: var(--primary);
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .phase-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: white;
+    }
+
+    .phase-subtitle {
+      color: var(--primary);
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      font-weight: 500;
+    }
+
+    .phase-preview {
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+
+    .phase-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--primary);
+      font-weight: 500;
+      text-decoration: none;
+      transition: gap 0.3s;
+    }
+
+    .phase-link:hover {
+      gap: 1rem;
+    }
+
+    .back-button {
+      margin-bottom: 2rem;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: rgba(255, 255, 255, 0.5);
+    }
+
+    .empty-state-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="index-container">
+    <div class="back-button">
+      <button onclick="window.location.href='/'" class="btn btn-secondary">← Back Home</button>
+    </div>
+
+    <div id="loadingState" class="empty-state">
+      <div class="empty-state-icon">⏳</div>
+      <p>Loading...</p>
+    </div>
+
+    <div id="contentContainer" style="display: none;">
+      <div class="index-header">
+        <div class="index-icon" id="indexIcon"></div>
+        <h1 class="index-title" id="indexTitle"></h1>
+        <p class="index-description" id="indexDescription"></p>
+      </div>
+
+      <div id="phasesGrid" class="phases-grid">
+        <!-- Phases loaded dynamically -->
+      </div>
+    </div>
+
+    <div id="errorState" class="empty-state" style="display: none;">
+      <div class="empty-state-icon">❌</div>
+      <p id="errorMessage">Error loading content</p>
+    </div>
+  </div>
+
+  <script>
+    // Get index slug from URL parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const indexSlug = urlParams.get('index');
+
+    if (!indexSlug) {
+      showError('No index specified');
+    } else {
+      loadIndex(indexSlug);
+    }
+
+    async function loadIndex(slug) {
+      try {
+        const response = await fetch(`/api/custom-indexes/${slug}`);
+        const data = await response.json();
+
+        if (data.success) {
+          renderIndex(data.index, data.phases);
+        } else {
+          showError(data.error || 'Failed to load index');
+        }
+      } catch (error) {
+        console.error('Error loading index:', error);
+        showError('Error loading index: ' + error.message);
+      }
+    }
+
+    function renderIndex(index, phases) {
+      // Update page title
+      document.title = index.title;
+      document.getElementById('pageTitle').textContent = index.title;
+
+      // Update header
+      document.getElementById('indexIcon').textContent = index.icon;
+      document.getElementById('indexTitle').textContent = index.title;
+      document.getElementById('indexDescription').textContent = index.description || '';
+
+      // Render phases
+      const grid = document.getElementById('phasesGrid');
+
+      if (phases.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1/-1;">
+            <div class="empty-state-icon">📭</div>
+            <p>No phases available yet. Check back soon!</p>
+          </div>
+        `;
+      } else {
+        grid.innerHTML = phases.map(phase => `
+          <div class="phase-card" onclick="window.location.href='/custom-phase.html?index=${index.slug}&phase=${phase.slug}'">
+            <div class="phase-number">Phase ${phase.phase_order}</div>
+            <h2 class="phase-title">${phase.title}</h2>
+            ${phase.subtitle ? `<div class="phase-subtitle">${phase.subtitle}</div>` : ''}
+            ${phase.preview_text ? `<p class="phase-preview">${phase.preview_text}</p>` : ''}
+            <a href="/custom-phase.html?index=${index.slug}&phase=${phase.slug}" class="phase-link" onclick="event.stopPropagation()">
+              View Phase →
+            </a>
+          </div>
+        `).join('');
+      }
+
+      // Show content, hide loading
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('contentContainer').style.display = 'block';
+    }
+
+    function showError(message) {
+      document.getElementById('loadingState').style.display = 'none';
+      document.getElementById('errorState').style.display = 'block';
+      document.getElementById('errorMessage').textContent = message;
+    }
+  </script>
+</body>
+</html>
