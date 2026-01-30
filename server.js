@@ -312,9 +312,35 @@ app.get('/api/user/claims/:account', async (req, res) => {
     const claims = db.claims.getByAccount(account);
     const config = db.config.get();
 
-    // Enrich claims with template names
-    const enrichedClaims = await Promise.all(claims.map(async (claim) => {
-      // Get reward template name from template_rewards table first
+    // Collect all unique template IDs that need fetching (not in database)
+    const rewardTemplatesToFetch = new Set();
+    const qualifyingTemplatesToFetch = new Set();
+
+    for (const claim of claims) {
+      // Check if reward name is in database
+      if (claim.reward_id) {
+        const rewardConfig = db.templateRewards.getById(claim.reward_id);
+        if (!rewardConfig || !rewardConfig.reward_name) {
+          rewardTemplatesToFetch.add(String(claim.reward_template));
+        }
+      } else {
+        rewardTemplatesToFetch.add(String(claim.reward_template));
+      }
+
+      // Check if qualifying template name is in database
+      const templateConfig = db.templates.getById(claim.template_id);
+      if (!templateConfig || !templateConfig.name) {
+        qualifyingTemplatesToFetch.add(String(claim.template_id));
+      }
+    }
+
+    // Batch fetch all unique templates at once
+    const allTemplatesToFetch = [...rewardTemplatesToFetch, ...qualifyingTemplatesToFetch];
+    const templateDataMap = await wax.getTemplatesBatch(config.collection_name, allTemplatesToFetch);
+
+    // Enrich claims with template names using fetched data
+    const enrichedClaims = claims.map((claim) => {
+      // Get reward template name
       let rewardName = null;
       if (claim.reward_id) {
         const rewardConfig = db.templateRewards.getById(claim.reward_id);
@@ -322,16 +348,10 @@ app.get('/api/user/claims/:account', async (req, res) => {
           rewardName = rewardConfig.reward_name;
         }
       }
-
-      // If no custom reward name, fetch from blockchain
       if (!rewardName) {
-        try {
-          const rewardTemplate = await wax.getTemplate(config.collection_name, claim.reward_template);
-          if (rewardTemplate && rewardTemplate.immutable_data && rewardTemplate.immutable_data.name) {
-            rewardName = rewardTemplate.immutable_data.name;
-          }
-        } catch (err) {
-          console.warn(`Could not fetch reward template ${claim.reward_template}:`, err.message);
+        const rewardTemplate = templateDataMap.get(String(claim.reward_template));
+        if (rewardTemplate && rewardTemplate.immutable_data && rewardTemplate.immutable_data.name) {
+          rewardName = rewardTemplate.immutable_data.name;
         }
       }
 
@@ -341,13 +361,9 @@ app.get('/api/user/claims/:account', async (req, res) => {
       if (templateConfig && templateConfig.name) {
         qualifyingTemplateName = templateConfig.name;
       } else {
-        try {
-          const qualifyingTemplate = await wax.getTemplate(config.collection_name, claim.template_id);
-          if (qualifyingTemplate && qualifyingTemplate.immutable_data && qualifyingTemplate.immutable_data.name) {
-            qualifyingTemplateName = qualifyingTemplate.immutable_data.name;
-          }
-        } catch (err) {
-          console.warn(`Could not fetch template ${claim.template_id}:`, err.message);
+        const qualifyingTemplate = templateDataMap.get(String(claim.template_id));
+        if (qualifyingTemplate && qualifyingTemplate.immutable_data && qualifyingTemplate.immutable_data.name) {
+          qualifyingTemplateName = qualifyingTemplate.immutable_data.name;
         }
       }
 
@@ -356,7 +372,7 @@ app.get('/api/user/claims/:account', async (req, res) => {
         reward_name: rewardName || `Template #${claim.reward_template}`,
         qualifying_template_name: qualifyingTemplateName || `Template #${claim.template_id}`
       };
-    }));
+    });
 
     res.json({
       success: true,
@@ -1577,6 +1593,10 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
     const { JsonRpc } = require('eosjs');
     const rpcEndpoint = new JsonRpc('https://wax.greymass.com', { fetch });
 
+    // First pass: collect blend data and template IDs
+    const blendDataList = [];
+    const allTemplateIds = new Set();
+
     for (const blendId of blend_ids) {
       try {
         console.log(`   Fetching blend #${blendId} from blockchain...`);
@@ -1605,78 +1625,40 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
           continue;
         }
 
-        // Parse ingredients (what you need to burn)
-        // Format: ["TEMPLATE_INGREDIENT", {"template_id": 202914, "amount": 1, ...}]
-        const ingredients = [];
+        // Collect ingredient template IDs
+        const ingredientData = [];
         let totalRequired = 0;
 
         if (blend.ingredients && Array.isArray(blend.ingredients)) {
           for (const ingredient of blend.ingredients) {
-            // Ingredients are tuples: ["TEMPLATE_INGREDIENT", {...}]
             if (Array.isArray(ingredient) && ingredient[0] === 'TEMPLATE_INGREDIENT' && ingredient[1]) {
               const ing = ingredient[1];
               const templateId = ing.template_id;
               const amount = parseInt(ing.amount || 1);
 
               if (templateId) {
-                // Fetch template data for display name and image
-                let templateName = `Template #${templateId}`;
-                let templateImg = null;
-                try {
-                  const templateRes = await fetch(`https://aa-wax-public1.neftyblocks.com/atomicassets/v1/templates/${collection}/${templateId}`);
-                  if (templateRes.ok) {
-                    const templateData = await templateRes.json();
-                    templateName = templateData.data.immutable_data?.name || templateName;
-                    templateImg = templateData.data.immutable_data?.img || null;
-                  }
-                } catch (err) {
-                  console.warn(`   Could not fetch template ${templateId} name:`, err.message);
-                }
-
-                ingredients.push({
-                  template_id: templateId,
-                  name: templateName,
-                  img: templateImg,
-                  amount: amount,
-                  owned: 0 // Will be populated below
-                });
+                allTemplateIds.add(String(templateId));
+                ingredientData.push({ templateId, amount });
                 totalRequired += amount;
               }
             }
           }
         }
 
-        // Parse results (what you get after blend)
-        // Format: rolls[{outcomes[{results[["ON_DEMAND_NFT_RESULT", {"template_id": 211094}]]}]}]
-        const results = [];
+        // Collect result template IDs
+        const resultData = [];
         if (blend.rolls && Array.isArray(blend.rolls)) {
           for (const roll of blend.rolls) {
             if (roll.outcomes && Array.isArray(roll.outcomes)) {
               for (const outcome of roll.outcomes) {
                 if (outcome.results && Array.isArray(outcome.results)) {
                   for (const result of outcome.results) {
-                    // Results are tuples: ["ON_DEMAND_NFT_RESULT", {"template_id": ...}]
                     if (Array.isArray(result) && result[0] === 'ON_DEMAND_NFT_RESULT' && result[1]) {
                       const templateId = result[1].template_id;
                       if (templateId) {
-                        // Fetch template data
-                        let templateName = `Template #${templateId}`;
-                        let templateImg = null;
-                        try {
-                          const templateRes = await fetch(`https://aa-wax-public1.neftyblocks.com/atomicassets/v1/templates/${collection}/${templateId}`);
-                          if (templateRes.ok) {
-                            const templateData = await templateRes.json();
-                            templateName = templateData.data.immutable_data?.name || templateName;
-                            templateImg = templateData.data.immutable_data?.img || null;
-                          }
-                        } catch (err) {
-                          console.warn(`   Could not fetch result template ${templateId}:`, err.message);
-                        }
-
-                        results.push({
-                          template_id: templateId,
-                          name: templateName,
-                          img: templateImg,
+                        allTemplateIds.add(String(templateId));
+                        resultData.push({
+                          templateId,
                           odds: outcome.odds,
                           total_odds: roll.total_odds
                         });
@@ -1689,18 +1671,12 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
           }
         }
 
-        // Add to blends list
-        blends.push({
-          blend_id: blendId,
-          name: blend.display_data || `Blend #${blendId}`,
-          description: `Requires ${totalRequired} ingredients`,
-          collection: collection,
-          ingredients: ingredients,
-          results: results,
-          total_required: totalRequired,
-          can_execute: false, // Will be calculated after checking user's assets
-          missing_ingredients: [],
-          contract: 'blend.nefty'
+        blendDataList.push({
+          blendId,
+          blend,
+          ingredientData,
+          resultData,
+          totalRequired
         });
 
         console.log(`   ✅ Loaded blend #${blendId}: ${blend.display_data || 'Unnamed'}`);
@@ -1708,6 +1684,52 @@ app.post('/api/blends/analyze', strictLimiter, async (req, res) => {
       } catch (error) {
         console.error(`   ❌ Error fetching blend #${blendId}:`, error.message);
       }
+    }
+
+    // Batch fetch all unique templates at once
+    console.log(`   📦 Batch fetching ${allTemplateIds.size} unique templates...`);
+    const templateDataMap = await wax.getTemplatesBatch(collection, Array.from(allTemplateIds));
+
+    // Second pass: build blends with template data
+    for (const blendData of blendDataList) {
+      const { blendId, blend, ingredientData, resultData, totalRequired } = blendData;
+
+      // Build ingredients with template data
+      const ingredients = ingredientData.map(({ templateId, amount }) => {
+        const template = templateDataMap.get(String(templateId));
+        return {
+          template_id: templateId,
+          name: template?.immutable_data?.name || `Template #${templateId}`,
+          img: template?.immutable_data?.img || null,
+          amount: amount,
+          owned: 0 // Will be populated below
+        };
+      });
+
+      // Build results with template data
+      const results = resultData.map(({ templateId, odds, total_odds }) => {
+        const template = templateDataMap.get(String(templateId));
+        return {
+          template_id: templateId,
+          name: template?.immutable_data?.name || `Template #${templateId}`,
+          img: template?.immutable_data?.img || null,
+          odds: odds,
+          total_odds: total_odds
+        };
+      });
+
+      blends.push({
+        blend_id: blendId,
+        name: blend.display_data || `Blend #${blendId}`,
+        description: `Requires ${totalRequired} ingredients`,
+        collection: collection,
+        ingredients: ingredients,
+        results: results,
+        total_required: totalRequired,
+        can_execute: false, // Will be calculated after checking user's assets
+        missing_ingredients: [],
+        contract: 'blend.nefty'
+      });
     }
 
     if (blends.length === 0) {
@@ -2020,8 +2042,34 @@ app.get('/api/admin/claims/full', authenticateAdmin, async (req, res) => {
     const allClaims = db.claims.getAll(999999);
     const config = db.config.get();
 
-    // Enrich claims with template names
-    const enrichedClaims = await Promise.all(allClaims.map(async (claim) => {
+    // Collect all unique template IDs that need fetching (not in database)
+    const rewardTemplatesToFetch = new Set();
+    const qualifyingTemplatesToFetch = new Set();
+
+    for (const claim of allClaims) {
+      // Check if reward name is in database
+      if (claim.reward_id) {
+        const rewardConfig = db.templateRewards.getById(claim.reward_id);
+        if (!rewardConfig || !rewardConfig.reward_name) {
+          rewardTemplatesToFetch.add(String(claim.reward_template));
+        }
+      } else {
+        rewardTemplatesToFetch.add(String(claim.reward_template));
+      }
+
+      // Check if qualifying template name is in database
+      const templateConfig = db.templates.getById(claim.template_id);
+      if (!templateConfig || !templateConfig.name) {
+        qualifyingTemplatesToFetch.add(String(claim.template_id));
+      }
+    }
+
+    // Batch fetch all unique templates at once
+    const allTemplatesToFetch = [...rewardTemplatesToFetch, ...qualifyingTemplatesToFetch];
+    const templateDataMap = await wax.getTemplatesBatch(config.collection_name, allTemplatesToFetch);
+
+    // Enrich claims with template names using fetched data
+    const enrichedClaims = allClaims.map((claim) => {
       // Get reward name
       let rewardName = null;
       if (claim.reward_id) {
@@ -2030,15 +2078,10 @@ app.get('/api/admin/claims/full', authenticateAdmin, async (req, res) => {
           rewardName = rewardConfig.reward_name;
         }
       }
-
       if (!rewardName) {
-        try {
-          const rewardTemplate = await wax.getTemplate(config.collection_name, claim.reward_template);
-          if (rewardTemplate && rewardTemplate.immutable_data && rewardTemplate.immutable_data.name) {
-            rewardName = rewardTemplate.immutable_data.name;
-          }
-        } catch (err) {
-          console.warn(`Could not fetch reward template ${claim.reward_template}:`, err.message);
+        const rewardTemplate = templateDataMap.get(String(claim.reward_template));
+        if (rewardTemplate && rewardTemplate.immutable_data && rewardTemplate.immutable_data.name) {
+          rewardName = rewardTemplate.immutable_data.name;
         }
       }
 
@@ -2048,13 +2091,9 @@ app.get('/api/admin/claims/full', authenticateAdmin, async (req, res) => {
       if (templateConfig && templateConfig.name) {
         qualifyingTemplateName = templateConfig.name;
       } else {
-        try {
-          const qualifyingTemplate = await wax.getTemplate(config.collection_name, claim.template_id);
-          if (qualifyingTemplate && qualifyingTemplate.immutable_data && qualifyingTemplate.immutable_data.name) {
-            qualifyingTemplateName = qualifyingTemplate.immutable_data.name;
-          }
-        } catch (err) {
-          console.warn(`Could not fetch template ${claim.template_id}:`, err.message);
+        const qualifyingTemplate = templateDataMap.get(String(claim.template_id));
+        if (qualifyingTemplate && qualifyingTemplate.immutable_data && qualifyingTemplate.immutable_data.name) {
+          qualifyingTemplateName = qualifyingTemplate.immutable_data.name;
         }
       }
 
@@ -2063,7 +2102,7 @@ app.get('/api/admin/claims/full', authenticateAdmin, async (req, res) => {
         reward_name: rewardName || `Template #${claim.reward_template}`,
         qualifying_template_name: qualifyingTemplateName || `Template #${claim.template_id}`
       };
-    }));
+    });
 
     let result;
 
@@ -4832,54 +4871,29 @@ app.get('/api/pack/unbox-details/:pack_asset_id', async (req, res) => {
 
     console.log(`Found ${rollsResult.rows.length} rolls in pack ${packAssetId}`);
 
-    // Fetch template details for each roll
-    const atomicEndpoint = 'https://aa-wax-public1.neftyblocks.com';
-    const assets = [];
+    // Collect all unique template IDs
+    const templateIds = [...new Set(rollsResult.rows.map(row => row.template_id))];
+    console.log(`📦 Batch fetching ${templateIds.length} unique templates...`);
 
-    for (const row of rollsResult.rows) {
-      try {
-        // Get template details from AtomicAssets API
-        const templateResponse = await fetch(`${atomicEndpoint}/atomicassets/v1/templates/futuresrelic/${row.template_id}`);
+    // Batch fetch all templates at once
+    const templateDataMap = await wax.getTemplatesBatch('futuresrelic', templateIds);
 
-        if (templateResponse.ok) {
-          const templateData = await templateResponse.json();
-          const template = templateData.data;
+    // Build assets array with template data
+    const assets = rollsResult.rows.map(row => {
+      const template = templateDataMap.get(String(row.template_id));
 
-          const assetData = {
-            template_id: row.template_id,
-            origin_roll_id: row.origin_roll_id,
-            name: template.immutable_data?.name || `Template #${row.template_id}`,
-            img: template.immutable_data?.img || null,
-            video: template.immutable_data?.video || null,
-            rarity: template.immutable_data?.rarity || null
-          };
+      const assetData = {
+        template_id: row.template_id,
+        origin_roll_id: row.origin_roll_id,
+        name: template?.immutable_data?.name || `Template #${row.template_id}`,
+        img: template?.immutable_data?.img || null,
+        video: template?.immutable_data?.video || null,
+        rarity: template?.immutable_data?.rarity || null
+      };
 
-          assets.push(assetData);
-          console.log(`  - Roll ${row.origin_roll_id}: ${assetData.name} (Template ${row.template_id})`);
-        } else {
-          // Fallback if template fetch fails
-          assets.push({
-            template_id: row.template_id,
-            origin_roll_id: row.origin_roll_id,
-            name: `Template #${row.template_id}`,
-            img: null,
-            video: null,
-            rarity: null
-          });
-        }
-      } catch (err) {
-        console.warn(`Could not fetch template ${row.template_id}:`, err.message);
-        // Add fallback entry
-        assets.push({
-          template_id: row.template_id,
-          origin_roll_id: row.origin_roll_id,
-          name: `Template #${row.template_id}`,
-          img: null,
-          video: null,
-          rarity: null
-        });
-      }
-    }
+      console.log(`  - Roll ${row.origin_roll_id}: ${assetData.name} (Template ${row.template_id})`);
+      return assetData;
+    });
 
     res.json({
       success: true,

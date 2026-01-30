@@ -266,6 +266,38 @@ async function getTemplate(collection, templateId) {
 }
 
 /**
+ * Batch fetch multiple templates efficiently with caching
+ * Deduplicates template IDs and uses cache for all requests
+ * @param {string} collection - Collection name
+ * @param {Array<number|string>} templateIds - Array of template IDs
+ * @returns {Promise<Map<string, Object>>} Map of templateId -> template data
+ */
+async function getTemplatesBatch(collection, templateIds) {
+  if (!templateIds || templateIds.length === 0) {
+    return new Map();
+  }
+
+  // Deduplicate template IDs
+  const uniqueIds = [...new Set(templateIds.map(id => String(id)))];
+
+  // Fetch all templates in parallel (cache will prevent redundant fetches)
+  const results = await Promise.all(
+    uniqueIds.map(async (templateId) => {
+      try {
+        const template = await getTemplate(collection, templateId);
+        return [templateId, template];
+      } catch (error) {
+        console.warn(`Failed to fetch template ${templateId}:`, error.message);
+        return [templateId, null];
+      }
+    })
+  );
+
+  // Convert to Map for easy lookup
+  return new Map(results.filter(([_, template]) => template !== null));
+}
+
+/**
  * Convert IPFS hash to usable URL
  * @param {string} ipfsHash - IPFS hash (e.g., "QmXXX" or "ipfs://QmXXX")
  * @returns {string} Full IPFS URL
@@ -1140,6 +1172,7 @@ module.exports = {
   getUserAssets,
   getUserAssetsLive,
   getTemplate,
+  getTemplatesBatch,
   checkEligibility,
   mintNFT,
   transferNFTs,
