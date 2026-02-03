@@ -5801,6 +5801,154 @@ app.post('/api/story-index/save', authenticateAdmin, async (req, res) => {
 });
 
 /**
+ * POST /api/story-index/migrate
+ * Migrate old story phases from /story/index.html to new custom indexes system
+ * Creates a "Story" custom index and converts all phase cards to custom phases
+ * Requires: Admin authentication
+ */
+app.post('/api/story-index/migrate', authenticateAdmin, async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const { parse } = require('node-html-parser');
+
+    // Step 1: Load old story phases from /story/index.html
+    const filepath = path.join(__dirname, 'public', 'story', 'index.html');
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ error: 'Story index not found', success: false });
+    }
+
+    const htmlContent = fs.readFileSync(filepath, 'utf8');
+    const root = parse(htmlContent);
+
+    // Parse phase cards
+    const phaseCards = root.querySelectorAll('.phase-card');
+    const oldPhases = [];
+
+    phaseCards.forEach(card => {
+      const link = card.closest('a')?.getAttribute('href') || '';
+      const title = card.querySelector('h2')?.text || '';
+      const action = card.querySelector('.action')?.text || '';
+      const preview = card.querySelector('p:not(.action)')?.text || '';
+
+      oldPhases.push({
+        title: title.trim(),
+        action: action.trim(),
+        preview: preview.trim(),
+        link: link.trim()
+      });
+    });
+
+    if (oldPhases.length === 0) {
+      return res.status(400).json({
+        error: 'No phase cards found in story index',
+        success: false
+      });
+    }
+
+    // Step 2: Check if "Story" custom index already exists
+    const existingIndex = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM custom_indexes WHERE slug = ?', ['story'], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    let storyIndexId;
+
+    if (existingIndex) {
+      storyIndexId = existingIndex.id;
+      console.log('📋 Using existing Story custom index (ID:', storyIndexId, ')');
+    } else {
+      // Step 3: Create new "Story" custom index
+      storyIndexId = await new Promise((resolve, reject) => {
+        db.run(`
+          INSERT INTO custom_indexes (name, slug, title, description, icon, display_order, enabled, nav_visible, is_system, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `, [
+          'story',
+          'story',
+          '📽️ Future\'s Relic Story',
+          'The complete narrative journey. Follow the story, complete the actions.',
+          '📽️',
+          1,
+          1,
+          1,
+          0
+        ], function(err) {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        });
+      });
+      console.log('✅ Created new Story custom index (ID:', storyIndexId, ')');
+    }
+
+    // Step 4: Migrate each phase card to a custom phase
+    const migratedPhases = [];
+
+    for (let i = 0; i < oldPhases.length; i++) {
+      const oldPhase = oldPhases[i];
+
+      // Extract phase number from title (e.g., "Phase 1: The Recruitment" -> "phase-1")
+      // or from link (e.g., "/story/phase1.html" -> "phase1")
+      let slug = oldPhase.link.split('/').pop().replace('.html', '');
+      if (!slug || slug === 'index.html') {
+        slug = `phase-${i + 1}`;
+      }
+
+      // Check if phase already exists
+      const existingPhase = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM custom_phases WHERE index_id = ? AND slug = ?',
+          [storyIndexId, slug], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+
+      if (existingPhase) {
+        console.log(`⏭️  Skipping existing phase: ${slug}`);
+        migratedPhases.push({ slug, status: 'skipped', id: existingPhase.id });
+        continue;
+      }
+
+      // Create new custom phase
+      const phaseId = await new Promise((resolve, reject) => {
+        db.run(`
+          INSERT INTO custom_phases (index_id, phase_order, slug, title, subtitle, preview_text, enabled, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `, [
+          storyIndexId,
+          i + 1,
+          slug,
+          oldPhase.title,
+          oldPhase.action,
+          oldPhase.preview,
+          1
+        ], function(err) {
+          if (err) reject(err);
+          else resolve(this.lastID);
+        });
+      });
+
+      console.log(`✅ Migrated phase: ${oldPhase.title} (ID: ${phaseId})`);
+      migratedPhases.push({ slug, title: oldPhase.title, status: 'migrated', id: phaseId });
+    }
+
+    res.json({
+      success: true,
+      message: `Migration complete! ${migratedPhases.filter(p => p.status === 'migrated').length} phases migrated, ${migratedPhases.filter(p => p.status === 'skipped').length} skipped.`,
+      indexId: storyIndexId,
+      phases: migratedPhases
+    });
+
+  } catch (error) {
+    console.error('Error migrating story phases:', error);
+    res.status(500).json({ error: error.message, success: false });
+  }
+});
+
+/**
  * GET /api/site-map/scan
  * Scan the entire public directory to build a site map with all pages and their modules
  */

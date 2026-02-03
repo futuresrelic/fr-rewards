@@ -4,17 +4,56 @@
 let currentIndex = null;
 let currentPhase = null;
 let allIndexes = [];
+let adminToken = null;
+
+// Get authentication headers
+function getAuthHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${adminToken}`
+  };
+}
+
+// Check if authenticated
+function checkAuthentication() {
+  adminToken = sessionStorage.getItem('admin_token');
+
+  if (!adminToken) {
+    alert('⚠️ Authentication required. Redirecting to admin login...');
+    window.location.href = '/admin-dashboard.html';
+    return false;
+  }
+
+  return true;
+}
+
+// Handle 401 errors
+function handle401Error() {
+  alert('🔒 Session expired. Please log in again.');
+  sessionStorage.removeItem('admin_token');
+  window.location.href = '/admin-dashboard.html';
+}
 
 // Load all indexes on page load
 document.addEventListener('DOMContentLoaded', () => {
-  loadIndexes();
+  if (checkAuthentication()) {
+    loadIndexes();
+  }
 });
 
 // ==================== INDEX MANAGEMENT ====================
 
 async function loadIndexes() {
   try {
-    const response = await fetch('/api/admin/custom-indexes');
+    const response = await fetch('/api/admin/custom-indexes', {
+      headers: getAuthHeaders()
+    });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
+
     const data = await response.json();
 
     if (data.success) {
@@ -130,9 +169,14 @@ document.getElementById('indexForm').addEventListener('submit', async (e) => {
 
     const response = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data)
     });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
 
     const result = await response.json();
 
@@ -164,8 +208,14 @@ async function deleteIndex(id) {
 
   try {
     const response = await fetch(`/api/admin/custom-indexes/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders()
     });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
 
     const result = await response.json();
 
@@ -200,7 +250,15 @@ function closePhasesModal() {
 
 async function loadPhases(indexId) {
   try {
-    const response = await fetch(`/api/admin/custom-indexes/${indexId}/phases`);
+    const response = await fetch(`/api/admin/custom-indexes/${indexId}/phases`, {
+      headers: getAuthHeaders()
+    });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
+
     const data = await response.json();
 
     if (data.success) {
@@ -263,7 +321,15 @@ function showCreatePhaseModal() {
 
 async function editPhase(id) {
   try {
-    const response = await fetch(`/api/admin/custom-indexes/${currentIndex.id}/phases`);
+    const response = await fetch(`/api/admin/custom-indexes/${currentIndex.id}/phases`, {
+      headers: getAuthHeaders()
+    });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
+
     const data = await response.json();
 
     if (data.success) {
@@ -312,9 +378,14 @@ document.getElementById('phaseForm').addEventListener('submit', async (e) => {
 
     const response = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data)
     });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
 
     const result = await response.json();
 
@@ -338,8 +409,14 @@ async function deletePhase(id) {
 
   try {
     const response = await fetch(`/api/admin/custom-phases/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders()
     });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
 
     const result = await response.json();
 
@@ -359,7 +436,15 @@ async function deletePhase(id) {
 
 async function editPhaseContent(phaseId) {
   try {
-    const response = await fetch(`/api/admin/custom-indexes/${currentIndex.id}/phases`);
+    const response = await fetch(`/api/admin/custom-indexes/${currentIndex.id}/phases`, {
+      headers: getAuthHeaders()
+    });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
+
     const data = await response.json();
 
     if (data.success) {
@@ -385,7 +470,15 @@ function closeContentModal() {
 
 async function loadPhaseContent(phaseId) {
   try {
-    const response = await fetch(`/api/admin/custom-phases/${phaseId}/content`);
+    const response = await fetch(`/api/admin/custom-phases/${phaseId}/content`, {
+      headers: getAuthHeaders()
+    });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
+
     const data = await response.json();
 
     if (data.success) {
@@ -482,9 +575,14 @@ document.getElementById('contentForm').addEventListener('submit', async (e) => {
 
     const response = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data)
     });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
 
     const result = await response.json();
 
@@ -508,8 +606,14 @@ async function deleteContentBlock(id) {
 
   try {
     const response = await fetch(`/api/admin/custom-phase-content/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders()
     });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
 
     const result = await response.json();
 
@@ -522,6 +626,48 @@ async function deleteContentBlock(id) {
   } catch (error) {
     console.error('Error deleting content block:', error);
     showError('Error deleting content block: ' + error.message);
+  }
+}
+
+// ==================== MIGRATION ====================
+
+async function migrateOldStoryPhases() {
+  const confirmed = confirm(
+    '🔄 This will migrate your old story phases from /story/index.html to the new Custom Indexes system.\n\n' +
+    'A new "Story" custom index will be created (if it doesn\'t exist) with all your existing phase cards.\n\n' +
+    'This is safe and non-destructive - your old story index will remain unchanged.\n\n' +
+    'Continue with migration?'
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const response = await fetch('/api/story-index/migrate', {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+
+    if (response.status === 401) {
+      handle401Error();
+      return;
+    }
+
+    const result = await response.json();
+
+    if (result.success) {
+      showSuccess(
+        `Migration complete!\n\n` +
+        `${result.message}\n\n` +
+        `Story Index ID: ${result.indexId}\n` +
+        `Total phases: ${result.phases.length}`
+      );
+      loadIndexes();
+    } else {
+      showError(result.error || 'Migration failed');
+    }
+  } catch (error) {
+    console.error('Error migrating story phases:', error);
+    showError('Error migrating: ' + error.message);
   }
 }
 

@@ -260,8 +260,9 @@
   <div class="container">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
       <h1>🗂️ Manage Custom Indexes</h1>
-      <div>
+      <div style="display: flex; gap: 0.5rem;">
         <button onclick="window.location.href='/admin-dashboard.html'" class="btn btn-secondary">← Back to Admin</button>
+        <button onclick="migrateOldStoryPhases()" class="btn" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">🔄 Migrate Old Story</button>
         <button onclick="showCreateIndexModal()" class="btn btn-primary">+ Create New Index</button>
       </div>
     </div>
