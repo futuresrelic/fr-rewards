@@ -5848,12 +5848,7 @@ app.post('/api/story-index/migrate', authenticateAdmin, async (req, res) => {
     }
 
     // Step 2: Check if "Story" custom index already exists
-    const existingIndex = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM custom_indexes WHERE slug = ?', ['story'], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
+    const existingIndex = db.customIndexes.getBySlug('story');
 
     let storyIndexId;
 
@@ -5862,25 +5857,18 @@ app.post('/api/story-index/migrate', authenticateAdmin, async (req, res) => {
       console.log('📋 Using existing Story custom index (ID:', storyIndexId, ')');
     } else {
       // Step 3: Create new "Story" custom index
-      storyIndexId = await new Promise((resolve, reject) => {
-        db.run(`
-          INSERT INTO custom_indexes (name, slug, title, description, icon, display_order, enabled, nav_visible, is_system, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-        `, [
-          'story',
-          'story',
-          '📽️ Future\'s Relic Story',
-          'The complete narrative journey. Follow the story, complete the actions.',
-          '📽️',
-          1,
-          1,
-          1,
-          0
-        ], function(err) {
-          if (err) reject(err);
-          else resolve(this.lastID);
-        });
+      const result = db.customIndexes.create({
+        name: 'story',
+        slug: 'story',
+        title: '📽️ Future\'s Relic Story',
+        description: 'The complete narrative journey. Follow the story, complete the actions.',
+        icon: '📽️',
+        display_order: 1,
+        enabled: 1,
+        is_system: 0,
+        nav_visible: 1
       });
+      storyIndexId = result.lastInsertRowid;
       console.log('✅ Created new Story custom index (ID:', storyIndexId, ')');
     }
 
@@ -5898,13 +5886,7 @@ app.post('/api/story-index/migrate', authenticateAdmin, async (req, res) => {
       }
 
       // Check if phase already exists
-      const existingPhase = await new Promise((resolve, reject) => {
-        db.get('SELECT * FROM custom_phases WHERE index_id = ? AND slug = ?',
-          [storyIndexId, slug], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        });
-      });
+      const existingPhase = db.customPhases.getBySlug(storyIndexId, slug);
 
       if (existingPhase) {
         console.log(`⏭️  Skipping existing phase: ${slug}`);
@@ -5913,23 +5895,16 @@ app.post('/api/story-index/migrate', authenticateAdmin, async (req, res) => {
       }
 
       // Create new custom phase
-      const phaseId = await new Promise((resolve, reject) => {
-        db.run(`
-          INSERT INTO custom_phases (index_id, phase_order, slug, title, subtitle, preview_text, enabled, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-        `, [
-          storyIndexId,
-          i + 1,
-          slug,
-          oldPhase.title,
-          oldPhase.action,
-          oldPhase.preview,
-          1
-        ], function(err) {
-          if (err) reject(err);
-          else resolve(this.lastID);
-        });
+      const phaseResult = db.customPhases.create({
+        index_id: storyIndexId,
+        phase_order: i + 1,
+        slug: slug,
+        title: oldPhase.title,
+        subtitle: oldPhase.action,
+        preview_text: oldPhase.preview,
+        enabled: 1
       });
+      const phaseId = phaseResult.lastInsertRowid;
 
       console.log(`✅ Migrated phase: ${oldPhase.title} (ID: ${phaseId})`);
       migratedPhases.push({ slug, title: oldPhase.title, status: 'migrated', id: phaseId });
