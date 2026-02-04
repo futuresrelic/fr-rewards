@@ -18,9 +18,12 @@ window.WalletManager = (function() {
   // Event listeners for wallet state changes
   const listeners = new Set();
 
-  // Storage keys
+  // Storage keys (shared across modules)
   const STORAGE_ACCOUNT = 'wax_account_shared';
   const STORAGE_WALLET = 'wax_wallet_shared';
+  // Legacy keys used by index.html (app.js)
+  const LEGACY_ACCOUNT = 'wax_account';
+  const LEGACY_WALLET = 'wax_wallet';
 
   /**
    * Initialize the wallet manager
@@ -114,44 +117,48 @@ window.WalletManager = (function() {
 
   /**
    * Restore existing session from localStorage
+   * For WCW: trusts the stored account name without creating a WaxJS instance
+   *          (matching the index.html/app.js pattern that works reliably).
+   *          The WaxJS instance is created lazily in transact() when needed.
+   * For Anchor: attempts to restore the Anchor session normally.
    */
   async function restoreSession() {
-    const savedAccount = localStorage.getItem(STORAGE_ACCOUNT);
-    const savedWallet = localStorage.getItem(STORAGE_WALLET);
+    // Check shared keys first, then fall back to legacy keys (from index.html/app.js)
+    let savedAccount = localStorage.getItem(STORAGE_ACCOUNT);
+    let savedWallet = localStorage.getItem(STORAGE_WALLET);
+
+    if (!savedAccount || !savedWallet) {
+      savedAccount = localStorage.getItem(LEGACY_ACCOUNT);
+      savedWallet = localStorage.getItem(LEGACY_WALLET);
+
+      if (savedAccount && savedWallet) {
+        // Sync legacy keys to shared keys so future lookups find them
+        localStorage.setItem(STORAGE_ACCOUNT, savedAccount);
+        localStorage.setItem(STORAGE_WALLET, savedWallet);
+        console.log('🔄 Synced legacy session to shared keys');
+      }
+    }
 
     if (!savedAccount || !savedWallet) {
       console.log('No saved session found');
       return false;
     }
 
-    console.log(`🔄 Attempting to restore ${savedWallet} session for ${savedAccount}`);
+    console.log(`🔄 Restoring ${savedWallet} session for ${savedAccount}`);
 
     try {
-      // Restore WCW session
+      // Restore WCW session - just trust localStorage, no popup
+      // The WaxJS instance will be created lazily when transact() is called
       if (savedWallet === 'wcw') {
-        const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
-        if (WaxJS) {
-          wax = new WaxJS({
-            rpcEndpoint: 'https://wax.greymass.com',
-            tryAutoLogin: false
-          });
-
-          // Call login explicitly - this will use cached session if available
-          const autoLoginAccount = await wax.login();
-
-          if (autoLoginAccount) {
-            currentAccount = autoLoginAccount;
-            currentWalletType = 'wcw';
-            console.log('✅ WCW session restored:', currentAccount);
-            notifyListeners('connected');
-            return true;
-          } else {
-            throw new Error('Auto-login failed');
-          }
-        }
+        currentAccount = savedAccount;
+        currentWalletType = 'wcw';
+        // wax instance intentionally left null - created on-demand in transact()
+        console.log('✅ WCW session restored:', currentAccount);
+        notifyListeners('connected');
+        return true;
       }
 
-      // Restore Anchor session
+      // Restore Anchor session (needs actual session restore)
       if (savedWallet === 'anchor' && window.AnchorWallet) {
         const restored = await window.AnchorWallet.restoreSession();
         if (restored) {
@@ -206,8 +213,11 @@ window.WalletManager = (function() {
 
       if (currentAccount) {
         currentWalletType = walletType;
+        // Save to both shared and legacy keys for cross-page compatibility
         localStorage.setItem(STORAGE_ACCOUNT, currentAccount);
         localStorage.setItem(STORAGE_WALLET, walletType);
+        localStorage.setItem(LEGACY_ACCOUNT, currentAccount);
+        localStorage.setItem(LEGACY_WALLET, walletType);
         console.log('✅ Wallet connected:', currentAccount, 'via', walletType);
         notifyListeners('connected');
       }
@@ -272,8 +282,11 @@ window.WalletManager = (function() {
     wax = null;
     anchor = null;
     currentWalletType = null;
+    // Clear both shared and legacy keys
     localStorage.removeItem(STORAGE_ACCOUNT);
     localStorage.removeItem(STORAGE_WALLET);
+    localStorage.removeItem(LEGACY_ACCOUNT);
+    localStorage.removeItem(LEGACY_WALLET);
   }
 
   /**
@@ -290,41 +303,46 @@ window.WalletManager = (function() {
       ...options
     };
 
-    if (currentWalletType === 'wcw' && wax) {
-      // If wax.api is not initialized, we might be using waxjs-simple.js
-      // Try to load the full library and recreate the instance
-      if (!wax.api) {
-        console.warn('⚠️ WaxJS api not initialized, attempting to load full library...');
+    if (currentWalletType === 'wcw') {
+      // Lazy-create WaxJS instance if needed (e.g., after session restore from localStorage)
+      // This is the only time wax.login() should be called - when the user initiates a transaction
+      if (!wax || !wax.api) {
+        console.log('🔄 Creating WaxJS instance for transaction...');
 
         try {
-          // Load full WaxJS library
+          // Load full WaxJS library (needed for transactions)
           await ensureFullWaxJS();
 
-          // Recreate WaxJS instance with the full library
           const WaxJS = window.waxjs?.WaxJS || window.WaxJS;
           if (!WaxJS) {
             throw new Error('WaxJS not available after loading');
           }
 
-          // Create new instance
+          // Create instance and login (popup is OK here - user initiated a transaction)
           wax = new WaxJS({
             rpcEndpoint: 'https://wax.greymass.com',
             tryAutoLogin: false
           });
 
-          // Login to restore session (will use cached credentials, no popup)
           const account = await wax.login();
 
-          if (!account || account !== currentAccount) {
-            throw new Error('Account mismatch after reinitializing WaxJS');
+          if (!account) {
+            throw new Error('WaxJS login failed');
           }
 
-          // Verify api is now initialized
+          // Update account in case it changed
+          if (account !== currentAccount) {
+            console.warn(`⚠️ Account changed: ${currentAccount} → ${account}`);
+            currentAccount = account;
+            localStorage.setItem(STORAGE_ACCOUNT, currentAccount);
+            localStorage.setItem(LEGACY_ACCOUNT, currentAccount);
+          }
+
           if (!wax.api) {
             throw new Error('WaxJS api still not initialized after loading full library');
           }
 
-          console.log('✅ WaxJS instance recreated with full library support');
+          console.log('✅ WaxJS instance ready for transactions');
         } catch (error) {
           console.error('Failed to initialize transaction support:', error);
           throw new Error('Transaction support unavailable. ' + error.message);

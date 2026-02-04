@@ -101,6 +101,10 @@
     </div>
   </div>
 
+  <!-- Wallet libraries (needed by modules for login and transactions) -->
+  <script src="/waxjs-simple.js"></script>
+  <script src="/anchor-simple.js"></script>
+
   <!-- Module loader for rendering content modules -->
   <script src="/modules/module-loader.js"></script>
   <script>
@@ -167,9 +171,11 @@
           </div>
         `).join('');
 
-        // Initialize module loader (if available)
-        if (window.moduleLoader) {
-          window.moduleLoader.loadAll();
+        // Initialize modules after dynamic content is built
+        // ModuleLoader auto-scans on DOMContentLoaded (already fired),
+        // so we must call initAllModules() manually for dynamically added elements
+        if (window.ModuleLoader) {
+          window.ModuleLoader.initAllModules();
         } else {
           console.warn('Module loader not available');
         }
