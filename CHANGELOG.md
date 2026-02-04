@@ -2,6 +2,47 @@
 
 All notable changes to the WAX NFT Rewards System will be documented in this file.
 
+## [Unreleased] - 2026-02-04
+
+### Added
+
+#### Site Builder - Custom Indexes Integration
+- **Custom Indexes in Site Builder**: Full integration of the Custom Indexes system directly in the Site Builder
+  - New "Custom Indexes" button in the header toolbar
+  - Browse, create, edit, and delete custom indexes from within the builder
+  - Manage phases (create, edit, delete) for each index
+  - **Visual Phase Content Editing**: "Edit in Canvas" button loads phase content blocks into the Site Builder canvas
+  - Use the full module gallery and config panels to visually build phase content
+  - Auto-save: changes to modules auto-save back to the phase content API
+  - Supports all module types (text, images, NFT drops, crafting, paid claims, etc.)
+  - Navigation breadcrumb for switching between index list, phase list, and forms
+
+#### Story Index Migration Fix
+- Fixed `POST /api/story-index/migrate` endpoint that was completely broken
+  - Root cause: used callback-style `sqlite3` API (`db.get()`, `db.run()`) but project uses synchronous `better-sqlite3`
+  - Replaced raw SQL callbacks with existing database helper methods (`db.customIndexes.*`, `db.customPhases.*`)
+
+#### Hamburger Menu System (previously undocumented)
+- **Menu Loader** (`/public/menu-loader.js`): Dynamic hamburger menu system
+  - Loads menu items from `/api/config/menu` with fallback defaults
+  - PWA install button support
+  - Admin-customizable menu items (labels, URLs, icons, order, enable/disable)
+  - Escape-key close, overlay click close
+  - Menu API endpoints: `GET/PUT /api/admin/config/menu`, `GET /api/config/menu`
+
+#### Template Fetching Optimizations
+- Batch template fetching with in-memory caching
+- Reduced redundant AtomicAssets API calls
+- Expanded AtomicAssets and WAX RPC endpoint lists for better reliability
+
+### Fixed
+- **Custom Indexes Authentication**: Fixed 401 errors on all admin-custom-indexes.js API requests (missing auth headers)
+- **Story Index Migration**: Fixed `TypeError: db.get is not a function` (better-sqlite3 API mismatch)
+- **Menu Download App**: Fixed Download App and About page links in hamburger menu
+- **Authentication Middleware**: Fixed middleware for menu endpoints
+
+---
+
 ## [Unreleased] - 2026-01-30
 
 ### Added

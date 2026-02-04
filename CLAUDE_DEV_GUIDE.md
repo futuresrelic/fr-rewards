@@ -106,32 +106,69 @@ Future Relic Rewards is a **WAX blockchain NFT rewards platform** with a **visua
 
 ```
 /fr-rewards/
-├── server.js                          # Main Express server (4000+ lines)
-├── database.js                        # All database operations
-├── wax.js                             # WAX blockchain interactions
+├── server.js                          # Main Express server (8700+ lines)
+├── database.js                        # All database operations (2900+ lines)
+├── wax.js                             # WAX blockchain interactions (1190+ lines)
+├── validators.js                      # Input validation
+├── scheduler.js                       # Background task scheduler
+├── generate-pwa-icons.js             # PWA icon generation utility
+├── /scripts/
+│   ├── migrate-all.js                 # Master migration orchestrator (runs on startup)
+│   ├── init-db.js                     # Database initialization
+│   ├── migrate-custom-indexes.js      # Custom indexes table migration
+│   ├── migrate-module-instances.js    # Module instances table migration
+│   ├── migrate-story-tabs.js          # Story tabs table migration
+│   └── migrate-workflow.js            # Workflow tables migration
 ├── /public/
-│   ├── site-builder.html              # Visual page builder interface
-│   ├── site-builder.js                # Site builder logic (1130 lines)
-│   ├── admin.html                     # Admin panel for templates/rewards
-│   ├── admin-factory.html             # Factory crafts admin panel
-│   ├── admin-wiki.html                # API documentation viewer
+│   ├── index.html                     # Main claims page (public)
+│   ├── site-builder.html              # Visual page builder + Custom Indexes
+│   ├── site-builder.js                # Site builder logic (1900+ lines)
+│   ├── menu-loader.js                 # Dynamic hamburger menu system
+│   ├── service-worker.js              # PWA service worker
+│   ├── about.html                     # About page
+│   ├── Admin Pages:
+│   │   ├── admin.html                 # Template/reward configuration
+│   │   ├── admin-dashboard.html       # Centralized admin control center
+│   │   ├── admin-factory.html         # Factory craft recipe management
+│   │   ├── admin-custom-indexes.html  # Custom indexes management
+│   │   ├── admin-pwa.html             # PWA theme/icon/manifest admin
+│   │   ├── admin-purchases.html       # Purchase tracking & recovery
+│   │   ├── admin-claims.html          # Claims management
+│   │   ├── admin-scheduler.html       # Scheduled actions management
+│   │   ├── admin-workflow.html        # Workflow/quest management
+│   │   ├── admin-story-tabs.html      # Story tab management
+│   │   ├── admin-blend-recipes.html   # NeftyBlocks blend recipes
+│   │   ├── admin-api-monitor.html     # API monitoring
+│   │   └── admin-wiki.html            # API documentation viewer
+│   ├── Public Pages:
+│   │   ├── custom-index.html          # Dynamic custom index page (?index=SLUG)
+│   │   ├── custom-phase.html          # Dynamic phase page (?index=SLUG&phase=SLUG)
+│   │   ├── rewards-hub.html           # Rewards hub
+│   │   ├── factory.html               # Crafting interface
+│   │   ├── packs.html                 # Pack opening interface
+│   │   └── story.html                 # Story pages
 │   ├── /modules/
-│   │   ├── wallet-manager.js          # Global wallet authentication (CRITICAL)
+│   │   ├── wallet-manager.js          # Global wallet auth (CRITICAL - see login notes)
 │   │   ├── module-loader.js           # Dynamic module injection system
 │   │   ├── unified-module-base.js     # Base class for all modules
-│   │   ├── unified-module.css         # Unified styling for modules
-│   │   ├── claim-rewards.js           # Free NFT claiming module (601 lines)
-│   │   ├── paid-claim.js              # NFT sales module (873 lines) ⭐ GOLD STANDARD
-│   │   ├── factory-craft.js           # Crafting system (919 lines)
-│   │   ├── unpack.js                  # Pack unpacking (789 lines)
-│   │   ├── blend-array.js             # NeftyBlocks blending (804 lines)
-│   │   ├── transfer-mode.js           # NFT transfers (460 lines)
-│   │   └── nefty-drop.js              # NeftyBlocks drop widget (28 lines)
+│   │   ├── unified-module.js          # Smart dispatcher for unified modules
+│   │   ├── unified-module.css         # Unified styling
+│   │   ├── claim-rewards.js           # Free NFT claiming
+│   │   ├── paid-claim.js              # NFT sales (WAX payment) ⭐ GOLD STANDARD
+│   │   ├── gated-paid-claim.js        # NFT-gated paid claims (new!)
+│   │   ├── factory-craft.js           # Crafting system
+│   │   ├── unpack.js                  # Pack unpacking
+│   │   ├── blend-array.js             # NeftyBlocks blending
+│   │   ├── transfer-mode.js           # NFT transfers
+│   │   └── nefty-drop.js              # NeftyBlocks drop widget
 │   └── /story/
-│       ├── phase2.html                # Example page with modules
-│       └── phase3.html                # Example page with modules
-├── COMPLETE_API_WIKI.md               # Comprehensive API documentation
+│       ├── index.html                 # Story index page (old, file-based)
+│       └── phase1-7.html              # Story phase pages
+├── COMPLETE_API_WIKI.md               # API reference (needs updating)
 ├── SITE_BUILDER_REPORT.md             # Module system architecture
+├── ADMIN_GUIDE.md                     # Admin panel guide (needs updating)
+├── USER_GUIDE.md                      # End-user guide
+├── CHANGELOG.md                       # Version history
 └── CLAUDE_DEV_GUIDE.md                # This file (you are here!)
 ```
 
@@ -1120,7 +1157,71 @@ sleep 4 && git push -u origin claude/your-branch-name
 
 ---
 
+## ⚠️ KNOWN ISSUES & IMPORTANT NOTES
+
+### WAX Login Persistence in Modules
+**Status:** Under investigation (Feb 2026)
+
+The main claims page (`index.html`) handles login well -- it saves the account to `localStorage` and trusts it on reload. But `wallet-manager.js` (used by all unified modules) has a different approach that causes problems:
+
+- `restoreSession()` creates a new WaxJS instance with `tryAutoLogin: false` and calls `wax.login()`, which **opens a popup every time** the page loads
+- `index.html` stores keys as `wax_account`/`wax_wallet`, while wallet-manager uses `wax_account_shared`/`wax_wallet_shared` -- these are separate, so logging in on one doesn't help the other
+- `custom-phase.html` is missing wallet library `<script>` tags and has a case mismatch (`window.moduleLoader` vs `window.ModuleLoader`)
+
+**The fix should follow the `index.html` pattern**: for WCW session restore, just trust the localStorage account name without creating a WaxJS instance or calling `login()`. A WaxJS instance is only needed when doing blockchain transactions.
+
+### Custom Phase Pages (custom-phase.html)
+The custom-phase.html page has three issues:
+1. Missing `<script>` tags for `waxjs-simple.js` and `anchor-simple.js`
+2. Case mismatch: code checks `window.moduleLoader` but class exposes `window.ModuleLoader`
+3. Timing: modules are built dynamically after API fetch, but module-loader auto-scans on DOMContentLoaded
+
+### Database API Pattern
+**CRITICAL**: This project uses `better-sqlite3` (synchronous). Never use callback-style `sqlite3` patterns:
+```javascript
+// WRONG - callback style (will crash)
+db.get('SELECT * FROM table', [], (err, row) => {});
+
+// RIGHT - better-sqlite3 synchronous API
+const row = db.prepare('SELECT * FROM table').get();
+
+// BEST - use the exported helper methods
+const row = db.customIndexes.getBySlug('story');
+```
+
+### Hamburger Menu System
+The menu system (`menu-loader.js`) loads items from `/api/config/menu`. Menu items have: `{ label, url, icon, order, enabled }`. Admin can customize via `/api/admin/config/menu`.
+
+### PWA System
+Full Progressive Web App support:
+- `service-worker.js` - Precaching, network-first API, cache-first static
+- `/api/pwa/manifest` - Dynamic manifest from DB settings
+- `/api/theme.css` - Dynamic theme CSS from DB
+- `admin-pwa.html` - Theme presets, icon generator, favicon generator
+
+### Automatic CPU PowerUp
+`wax.js` has `powerUpAccount()` that auto-powers up `pool.fr` when CPU is exhausted during NFT transfers. Triggered automatically by `transferNFTs()`.
+
+---
+
 ## 📝 CHANGELOG
+
+### **February 4, 2026** - Custom Indexes in Site Builder + Bug Fixes
+**Session ID:** `claude/continue-session-sbgYe`
+
+**Status:** In progress
+
+**CHANGES:**
+- Fixed story-index migration endpoint (`db.get is not a function`)
+- Integrated Custom Indexes system into Site Builder:
+  - Browse/create/edit/delete indexes directly in builder
+  - Manage phases for each index
+  - "Edit in Canvas" loads phase content for visual editing
+  - Auto-save to phase content API
+- Updated CHANGELOG.md with all recent undocumented changes
+- Updated CLAUDE_DEV_GUIDE.md with file structure, known issues, and missing documentation
+
+---
 
 ### **January 29, 2026** - User Guide Documentation Refresh 📖
 **Session ID:** `claude/review-previous-conversation-yWrBD` (continued)

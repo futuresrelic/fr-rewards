@@ -248,6 +248,9 @@ let moduleGallery, canvasEmpty, canvasModules, configEmpty, configPanel, configT
 let clearBtn, saveBtn, loadBtn, editPageBtn, exportBtn, codeModal, closeCodeModal;
 let cssEditorBtn, cssEditorModal, closeCssModal, applyCssBtn, cssEditor;
 let createPhaseBtn, manageIndexBtn, indexManagerModal, closeIndexModal, saveIndexBtn, addPhaseCardBtn, phaseCardsList;
+let customIndexesBtn, customIndexesModal, closeCustomIndexesModal;
+let currentEditingPhaseId = null; // Track if we're editing a custom index phase
+let currentEditingPhaseInfo = null; // {indexSlug, phaseSlug, phaseTitle}
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -278,6 +281,9 @@ document.addEventListener('DOMContentLoaded', () => {
   saveIndexBtn = document.getElementById('saveIndexBtn');
   addPhaseCardBtn = document.getElementById('addPhaseCardBtn');
   phaseCardsList = document.getElementById('phaseCardsList');
+  customIndexesBtn = document.getElementById('customIndexesBtn');
+  customIndexesModal = document.getElementById('customIndexesModal');
+  closeCustomIndexesModal = document.getElementById('closeCustomIndexesModal');
 
   // Populate module gallery
   renderModuleGallery();
@@ -297,6 +303,8 @@ document.addEventListener('DOMContentLoaded', () => {
   closeIndexModal.addEventListener('click', () => indexManagerModal.style.display = 'none');
   saveIndexBtn.addEventListener('click', saveStoryIndex);
   addPhaseCardBtn.addEventListener('click', addNewPhaseCard);
+  customIndexesBtn.addEventListener('click', openCustomIndexes);
+  closeCustomIndexesModal.addEventListener('click', () => customIndexesModal.style.display = 'none');
 
   // Copy button handlers
   document.querySelectorAll('[data-copy]').forEach(btn => {
@@ -387,9 +395,11 @@ async function addModule(moduleType) {
   renderCanvas();
   selectModule(pageModules.length - 1);
 
-  // Auto-save if editing a page
+  // Auto-save if editing a page or custom phase
   if (currentEditingFilepath) {
     await autoSave();
+  } else if (currentEditingPhaseId) {
+    await savePhaseContent();
   }
 }
 
@@ -1113,7 +1123,7 @@ async function applyConfig() {
   btn.textContent = '✓ Applied!';
   btn.style.background = '#10b981';
 
-  // Auto-save if we're editing a page
+  // Auto-save if we're editing a page or a custom phase
   if (currentEditingFilepath) {
     try {
       btn.textContent = '💾 Auto-saving...';
@@ -1122,6 +1132,15 @@ async function applyConfig() {
     } catch (error) {
       btn.textContent = '❌ Save failed';
       console.error('Auto-save error:', error);
+    }
+  } else if (currentEditingPhaseId) {
+    try {
+      btn.textContent = '💾 Saving to phase...';
+      await savePhaseContent();
+      btn.textContent = '✓ Saved!';
+    } catch (error) {
+      btn.textContent = '❌ Save failed';
+      console.error('Phase save error:', error);
     }
   }
 
@@ -1162,9 +1181,11 @@ async function removeModule(index) {
     renderCanvas();
     renderConfigPanel();
 
-    // Auto-save if editing a page
+    // Auto-save if editing a page or custom phase
     if (currentEditingFilepath) {
       await autoSave();
+    } else if (currentEditingPhaseId) {
+      await savePhaseContent();
     }
   }
 }
@@ -1186,9 +1207,11 @@ async function moveModule(index, direction) {
 
   renderCanvas();
 
-  // Auto-save if editing a page
+  // Auto-save if editing a page or custom phase
   if (currentEditingFilepath) {
     await autoSave();
+  } else if (currentEditingPhaseId) {
+    await savePhaseContent();
   }
 }
 
@@ -1227,6 +1250,8 @@ function clearAll() {
     pageModules = [];
     selectedModuleIndex = null;
     currentEditingFilepath = null;
+    currentEditingPhaseId = null;
+    currentEditingPhaseInfo = null;
     saveBtn.textContent = '💾 Save Config';
     saveBtn.classList.remove('btn-success');
     saveBtn.classList.add('btn-secondary');
@@ -1365,6 +1390,9 @@ async function saveToCurrentPage() {
       alert(`❌ Failed to save page:\n${error.message}`);
       console.error('Save page error:', error);
     }
+  } else if (currentEditingPhaseId) {
+    // Save to custom phase content
+    await savePhaseContent();
   } else {
     // Otherwise, just save to localStorage like before
     saveConfiguration();
@@ -1697,5 +1725,432 @@ async function saveStoryIndex() {
   } catch (error) {
     alert(`❌ Failed to save story index:\n${error.message}`);
     console.error('Save index error:', error);
+  }
+}
+
+// ==================== CUSTOM INDEXES MANAGEMENT ====================
+
+let ciAllIndexes = [];
+let ciCurrentIndex = null;
+let ciViewStack = ['indexes']; // Navigation breadcrumb: 'indexes', 'phases', 'indexForm', 'phaseForm'
+
+function ciShowView(view) {
+  document.getElementById('ciIndexView').style.display = view === 'indexes' ? 'block' : 'none';
+  document.getElementById('ciPhaseView').style.display = view === 'phases' ? 'block' : 'none';
+  document.getElementById('ciIndexFormView').style.display = view === 'indexForm' ? 'block' : 'none';
+  document.getElementById('ciPhaseFormView').style.display = view === 'phaseForm' ? 'block' : 'none';
+
+  const backBtn = document.getElementById('ciBackBtn');
+  backBtn.style.display = ciViewStack.length > 1 ? 'inline-block' : 'none';
+
+  // Update title
+  const titleEl = document.getElementById('ciModalTitle');
+  if (view === 'indexes') titleEl.textContent = '📑 Custom Indexes';
+  else if (view === 'phases') titleEl.textContent = `📑 ${ciCurrentIndex?.title || 'Phases'}`;
+  else if (view === 'indexForm') titleEl.textContent = document.getElementById('ciIndexFormId').value ? '✏️ Edit Index' : '➕ Create Index';
+  else if (view === 'phaseForm') titleEl.textContent = document.getElementById('ciPhaseFormId').value ? '✏️ Edit Phase' : '➕ Create Phase';
+}
+
+function ciNavigateTo(view) {
+  ciViewStack.push(view);
+  ciShowView(view);
+}
+
+function ciGoBack() {
+  if (ciViewStack.length <= 1) return;
+  ciViewStack.pop();
+  const prevView = ciViewStack[ciViewStack.length - 1];
+  ciShowView(prevView);
+  // Refresh data when going back
+  if (prevView === 'indexes') ciLoadIndexes();
+  else if (prevView === 'phases' && ciCurrentIndex) ciLoadPhases(ciCurrentIndex.id);
+}
+
+async function openCustomIndexes() {
+  ciViewStack = ['indexes'];
+  ciCurrentIndex = null;
+  customIndexesModal.style.display = 'block';
+
+  // Set up event listeners (only once)
+  if (!openCustomIndexes._initialized) {
+    openCustomIndexes._initialized = true;
+
+    document.getElementById('ciBackBtn').addEventListener('click', ciGoBack);
+    document.getElementById('ciCreateIndexBtn').addEventListener('click', ciShowCreateIndexForm);
+    document.getElementById('ciCreatePhaseBtn').addEventListener('click', ciShowCreatePhaseForm);
+    document.getElementById('ciIndexFormCancel').addEventListener('click', ciGoBack);
+    document.getElementById('ciPhaseFormCancel').addEventListener('click', ciGoBack);
+
+    document.getElementById('ciIndexForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await ciSaveIndex();
+    });
+
+    document.getElementById('ciPhaseForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await ciSavePhase();
+    });
+  }
+
+  await ciLoadIndexes();
+  ciShowView('indexes');
+}
+
+async function ciLoadIndexes() {
+  try {
+    const response = await fetch('/api/admin/custom-indexes', {
+      headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    if (data.success) {
+      ciAllIndexes = data.indexes;
+      ciRenderIndexes(data.indexes);
+    }
+  } catch (error) {
+    console.error('Error loading custom indexes:', error);
+  }
+}
+
+function ciRenderIndexes(indexes) {
+  const container = document.getElementById('ciIndexList');
+
+  if (indexes.length === 0) {
+    container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #9ca3af; padding: 40px;">No custom indexes yet. Create your first one!</p>';
+    return;
+  }
+
+  container.innerHTML = indexes.map(idx => `
+    <div style="background: #ffffff; border: 2px solid ${idx.enabled ? '#cbd5e1' : '#f87171'}; border-radius: 10px; padding: 18px; cursor: pointer; transition: border-color 0.2s;"
+         onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='${idx.enabled ? '#cbd5e1' : '#f87171'}'"
+         data-ci-index-id="${idx.id}">
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+        <span style="font-size: 2rem;">${idx.icon}</span>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); ciEditIndex(${idx.id})" title="Edit">✏️</button>
+          ${!idx.is_system ? `<button class="btn btn-error btn-sm" onclick="event.stopPropagation(); ciDeleteIndex(${idx.id})" title="Delete">🗑️</button>` : ''}
+        </div>
+      </div>
+      <div style="font-weight: 600; font-size: 1.1rem; color: #1e293b; margin-bottom: 4px;">${idx.title}</div>
+      <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 10px;">${idx.description || 'No description'}</div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        ${idx.is_system ? '<span style="background: #dbeafe; color: #1d4ed8; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">System</span>' : ''}
+        <span style="background: ${idx.enabled ? '#dcfce7' : '#fee2e2'}; color: ${idx.enabled ? '#16a34a' : '#dc2626'}; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">${idx.enabled ? 'Enabled' : 'Disabled'}</span>
+        ${idx.nav_visible ? '<span style="background: #f3e8ff; color: #7c3aed; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">In Nav</span>' : ''}
+        <span style="background: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">/${idx.slug}</span>
+      </div>
+    </div>
+  `).join('');
+
+  // Click to drill into phases
+  container.querySelectorAll('[data-ci-index-id]').forEach(card => {
+    card.addEventListener('click', () => {
+      const id = parseInt(card.dataset.ciIndexId);
+      ciCurrentIndex = ciAllIndexes.find(i => i.id === id);
+      ciNavigateTo('phases');
+      ciLoadPhases(id);
+    });
+  });
+}
+
+function ciShowCreateIndexForm() {
+  document.getElementById('ciIndexForm').reset();
+  document.getElementById('ciIndexFormId').value = '';
+  document.getElementById('ciIndexIcon').value = '📖';
+  document.getElementById('ciIndexOrder').value = '0';
+  document.getElementById('ciIndexEnabled').checked = true;
+  document.getElementById('ciIndexNav').checked = true;
+  ciNavigateTo('indexForm');
+}
+
+function ciEditIndex(id) {
+  const idx = ciAllIndexes.find(i => i.id === id);
+  if (!idx) return;
+
+  document.getElementById('ciIndexFormId').value = idx.id;
+  document.getElementById('ciIndexName').value = idx.name;
+  document.getElementById('ciIndexSlug').value = idx.slug;
+  document.getElementById('ciIndexFormTitle').value = idx.title;
+  document.getElementById('ciIndexDesc').value = idx.description || '';
+  document.getElementById('ciIndexIcon').value = idx.icon;
+  document.getElementById('ciIndexOrder').value = idx.display_order;
+  document.getElementById('ciIndexEnabled').checked = idx.enabled === 1;
+  document.getElementById('ciIndexNav').checked = idx.nav_visible === 1;
+  ciNavigateTo('indexForm');
+}
+
+async function ciSaveIndex() {
+  const id = document.getElementById('ciIndexFormId').value;
+  const data = {
+    name: document.getElementById('ciIndexName').value,
+    slug: document.getElementById('ciIndexSlug').value,
+    title: document.getElementById('ciIndexFormTitle').value,
+    description: document.getElementById('ciIndexDesc').value,
+    icon: document.getElementById('ciIndexIcon').value || '📖',
+    display_order: parseInt(document.getElementById('ciIndexOrder').value) || 0,
+    enabled: document.getElementById('ciIndexEnabled').checked ? 1 : 0,
+    nav_visible: document.getElementById('ciIndexNav').checked ? 1 : 0
+  };
+
+  try {
+    const url = id ? `/api/admin/custom-indexes/${id}` : '/api/admin/custom-indexes';
+    const method = id ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method,
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert(`✓ Index ${id ? 'updated' : 'created'} successfully!`);
+      ciGoBack();
+    } else {
+      alert(`❌ ${result.error || 'Failed to save index'}`);
+    }
+  } catch (error) {
+    alert(`❌ Error saving index: ${error.message}`);
+  }
+}
+
+async function ciDeleteIndex(id) {
+  const idx = ciAllIndexes.find(i => i.id === id);
+  if (!idx) return;
+  if (idx.is_system) { alert('Cannot delete system index.'); return; }
+  if (!confirm(`Delete "${idx.title}"? This will also delete all its phases and content.`)) return;
+
+  try {
+    const response = await fetch(`/api/admin/custom-indexes/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const result = await response.json();
+    if (result.success) {
+      alert('✓ Index deleted.');
+      ciLoadIndexes();
+    } else {
+      alert(`❌ ${result.error || 'Failed to delete'}`);
+    }
+  } catch (error) {
+    alert(`❌ Error: ${error.message}`);
+  }
+}
+
+// ==================== CUSTOM PHASES ====================
+
+let ciPhases = [];
+
+async function ciLoadPhases(indexId) {
+  try {
+    document.getElementById('ciPhaseSubtitle').textContent = `Manage phases for "${ciCurrentIndex.title}". Click "Edit in Canvas" to visually build phase content.`;
+
+    const response = await fetch(`/api/admin/custom-indexes/${indexId}/phases`, {
+      headers: getAuthHeaders()
+    });
+    const data = await response.json();
+    if (data.success) {
+      ciPhases = data.phases;
+      ciRenderPhases(data.phases);
+    }
+  } catch (error) {
+    console.error('Error loading phases:', error);
+  }
+}
+
+function ciRenderPhases(phases) {
+  const container = document.getElementById('ciPhaseList');
+
+  if (phases.length === 0) {
+    container.innerHTML = '<p style="text-align: center; color: #9ca3af; padding: 40px;">No phases yet. Add your first phase!</p>';
+    return;
+  }
+
+  container.innerHTML = phases.map(phase => `
+    <div style="background: #ffffff; border: 2px solid ${phase.enabled ? '#cbd5e1' : '#f87171'}; border-radius: 8px; padding: 16px; display: flex; justify-content: space-between; align-items: center;">
+      <div style="flex: 1;">
+        <div style="font-weight: 600; color: #1e293b;">
+          ${phase.phase_order}. ${phase.title}
+          ${!phase.enabled ? '<span style="background: #fee2e2; color: #dc2626; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; margin-left: 6px;">Disabled</span>' : ''}
+        </div>
+        <div style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">${phase.subtitle || ''}</div>
+        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 4px;">Slug: /${ciCurrentIndex.slug}/${phase.slug}</div>
+      </div>
+      <div style="display: flex; gap: 6px; flex-shrink: 0;">
+        <button class="btn btn-primary btn-sm" onclick="ciEditPhaseInCanvas(${phase.id}, '${phase.title.replace(/'/g, "\\'")}')">🎨 Edit in Canvas</button>
+        <button class="btn btn-secondary btn-sm" onclick="ciEditPhase(${phase.id})">✏️</button>
+        <button class="btn btn-error btn-sm" onclick="ciDeletePhase(${phase.id})">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function ciShowCreatePhaseForm() {
+  document.getElementById('ciPhaseForm').reset();
+  document.getElementById('ciPhaseFormId').value = '';
+  document.getElementById('ciPhaseFormIndexId').value = ciCurrentIndex.id;
+  document.getElementById('ciPhaseOrder').value = ciPhases.length + 1;
+  document.getElementById('ciPhaseEnabled').checked = true;
+  ciNavigateTo('phaseForm');
+}
+
+function ciEditPhase(id) {
+  const phase = ciPhases.find(p => p.id === id);
+  if (!phase) return;
+
+  document.getElementById('ciPhaseFormId').value = phase.id;
+  document.getElementById('ciPhaseFormIndexId').value = phase.index_id;
+  document.getElementById('ciPhaseSlug').value = phase.slug;
+  document.getElementById('ciPhaseFormTitle').value = phase.title;
+  document.getElementById('ciPhaseSubtitleInput').value = phase.subtitle || '';
+  document.getElementById('ciPhasePreview').value = phase.preview_text || '';
+  document.getElementById('ciPhaseOrder').value = phase.phase_order;
+  document.getElementById('ciPhaseEnabled').checked = phase.enabled === 1;
+  ciNavigateTo('phaseForm');
+}
+
+async function ciSavePhase() {
+  const id = document.getElementById('ciPhaseFormId').value;
+  const indexId = document.getElementById('ciPhaseFormIndexId').value;
+  const data = {
+    phase_order: parseInt(document.getElementById('ciPhaseOrder').value) || 1,
+    slug: document.getElementById('ciPhaseSlug').value,
+    title: document.getElementById('ciPhaseFormTitle').value,
+    subtitle: document.getElementById('ciPhaseSubtitleInput').value,
+    preview_text: document.getElementById('ciPhasePreview').value,
+    enabled: document.getElementById('ciPhaseEnabled').checked ? 1 : 0
+  };
+
+  try {
+    const url = id ? `/api/admin/custom-phases/${id}` : `/api/admin/custom-indexes/${indexId}/phases`;
+    const method = id ? 'PUT' : 'POST';
+
+    const response = await fetch(url, {
+      method,
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      alert(`✓ Phase ${id ? 'updated' : 'created'} successfully!`);
+      ciGoBack();
+    } else {
+      alert(`❌ ${result.error || 'Failed to save phase'}`);
+    }
+  } catch (error) {
+    alert(`❌ Error saving phase: ${error.message}`);
+  }
+}
+
+async function ciDeletePhase(id) {
+  if (!confirm('Delete this phase? This will also delete all its content blocks.')) return;
+
+  try {
+    const response = await fetch(`/api/admin/custom-phases/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const result = await response.json();
+    if (result.success) {
+      alert('✓ Phase deleted.');
+      ciLoadPhases(ciCurrentIndex.id);
+    } else {
+      alert(`❌ ${result.error || 'Failed to delete'}`);
+    }
+  } catch (error) {
+    alert(`❌ Error: ${error.message}`);
+  }
+}
+
+// ==================== EDIT PHASE CONTENT IN CANVAS ====================
+
+async function ciEditPhaseInCanvas(phaseId, phaseTitle) {
+  try {
+    // Load phase content blocks from API
+    const response = await fetch(`/api/admin/custom-phases/${phaseId}/content`, {
+      headers: getAuthHeaders()
+    });
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to load phase content');
+    }
+
+    // Clear current state
+    pageModules = [];
+    selectedModuleIndex = null;
+    nextModuleId = 1;
+    currentEditingFilepath = null;
+    currentEditingPhaseId = phaseId;
+    currentEditingPhaseInfo = {
+      indexSlug: ciCurrentIndex.slug,
+      phaseSlug: ciPhases.find(p => p.id === phaseId)?.slug || '',
+      phaseTitle: phaseTitle
+    };
+
+    // Convert content blocks to pageModules format
+    for (const block of data.content) {
+      const moduleId = nextModuleId++;
+      pageModules.push({
+        id: moduleId,
+        moduleType: block.module_type,
+        config: typeof block.module_config === 'string' ? JSON.parse(block.module_config) : (block.module_config || {}),
+        moduleInstanceId: null, // Phase content uses the content API, not module instances
+        _contentBlockId: block.id // Track the original content block ID for updates
+      });
+    }
+
+    // Close modal
+    customIndexesModal.style.display = 'none';
+
+    // Update save button
+    saveBtn.textContent = `💾 Save to Phase: ${phaseTitle}`;
+    saveBtn.classList.remove('btn-secondary');
+    saveBtn.classList.add('btn-success');
+
+    renderCanvas();
+    renderConfigPanel();
+
+    if (pageModules.length > 0) {
+      selectModule(0);
+    }
+  } catch (error) {
+    alert(`❌ Failed to load phase content: ${error.message}`);
+    console.error('Load phase content error:', error);
+  }
+}
+
+async function savePhaseContent() {
+  if (!currentEditingPhaseId) return;
+
+  try {
+    // Convert pageModules to content blocks format
+    const contentBlocks = pageModules.map((module, index) => ({
+      content_order: index + 1,
+      module_type: module.moduleType,
+      module_config: module.config
+    }));
+
+    // Use the replace-all endpoint to atomically update all content
+    const response = await fetch(`/api/admin/custom-phases/${currentEditingPhaseId}/content/replace`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ content: contentBlocks })
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to save phase content');
+    }
+
+    console.log(`✅ Phase content saved (${contentBlocks.length} blocks)`);
+    return true;
+  } catch (error) {
+    console.error('Save phase content error:', error);
+    alert(`❌ Failed to save phase content: ${error.message}`);
+    return false;
   }
 }

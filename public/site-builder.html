@@ -496,6 +496,9 @@
       <button class="btn btn-info btn-sm" id="manageIndexBtn">
         📋 Manage Story Index
       </button>
+      <button class="btn btn-info btn-sm" id="customIndexesBtn" title="Manage Custom Indexes, Phases & Content">
+        📑 Custom Indexes
+      </button>
       <button class="btn btn-warning btn-sm" id="cssEditorBtn">
         🎨 CSS Editor
       </button>
@@ -612,6 +615,125 @@
 
       <div id="phaseCardsList" style="display: flex; flex-direction: column; gap: 15px;">
         <!-- Phase cards will be listed here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Indexes Manager Modal -->
+  <div id="customIndexesModal" class="code-modal">
+    <div class="code-modal-content" style="max-width: 1100px;">
+      <div class="code-modal-header">
+        <div class="code-modal-title" id="ciModalTitle">📑 Custom Indexes</div>
+        <div>
+          <button class="btn btn-secondary btn-sm" id="ciBackBtn" style="display: none;">← Back</button>
+          <button class="btn btn-secondary btn-sm" id="closeCustomIndexesModal">Close</button>
+        </div>
+      </div>
+
+      <!-- View: Index List -->
+      <div id="ciIndexView">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <p style="color: #64748b; margin: 0;">Manage your custom indexes (Story, Quests, Events, etc.) and their phase pages.</p>
+          <button class="btn btn-success btn-sm" id="ciCreateIndexBtn">➕ New Index</button>
+        </div>
+        <div id="ciIndexList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px;">
+          <!-- Index cards rendered here -->
+        </div>
+      </div>
+
+      <!-- View: Phase List -->
+      <div id="ciPhaseView" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <p style="color: #64748b; margin: 0;" id="ciPhaseSubtitle">Manage phases for this index.</p>
+          <button class="btn btn-success btn-sm" id="ciCreatePhaseBtn">➕ New Phase</button>
+        </div>
+        <div id="ciPhaseList" style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Phase items rendered here -->
+        </div>
+      </div>
+
+      <!-- View: Index Form (Create/Edit) -->
+      <div id="ciIndexFormView" style="display: none;">
+        <form id="ciIndexForm" style="display: grid; gap: 15px; max-width: 600px;">
+          <input type="hidden" id="ciIndexFormId">
+          <div>
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Name (unique identifier)</label>
+            <input type="text" id="ciIndexName" class="config-input" required placeholder="e.g. story, quests, events">
+          </div>
+          <div>
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Slug (URL-friendly)</label>
+            <input type="text" id="ciIndexSlug" class="config-input" required placeholder="e.g. story, quests">
+          </div>
+          <div>
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Title</label>
+            <input type="text" id="ciIndexFormTitle" class="config-input" required placeholder="Display title">
+          </div>
+          <div>
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Description</label>
+            <textarea id="ciIndexDesc" class="config-textarea" rows="2" placeholder="Brief description"></textarea>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+            <div>
+              <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Icon</label>
+              <input type="text" id="ciIndexIcon" class="config-input" value="📖" placeholder="Emoji">
+            </div>
+            <div>
+              <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Display Order</label>
+              <input type="number" id="ciIndexOrder" class="config-input" value="0">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 4px;">
+              <label style="color: #94a3b8; font-size: 0.85rem;">
+                <input type="checkbox" id="ciIndexEnabled" checked> Enabled
+              </label>
+              <label style="color: #94a3b8; font-size: 0.85rem;">
+                <input type="checkbox" id="ciIndexNav" checked> Show in Nav
+              </label>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-primary btn-sm">💾 Save Index</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="ciIndexFormCancel">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- View: Phase Form (Create/Edit) -->
+      <div id="ciPhaseFormView" style="display: none;">
+        <form id="ciPhaseForm" style="display: grid; gap: 15px; max-width: 600px;">
+          <input type="hidden" id="ciPhaseFormId">
+          <input type="hidden" id="ciPhaseFormIndexId">
+          <div>
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Slug (URL-friendly)</label>
+            <input type="text" id="ciPhaseSlug" class="config-input" required placeholder="e.g. phase1, chapter-2">
+          </div>
+          <div>
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Title</label>
+            <input type="text" id="ciPhaseFormTitle" class="config-input" required placeholder="Phase title">
+          </div>
+          <div>
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Subtitle</label>
+            <input type="text" id="ciPhaseSubtitleInput" class="config-input" placeholder="Action or subtitle text">
+          </div>
+          <div>
+            <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Preview Text</label>
+            <textarea id="ciPhasePreview" class="config-textarea" rows="2" placeholder="Brief preview for the index page"></textarea>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">Order</label>
+              <input type="number" id="ciPhaseOrder" class="config-input" value="1">
+            </div>
+            <div style="padding-top: 20px;">
+              <label style="color: #94a3b8; font-size: 0.85rem;">
+                <input type="checkbox" id="ciPhaseEnabled" checked> Enabled
+              </label>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-primary btn-sm">💾 Save Phase</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="ciPhaseFormCancel">Cancel</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
