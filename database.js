@@ -1791,6 +1791,22 @@ const craftRecipes = {
   }
 };
 
+// Safe JSON parse for craft history fields — handles corrupted/legacy rows gracefully
+function safeJsonParse(str, fallback = null) {
+  if (str === null || str === undefined) return fallback;
+  if (typeof str !== 'string') return str; // already parsed
+  try {
+    return JSON.parse(str);
+  } catch (_) {
+    // Try comma-separated numbers (legacy storage without brackets)
+    if (/^[\d,\s]+$/.test(str.trim())) {
+      const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length) return parts;
+    }
+    return fallback;
+  }
+}
+
 // Craft history management
 const craftHistory = {
   // Get all history
@@ -1822,8 +1838,8 @@ const craftHistory = {
 
     return history.map(record => ({
       ...record,
-      ingredient_asset_ids: JSON.parse(record.ingredient_asset_ids),
-      result_info: record.result_info ? JSON.parse(record.result_info) : null
+      ingredient_asset_ids: safeJsonParse(record.ingredient_asset_ids, []),
+      result_info: safeJsonParse(record.result_info, null)
     }));
   },
 
@@ -1834,8 +1850,8 @@ const craftHistory = {
     `).get(transfer_tx_id);
 
     if (record) {
-      record.ingredient_asset_ids = JSON.parse(record.ingredient_asset_ids);
-      record.result_info = record.result_info ? JSON.parse(record.result_info) : null;
+      record.ingredient_asset_ids = safeJsonParse(record.ingredient_asset_ids, []);
+      record.result_info = safeJsonParse(record.result_info, null);
     }
 
     return record;
@@ -1848,8 +1864,8 @@ const craftHistory = {
     `).get(id);
 
     if (record) {
-      record.ingredient_asset_ids = JSON.parse(record.ingredient_asset_ids);
-      record.result_info = record.result_info ? JSON.parse(record.result_info) : null;
+      record.ingredient_asset_ids = safeJsonParse(record.ingredient_asset_ids, []);
+      record.result_info = safeJsonParse(record.result_info, null);
     }
 
     return record;
@@ -1935,8 +1951,8 @@ const craftHistory = {
 
     return failed.map(record => ({
       ...record,
-      ingredient_asset_ids: JSON.parse(record.ingredient_asset_ids),
-      result_info: record.result_info ? JSON.parse(record.result_info) : null
+      ingredient_asset_ids: safeJsonParse(record.ingredient_asset_ids, []),
+      result_info: safeJsonParse(record.result_info, null)
     }));
   },
 
